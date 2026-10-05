@@ -172,7 +172,11 @@ Design rules:
 - **Node.js** 20 LTS — [nodejs.org](https://nodejs.org)
 - **pnpm** 9+ — Windows: `iwr https://get.pnpm.io/install.ps1 -useb | iex` / macOS: `brew install pnpm`
 - **Git** 2.40+
-- The **backend** running locally (see `ordenes-kds-backend/README.md`), or the mock server described in `CONTRIBUTING.md`
+- The **backend** running locally (see `ordenes-kds-backend/README.md`), or the mock server described in `docs/CONTRIBUTING_Frontend.md`
+
+> Step-by-step installation, verification commands, ports, troubleshooting and daily routine: [QUICKSTART.md §5–§6](QUICKSTART.md).
+>
+> New to Docker? Read the basic team guide (in Spanish) on how Docker works locally and the cloud scope (TASK-38): [docs/GUIA_DOCKER.md](docs/GUIA_DOCKER.md).
 
 #### Installation
 
@@ -186,7 +190,7 @@ pnpm install
 
 # 3. Set up environment variables
 cp .env.example .env.local
-# Edit .env.local with your values (see CONTRIBUTING.md, section "Environment Variables")
+# Edit .env.local with your values (see docs/CONTRIBUTING_Frontend.md, section "Environment Variables")
 
 # 4. Install Playwright browsers (first time only)
 pnpm exec playwright install --with-deps chromium webkit
@@ -239,12 +243,14 @@ ordenes-kds-frontend/
 │   └── mocks/                         # MSW handlers and fixtures
 │
 ├── docs/                              # Full project documentation
+├── QUICKSTART.md                      # CI prerequisites, branch protection, machine setup and daily routine
 ├── playwright.config.ts
 ├── vitest.config.ts
 ├── vite.config.ts                     # Vite + @originjs/vite-plugin-federation (remote)
 ├── tailwind.config.ts                 # Design tokens; Preflight (global reset) disabled
 ├── sonar-project.properties
 ├── Dockerfile
+├── .dockerignore
 └── .env.example
 ```
 
@@ -289,12 +295,13 @@ Full documentation is in the [`docs/`](docs/) folder:
 |---|---|
 | [`ERS_ordeneskds.md`](docs/ERS_ordeneskds.md) | Software Requirements Specification (v4) |
 | [`Arquitectura_ordeneskds.md`](docs/Arquitectura_ordeneskds.md) | Complete architecture: internal API and published events |
-| [`Comunicaciones_API_ordenes_y_KDS.md`](docs/Comunicaciones_API_ordenes_y_KDS.md) | REST, WebSocket and broker communication |
-| [`Especificaciones_UI_Ordenes_Consolidado.md`](docs/Especificaciones_UI_Ordenes_Consolidado.md) | Hardware and UI specification of the original four-view scope (waiter views now live in the Sala and Menu micro frontends) |
-| `FMAT-RESTAURANT Guía visual de componentes` | Shared visual guide for every micro frontend (colors such as `#C2410C`, radii, spacing) |
+| [`API_COMUNICACIONES.md`](docs/API_COMUNICACIONES.md) | REST, WebSocket and broker communication |
+| [`FMAT_RESTAURANT_Guia_Visual_Componentes.md`](docs/FMAT_RESTAURANT_Guia_Visual_Componentes.md) | Shared visual guide for every micro frontend (colors such as `#C2410C`, radii, spacing) |
 | [`DEVELOPMENT_GUIDELINES.md`](docs/DEVELOPMENT_GUIDELINES.md) | Coding standards and rules for humans and AI agents |
 | [`VyV_OrdenesKDS.md`](docs/VyV_OrdenesKDS.md) | Verification & Validation plan |
-| [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) | Contribution guidelines and workflow |
+| [`CONTRIBUTING_Frontend.md`](docs/CONTRIBUTING_Frontend.md) | Contribution guidelines and workflow (frontend-specific) |
+| [`QUICKSTART.md`](QUICKSTART.md) | CI/CD prerequisites, branch protection, machine setup and daily development routine |
+| [`docs/GUIA_DOCKER.md`](docs/GUIA_DOCKER.md) | How Docker works locally and what moves to the cloud in TASK-38 (Spanish) |
 
 ---
 
