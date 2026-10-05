@@ -8,6 +8,7 @@ export default defineConfig({
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Resource-Policy': 'same-site',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY'
     }
@@ -16,6 +17,7 @@ export default defineConfig({
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Resource-Policy': 'same-site',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY'
     }
