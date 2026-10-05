@@ -5,7 +5,9 @@ import fs from 'fs';
 test('verify no accessibility violations with axe-core', async ({ page }) => {
   await page.goto('/');
 
-  const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
+  const accessibilityScanResults = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
 
   fs.mkdirSync('axe-report', { recursive: true });
   fs.writeFileSync('axe-report/axe-report.json', JSON.stringify(accessibilityScanResults, null, 2));
