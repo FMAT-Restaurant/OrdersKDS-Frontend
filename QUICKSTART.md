@@ -200,36 +200,64 @@ docker --version        # Docker version 24 or newer (optional, for full stack)
 
 ### §6 — Local development
 
-#### 6.1 First-time setup
+#### 6.1 First-time setup (run once after cloning)
+
+The bootstrap script verifies all prerequisites, installs dependencies with a
+frozen lockfile, installs the Playwright browsers, and creates `.env.local`
+from the template.
+
+**Windows PowerShell:**
 
 ```powershell
-# 1. Clone the repository
 git clone https://github.com/<org>/ordenes-kds-frontend.git
 cd ordenes-kds-frontend
+.\scripts\bootstrap.ps1
+```
 
-# 2. Install dependencies
-pnpm install
+**macOS / Linux:**
 
-# 3. Set up environment variables
-cp .env.example .env.local
-# Edit .env.local — set VITE_API_BASE_URL and VITE_WS_URL to point to the backend
+```bash
+git clone https://github.com/<org>/ordenes-kds-frontend.git
+cd ordenes-kds-frontend
+bash scripts/bootstrap.sh
+```
 
-# 4. Install Playwright browsers (first time only)
-pnpm exec playwright install --with-deps chromium webkit
+The script prints the next steps when it finishes.  The only manual step is
+editing `.env.local` to point at the backend:
 
-# 5. Start the development server
+```dotenv
+VITE_API_BASE_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080/ws
+```
+
+Then start the dev server:
+
+```bash
+pnpm dev
+# Dev harness available at http://localhost:5173
+```
+
+#### 6.2 Daily routine (every time you open the repo)
+
+No activation step is needed (unlike the Python venv in the backend).
+Open a terminal in the repository root and:
+
+```bash
+# Pull the latest changes
+git pull --rebase origin develop
+
+# Sync dependencies if package.json or pnpm-lock.yaml changed after the pull
+# (safe to run always — fast no-op when nothing changed)
+pnpm install --frozen-lockfile
+
+# Start the development server
 pnpm dev
 ```
 
-The standalone dev harness will be available at `http://localhost:5173`.
-It mounts each exposed module so you can develop without the Auth Shell.
+Dev server is available at `http://localhost:5173`.
 
-#### 6.2 Daily routine
-
-| Goal | Command |
+| Quick reference | Command |
 |---|---|
-| Start the dev server | `pnpm dev` |
-| Run unit tests (watch) | `pnpm run test:unit` |
 | Run unit tests with coverage | `pnpm run test:coverage` |
 | Run E2E tests | `pnpm run test:e2e` |
 | Run accessibility tests | `pnpm run test:a11y` |
@@ -238,38 +266,48 @@ It mounts each exposed module so you can develop without the Auth Shell.
 | Lint | `pnpm run lint` |
 | Type check | `pnpm exec tsc --noEmit` |
 
-#### 6.3 Working without the backend (MSW mocks)
+#### 6.3 After a dependency update (someone changed package.json)
+
+If `pnpm-lock.yaml` changed after a `git pull`, the frozen install will fail
+with a lockfile mismatch.  Run the regular install instead:
+
+```bash
+pnpm install
+```
+
+Commit the updated lockfile if you were the one adding the dependency.
+
+#### 6.4 Working without the backend (MSW mocks)
 
 While the backend is not yet implemented or not running locally, the frontend
 uses **Mock Service Worker (MSW)** to intercept REST and WebSocket calls.
-Handlers live in `src/mocks/`. Import `setupWorker` in `src/main.tsx` for
-development mode.
+Handlers live in `src/mocks/`.  No additional configuration is required —
+the dev server starts with mocks active by default when
+`VITE_APP_ENV=development`.
 
-No additional configuration is required — the dev server starts with mocks
-active by default when `VITE_APP_ENV=development`.
+#### 6.5 Testing the Module Federation remote
 
-#### 6.4 Testing the Module Federation remote
-
-```powershell
+```bash
 # Build the remote and serve it on port 4173
 pnpm run build
 pnpm run preview
 
-# The remoteEntry.js is now available at:
+# remoteEntry.js is now available at:
 # http://localhost:4173/assets/remoteEntry.js
-# Point the Auth Shell's remote URL here during local integration.
+# Point the Auth Shell remote URL here during local integration.
 ```
 
-#### 6.5 Troubleshooting
+#### 6.6 Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `pnpm install` fails | Lockfile conflict | Delete `node_modules` and `pnpm-lock.yaml`, then `pnpm install` |
-| `pnpm dev` port 5173 in use | Another Vite server running | Kill the other process or use `pnpm dev --port 5174` |
+| `pnpm install` fails with lockfile mismatch | package.json changed | Run `pnpm install` (without `--frozen-lockfile`) |
+| `pnpm dev` — port 5173 in use | Another Vite server running | Kill the other process or use `pnpm dev --port 5174` |
 | TypeScript errors on start | Outdated types after `git pull` | Run `pnpm install` to update type definitions |
-| E2E tests time out | Preview server not running | Ensure `pnpm run preview` is running, or check `playwright.config.ts` `webServer` |
+| E2E tests time out | Preview server not running | Ensure `pnpm run preview` is running, or check `webServer` in `playwright.config.ts` |
 | `remoteEntry.js` not found | Bundle not built | Run `pnpm run build` before `pnpm run preview` |
-| SonarLint shows no issues | Not connected to SonarCloud | Check `.sonarlint/connectedMode.json` and verify the `SONAR_TOKEN` in VS Code settings |
+| SonarLint shows no issues | Not connected to SonarCloud | Check `.sonarlint/connectedMode.json` and verify the token in VS Code settings |
+| Playwright browsers missing | Bootstrap not run or browsers removed | Run `pnpm exec playwright install --with-deps chromium webkit` |
 
 ---
 
@@ -440,68 +478,111 @@ pnpm --version          # 9.x
 
 ### §6 — Desarrollo local
 
-#### 6.1 Configuración inicial
+#### 6.1 Configuracion inicial (ejecutar una sola vez al clonar el repo)
+
+El script de bootstrap verifica todos los prerequisitos, instala las
+dependencias con lockfile fijo, instala los navegadores de Playwright
+y crea `.env.local` desde la plantilla.
+
+**Windows PowerShell:**
 
 ```powershell
-# 1. Clonar el repositorio
 git clone https://github.com/<org>/ordenes-kds-frontend.git
 cd ordenes-kds-frontend
+.\scripts\bootstrap.ps1
+```
 
-# 2. Instalar dependencias
-pnpm install
+**macOS / Linux:**
 
-# 3. Configurar variables de entorno
-cp .env.example .env.local
-# Edita .env.local — establece VITE_API_BASE_URL y VITE_WS_URL apuntando al backend
+```bash
+git clone https://github.com/<org>/ordenes-kds-frontend.git
+cd ordenes-kds-frontend
+bash scripts/bootstrap.sh
+```
 
-# 4. Instalar navegadores de Playwright (solo la primera vez)
-pnpm exec playwright install --with-deps chromium webkit
+El script imprime los proximos pasos al terminar.  El unico paso manual es
+editar `.env.local` para apuntar al backend:
 
-# 5. Iniciar el servidor de desarrollo
+```dotenv
+VITE_API_BASE_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080/ws
+```
+
+Luego inicia el servidor de desarrollo:
+
+```bash
+pnpm dev
+# Dev harness disponible en http://localhost:5173
+```
+
+#### 6.2 Rutina diaria (cada vez que abres el repo)
+
+No se necesita activar ningun entorno virtual (a diferencia del backend con Python).
+Abre una terminal en la raiz del repositorio y:
+
+```bash
+# Traer los ultimos cambios
+git pull --rebase origin develop
+
+# Sincronizar dependencias si package.json o pnpm-lock.yaml cambiaron
+# (seguro ejecutar siempre — muy rapido si no hay cambios)
+pnpm install --frozen-lockfile
+
+# Iniciar el servidor de desarrollo
 pnpm dev
 ```
 
-El harness de desarrollo estará disponible en `http://localhost:5173`.
-Monta cada módulo expuesto para que puedas desarrollar sin el Auth Shell.
+El servidor de desarrollo estara disponible en `http://localhost:5173`.
 
-#### 6.2 Rutina diaria
-
-| Objetivo | Comando |
+| Referencia rapida | Comando |
 |---|---|
-| Iniciar el servidor de desarrollo | `pnpm dev` |
-| Ejecutar pruebas unitarias (modo watch) | `pnpm run test:unit` |
-| Ejecutar pruebas unitarias con cobertura | `pnpm run test:coverage` |
-| Ejecutar pruebas E2E | `pnpm run test:e2e` |
-| Ejecutar pruebas de accesibilidad | `pnpm run test:a11y` |
-| Construir el bundle de federación | `pnpm run build` |
-| Previsualizar el bundle construido | `pnpm run preview` |
+| Pruebas unitarias con cobertura | `pnpm run test:coverage` |
+| Pruebas E2E | `pnpm run test:e2e` |
+| Pruebas de accesibilidad | `pnpm run test:a11y` |
+| Construir el bundle de federacion | `pnpm run build` |
+| Previsualizar el bundle | `pnpm run preview` |
 | Lint | `pnpm run lint` |
-| Verificación de tipos | `pnpm exec tsc --noEmit` |
+| Verificacion de tipos | `pnpm exec tsc --noEmit` |
 
-#### 6.3 Trabajar sin el backend (mocks MSW)
+#### 6.3 Despues de que alguien actualizo dependencias
 
-Mientras el backend no está implementado o no está corriendo localmente, el frontend usa **Mock Service Worker (MSW)** para interceptar llamadas REST y WebSocket.
-Los handlers viven en `src/mocks/`. No se requiere configuración adicional — el servidor de desarrollo inicia con mocks activos por defecto cuando `VITE_APP_ENV=development`.
+Si `pnpm-lock.yaml` cambio despues de un `git pull`, el install con lockfile
+fijo fallara. En ese caso ejecuta el install normal:
 
-#### 6.4 Probar el remoto de Module Federation
+```bash
+pnpm install
+```
 
-```powershell
+Haz commit del lockfile actualizado si fuiste tu quien agrego la dependencia.
+
+#### 6.4 Trabajar sin el backend (mocks MSW)
+
+Mientras el backend no esta implementado o no esta corriendo localmente, el frontend
+usa **Mock Service Worker (MSW)** para interceptar llamadas REST y WebSocket.
+Los handlers viven en `src/mocks/`.  No se requiere configuracion adicional —
+el servidor de desarrollo inicia con mocks activos por defecto cuando
+`VITE_APP_ENV=development`.
+
+#### 6.5 Probar el remoto de Module Federation
+
+```bash
 # Construir el remoto y servirlo en el puerto 4173
 pnpm run build
 pnpm run preview
 
 # remoteEntry.js disponible en:
 # http://localhost:4173/assets/remoteEntry.js
-# Apunta la URL del remoto del Auth Shell aquí durante la integración local.
+# Apunta la URL del remoto del Auth Shell aqui durante la integracion local.
 ```
 
-#### 6.5 Problemas frecuentes
+#### 6.6 Problemas frecuentes
 
-| Síntoma | Causa probable | Solución |
+| Sintoma | Causa probable | Solucion |
 |---|---|---|
-| `pnpm install` falla | Conflicto de lockfile | Elimina `node_modules` y `pnpm-lock.yaml`, luego `pnpm install` |
+| `pnpm install` falla por lockfile | package.json cambio | Ejecuta `pnpm install` (sin `--frozen-lockfile`) |
 | `pnpm dev` — puerto 5173 en uso | Otro servidor Vite corriendo | Cierra el otro proceso o usa `pnpm dev --port 5174` |
-| Errores de TypeScript al iniciar | Tipos desactualizados tras `git pull` | Ejecuta `pnpm install` para actualizar las definiciones de tipos |
-| Pruebas E2E dan timeout | Servidor de preview no corriendo | Asegúrate de que `pnpm run preview` esté corriendo, o revisa `webServer` en `playwright.config.ts` |
+| Errores de TypeScript al iniciar | Tipos desactualizados tras `git pull` | Ejecuta `pnpm install` |
+| Pruebas E2E dan timeout | Servidor de preview no corriendo | Asegurate de que `pnpm run preview` este corriendo |
 | `remoteEntry.js` no encontrado | Bundle no construido | Ejecuta `pnpm run build` antes de `pnpm run preview` |
-| SonarLint no muestra issues | No conectado a SonarCloud | Verifica `.sonarlint/connectedMode.json` y el token en la configuración de VS Code |
+| SonarLint no muestra issues | No conectado a SonarCloud | Verifica `.sonarlint/connectedMode.json` |
+| Navegadores de Playwright faltantes | Bootstrap no ejecutado | Ejecuta `pnpm exec playwright install --with-deps chromium webkit` |

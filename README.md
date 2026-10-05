@@ -180,17 +180,39 @@ Design rules:
 
 #### Installation
 
+**Option A — automated bootstrap (recommended for a clean machine):**
+
+```powershell
+# Windows PowerShell
+git clone https://github.com/your-org/ordenes-kds-frontend.git
+cd ordenes-kds-frontend
+.\scripts\bootstrap.ps1
+```
+
+```bash
+# macOS / Linux
+git clone https://github.com/your-org/ordenes-kds-frontend.git
+cd ordenes-kds-frontend
+bash scripts/bootstrap.sh
+```
+
+The script verifies Node.js and pnpm, installs dependencies with a frozen
+lockfile, installs the Playwright browsers, and creates `.env.local` from
+`.env.example`.  It prints the remaining steps when it finishes.
+
+**Option B — manual steps:**
+
 ```bash
 # 1. Clone the repository
 git clone https://github.com/your-org/ordenes-kds-frontend.git
 cd ordenes-kds-frontend
 
 # 2. Install dependencies
-pnpm install
+pnpm install --frozen-lockfile
 
 # 3. Set up environment variables
 cp .env.example .env.local
-# Edit .env.local with your values (see docs/CONTRIBUTING_Frontend.md, section "Environment Variables")
+# Edit .env.local — set VITE_API_BASE_URL and VITE_WS_URL
 
 # 4. Install Playwright browsers (first time only)
 pnpm exec playwright install --with-deps chromium webkit
@@ -200,6 +222,8 @@ pnpm dev
 ```
 
 The stand-alone dev harness will be available at `http://localhost:5173`. It mounts each exported module by itself so you can work without the Auth Shell.
+
+> **Daily routine:** `git pull --rebase origin develop && pnpm install --frozen-lockfile && pnpm dev`. No virtual environment activation needed.
 
 > **Tip:** to try the KDS App exactly as the kitchen uses it, open `http://localhost:5173/kds` in a landscape window and operate it only with the keyboard.
 
@@ -242,7 +266,11 @@ ordenes-kds-frontend/
 │   ├── contract/                      # REST contract checks against the backend
 │   └── mocks/                         # MSW handlers and fixtures
 │
+├── e2e/                           # Playwright specs at the repo root (app-level)
 ├── docs/                              # Full project documentation
+├── scripts/
+│   ├── bootstrap.ps1              # One-shot setup for Windows PowerShell
+│   └── bootstrap.sh               # One-shot setup for macOS / Linux
 ├── QUICKSTART.md                      # CI prerequisites, branch protection, machine setup and daily routine
 ├── playwright.config.ts
 ├── vitest.config.ts
