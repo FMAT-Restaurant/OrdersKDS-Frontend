@@ -10,7 +10,7 @@
 #   # or, after making it executable:
 #   chmod +x scripts/bootstrap.sh && ./scripts/bootstrap.sh
 #
-# Prerequisites: Node.js 20 LTS and pnpm 9+ must be on your PATH.
+# Prerequisites: Node.js 24 LTS and pnpm 9+ must be on your PATH.
 #   Node.js : https://nodejs.org
 #   pnpm    : npm install -g pnpm
 
@@ -31,12 +31,12 @@ warn()  { echo -e "    ${YELLOW}[!!]${NC} $1"; }
 abort() { echo -e "\n${RED}[ABORTED]${NC} $1"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Step 1 -- Verify Node.js 20+
+# Step 1 -- Verify Node.js 24+
 # ---------------------------------------------------------------------------
 step "Checking Node.js version"
 
 if ! command -v node &>/dev/null; then
-    abort "Node.js not found.  Install Node.js 20 LTS from https://nodejs.org"
+    abort "Node.js not found.  Install Node.js 24 LTS from https://nodejs.org"
 fi
 
 NODE_VERSION=$(node --version 2>&1)
@@ -46,8 +46,8 @@ if [ -z "$NODE_MAJOR" ]; then
     abort "Could not parse Node.js version from: $NODE_VERSION"
 fi
 
-if [ "$NODE_MAJOR" -lt 20 ]; then
-    abort "Node.js 20+ required.  Found: $NODE_VERSION"
+if [ "$NODE_MAJOR" -lt 24 ]; then
+    abort "Node.js 24+ required.  Found: $NODE_VERSION"
 fi
 
 ok "Found Node.js $NODE_VERSION"

@@ -144,7 +144,7 @@ Every team member needs the tools below **before** running the setup steps.
 |---|---|---|---|
 | **Git** | 2.40+ | Clone, branches, commits | https://git-scm.com/downloads |
 | **Docker Desktop** (includes Compose v2) | Docker 24+ | Backend services (postgres, redis, rabbitmq) when running full stack locally | https://www.docker.com/products/docker-desktop |
-| **Node.js** | 20 LTS | JavaScript runtime for pnpm, Vite, Vitest, Playwright | https://nodejs.org |
+| **Node.js** | 24 LTS | JavaScript runtime for pnpm, Vite, Vitest, Playwright | https://nodejs.org |
 | **pnpm** | 9+ | Package manager | `npm install -g pnpm` or `corepack enable && corepack prepare pnpm@latest --activate` |
 | **VS Code** (recommended) | — | Editor with TypeScript and ESLint integration | https://code.visualstudio.com |
 
@@ -183,7 +183,7 @@ Install via the Extensions sidebar or `code --install-extension <id>`:
 
 ```powershell
 git --version           # 2.40 or newer
-node --version          # v20.x
+node --version          # v24.x
 pnpm --version          # 9.x
 docker --version        # Docker version 24 or newer (optional, for full stack)
 ```
@@ -438,7 +438,7 @@ Fallos comunes y soluciones:
 |---|---|---|---|
 | **Git** | 2.40+ | Clonar, ramas, commits | https://git-scm.com/downloads |
 | **Docker Desktop** (incluye Compose v2) | Docker 24+ | Servicios del backend cuando se ejecuta el stack completo localmente | https://www.docker.com/products/docker-desktop |
-| **Node.js** | 20 LTS | Runtime de JavaScript para pnpm, Vite, Vitest, Playwright | https://nodejs.org |
+| **Node.js** | 24 LTS | Runtime de JavaScript para pnpm, Vite, Vitest, Playwright | https://nodejs.org |
 | **pnpm** | 9+ | Manejador de paquetes | `npm install -g pnpm` |
 | **VS Code** (recomendado) | — | Editor con integración de TypeScript y ESLint | https://code.visualstudio.com |
 
@@ -462,7 +462,7 @@ Fallos comunes y soluciones:
 
 ```powershell
 git --version           # 2.40 o superior
-node --version          # v20.x
+node --version          # v24.x
 pnpm --version          # 9.x
 ```
 

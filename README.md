@@ -169,7 +169,7 @@ Design rules:
 
 #### Prerequisites
 
-- **Node.js** 20 LTS — [nodejs.org](https://nodejs.org)
+- **Node.js** 24 LTS — [nodejs.org](https://nodejs.org)
 - **pnpm** 9+ — Windows: `iwr https://get.pnpm.io/install.ps1 -useb | iex` / macOS: `brew install pnpm`
 - **Git** 2.40+
 - The **backend** running locally (see `ordenes-kds-backend/README.md`), or the mock server described in `docs/CONTRIBUTING_Frontend.md`

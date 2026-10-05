@@ -10,7 +10,7 @@
 # If PowerShell blocks execution due to policy, run first (once per machine):
 #   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 #
-# Prerequisites: Node.js 20 LTS and pnpm 9+ must be on your PATH.
+# Prerequisites: Node.js 24 LTS and pnpm 9+ must be on your PATH.
 #   Node.js : https://nodejs.org
 #   pnpm    : npm install -g pnpm
 
@@ -44,19 +44,19 @@ function Abort {
 }
 
 # ---------------------------------------------------------------------------
-# Step 1 -- Verify Node.js 20+
+# Step 1 -- Verify Node.js 24+
 # ---------------------------------------------------------------------------
 Write-Step "Checking Node.js version"
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Abort "Node.js not found.  Install Node.js 20 LTS from https://nodejs.org"
+    Abort "Node.js not found.  Install Node.js 24 LTS from https://nodejs.org"
 }
 
 $nodeVersion = node --version 2>&1
 if ($nodeVersion -match "v(\d+)\.") {
     $nodeMajor = [int]$Matches[1]
-    if ($nodeMajor -lt 20) {
-        Abort "Node.js 20+ required.  Found: $nodeVersion"
+    if ($nodeMajor -lt 24) {
+        Abort "Node.js 24+ required.  Found: $nodeVersion"
     }
     Write-Ok "Found Node.js $nodeVersion"
 } else {
