@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="1" failures="0" errors="0" time="0.1759458">
+    <testsuite name="src/App.test.tsx" timestamp="2026-10-05T07:42:58.926Z" hostname="LENOVOERICK" tests="1" failures="0" errors="0" skipped="0" time="0.1759458">
+        <testcase classname="src/App.test.tsx" name="App component &gt; renders correctly with heading and counter button" time="0.1720472">
+        </testcase>
+    </testsuite>
+</testsuites>
