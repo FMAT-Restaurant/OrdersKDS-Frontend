@@ -1,0 +1,35 @@
+# Environment files — never bake secrets into the image
+.env
+.env.local
+.env.*.local
+
+# Dependencies — reinstalled inside the builder stage
+node_modules
+
+# Build output — rebuilt inside the builder stage
+dist
+
+# Version control
+.git
+.gitignore
+
+# Test artefacts
+tests
+e2e
+playwright-report
+test-results
+coverage
+axe-report
+
+# Editor / IDE
+.vscode
+.idea
+*.swp
+
+# CI/CD — not needed inside the image
+.github
+.zap
+
+# Development-only files
+*.md
+junit.xml
