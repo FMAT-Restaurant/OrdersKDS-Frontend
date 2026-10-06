@@ -1,54 +1,36 @@
-/// <reference types="vitest" />
-import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import federation from '@originjs/vite-plugin-federation';
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    (federation as any)({
+      name: 'ordersKds',
+      filename: 'remoteEntry.js',
+      exposes: {
+        './KdsApp': './src/KdsApp.tsx',
+        './IntermediateDishesApp': './src/IntermediateDishesApp.tsx',
+        './OrderTicketwidget': './src/OrderTicketwidget.tsx',
+      },
+      shared: ['react', 'react-dom'],
+    }),
+  ],
+  // CONFIGURACIÓN PARA FIX DE VITEST:
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./src/setupTests.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
-    reporters: ['default', 'junit'],
-    outputFile: 'junit.xml',
-    coverage: {
-      provider: 'v8',
-      // lcov   → consumed by SonarCloud (sonar.javascript.lcov.reportPaths)
-      // cobertura → consumed by the GitHub Actions coverage summary step
-      reporter: ['text', 'lcov', 'cobertura'],
-      // main.tsx is the app entry point; vite-env.d.ts is a generated type declaration.
-      // Neither contains testable logic, so both are excluded from the coverage gate.
-      exclude: ['src/main.tsx', 'src/vite-env.d.ts', '.eslintrc.cjs']
-    }
+    setupFiles: './src/setupTests.ts',
+    exclude: ['**/node_modules/**', '**/e2e/**'], // Ignora los tests e2e de Playwright
   },
-  // Security headers applied during local development (pnpm dev).
-  // Mirrors production headers set by the Nginx config in the Docker image.
-  // COEP + COOP are required for SharedArrayBuffer (used by some Playwright helpers).
-  server: {
-    headers: {
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-      'Cross-Origin-Resource-Policy': 'same-site',
-      'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
-      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
-    }
+  build: {
+    modulePreload: false,
+    target: 'esnext',
+    minify: false,
+    cssCodeSplit: false,
   },
-  // The same headers must be present on the preview server (pnpm preview) because
-  // E2E tests and the ZAP baseline scan run against it, not against the dev server.
   preview: {
-    headers: {
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-      'Cross-Origin-Resource-Policy': 'same-site',
-      'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
-      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
-    }
-  }
-})
+    cors: true,
+    port: 4173,
+  },
+});
