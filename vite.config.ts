@@ -16,12 +16,19 @@ export default defineConfig({
       shared: ['react', 'react-dom'],
     }),
   ],
-  // CONFIGURACIÓN PARA FIX DE VITEST:
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: './src/setupTests.ts',
-    exclude: ['**/node_modules/**', '**/e2e/**'], // Ignora los tests e2e de Playwright
+    setupFiles: ['./src/setupTests.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    reporters: ['default', 'junit'],
+    outputFile: 'junit.xml',
+    exclude: ['**/node_modules/**', '**/e2e/**'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'cobertura'],
+      exclude: ['src/main.tsx', 'src/vite-env.d.ts', '.eslintrc.cjs'],
+    },
   },
   build: {
     modulePreload: false,
@@ -29,8 +36,30 @@ export default defineConfig({
     minify: false,
     cssCodeSplit: false,
   },
+  server: {
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Resource-Policy': 'same-site',
+      'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    },
+  },
   preview: {
     cors: true,
     port: 4173,
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Resource-Policy': 'same-site',
+      'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    },
   },
 });

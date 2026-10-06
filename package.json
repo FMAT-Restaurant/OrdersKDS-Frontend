@@ -17,13 +17,12 @@
     "test:a11y": "playwright test e2e/a11y.spec.ts"
   },
   "dependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
-  },
+    "@originjs/vite-plugin-federation": "^1.4.1"
+  }, 
+
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
-    "@originjs/vite-plugin-federation": "^1.4.1",
     "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
