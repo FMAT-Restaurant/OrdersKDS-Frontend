@@ -1,30 +1,51 @@
-/// <reference types="vitest" />
-import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import { createRequire } from 'node:module';
 
-// https://vite.dev/config/
+// @originjs/vite-plugin-federation ships CJS only. createRequire bridges the
+// ESM/CJS boundary so TypeScript's nodenext module resolution stays happy.
+const require = createRequire(import.meta.url);
+const federation = require('@originjs/vite-plugin-federation') as typeof import('@originjs/vite-plugin-federation')['default'];
+
+
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    federation({
+      name: 'ordersKds',
+      filename: 'remoteEntry.js',
+      exposes: {
+        './KdsApp': './src/KdsApp.tsx',
+        './IntermediateDishesApp': './src/IntermediateDishesApp.tsx',
+        './OrderTicketWidget': './src/OrderTicketWidget.tsx',
+      },
+      shared: ['react', 'react-dom'],
+    }),
+  ],
   test: {
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    typecheck: {
+      tsconfig: './tsconfig.vitest.json',
+    },
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'tests/unit/**/*.{test,spec}.{ts,tsx}'],
     reporters: ['default', 'junit'],
-    outputFile: 'junit.xml',
+    outputFile: 'reports/junit.xml',
+    exclude: ['**/node_modules/**', '**/e2e/**'],
     coverage: {
       provider: 'v8',
-      // lcov   → consumed by SonarCloud (sonar.javascript.lcov.reportPaths)
-      // cobertura → consumed by the GitHub Actions coverage summary step
       reporter: ['text', 'lcov', 'cobertura'],
-      // main.tsx is the app entry point; vite-env.d.ts is a generated type declaration.
-      // Neither contains testable logic, so both are excluded from the coverage gate.
-      exclude: ['src/main.tsx', 'src/vite-env.d.ts', '.eslintrc.cjs']
-    }
+      exclude: ['src/main.tsx', 'src/vite-env.d.ts', '.eslintrc.cjs'],
+    },
   },
-  // Security headers applied during local development (pnpm dev).
-  // Mirrors production headers set by the Nginx config in the Docker image.
-  // COEP + COOP are required for SharedArrayBuffer (used by some Playwright helpers).
+  build: {
+    modulePreload: false,
+    target: 'esnext',
+    minify: false,
+    cssCodeSplit: false,
+  },
   server: {
     headers: {
       'X-Content-Type-Options': 'nosniff',
@@ -34,12 +55,12 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Resource-Policy': 'same-site',
       'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
-      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
-    }
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    },
   },
-  // The same headers must be present on the preview server (pnpm preview) because
-  // E2E tests and the ZAP baseline scan run against it, not against the dev server.
   preview: {
+    cors: true,
+    port: 4173,
     headers: {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
@@ -48,7 +69,7 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Resource-Policy': 'same-site',
       'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
-      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
-    }
-  }
-})
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    },
+  },
+});
