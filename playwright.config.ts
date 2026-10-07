@@ -13,7 +13,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: process.env.CI ? 'pnpm run preview -- --port 4173 --host 127.0.0.1' : 'pnpm run build && pnpm run preview -- --port 4173 --host 127.0.0.1',
+      command: process.env.CI ? 'pnpm exec vite preview --port 4173 --host 127.0.0.1' : 'pnpm run build && pnpm exec vite preview --port 4173 --host 127.0.0.1',
       port: 4173,
       reuseExistingServer: !process.env.CI,
     },
