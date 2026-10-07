@@ -2,3 +2,4 @@
 10049	IGNORE	(Ignorar Non-Cacheable Content dev)
 10109	IGNORE	(Ignorar aviso de Modern Web Application)
 90004	IGNORE	(Ignorar CORP en archivos estaticos)
+10098	IGNORE	(Ignorar Cross-Domain Misconfiguration para Module Federation)
