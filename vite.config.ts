@@ -1,17 +1,24 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import federation from '@originjs/vite-plugin-federation';
+import { createRequire } from 'node:module';
+
+// @originjs/vite-plugin-federation ships CJS only. createRequire bridges the
+// ESM/CJS boundary so TypeScript's nodenext module resolution stays happy.
+const require = createRequire(import.meta.url);
+const federation = (require('@originjs/vite-plugin-federation') as typeof import('@originjs/vite-plugin-federation')).default;
+
+
 
 export default defineConfig({
   plugins: [
     react(),
-    (federation as any)({
+    federation({
       name: 'ordersKds',
       filename: 'remoteEntry.js',
       exposes: {
         './KdsApp': './src/KdsApp.tsx',
         './IntermediateDishesApp': './src/IntermediateDishesApp.tsx',
-        './OrderTicketwidget': './src/OrderTicketwidget.tsx',
+        './OrderTicketWidget': './src/OrderTicketWidget.tsx',
       },
       shared: ['react', 'react-dom'],
     }),
@@ -20,9 +27,12 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
+    typecheck: {
+      tsconfig: './tsconfig.vitest.json',
+    },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     reporters: ['default', 'junit'],
-    outputFile: 'junit.xml',
+    outputFile: 'reports/junit.xml',
     exclude: ['**/node_modules/**', '**/e2e/**'],
     coverage: {
       provider: 'v8',
