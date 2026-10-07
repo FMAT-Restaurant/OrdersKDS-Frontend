@@ -40,7 +40,7 @@ jobs:
             exit 1
           fi
       - name: Validate PR title (Conventional Commits)
-        uses: amannn/action-semantic-pull-request@v5
+        uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -81,7 +81,7 @@ jobs:
 
   unit-tests:
     name: Unit Tests
-    needs: lint-and-types
+    needs: build-federation
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -98,6 +98,12 @@ jobs:
         with:
           node-version: 24
           cache: "pnpm"
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: federation-dist
+          path: dist
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -202,6 +208,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: federation-dist
+          path: dist
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps
 
@@ -241,6 +253,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: federation-dist
+          path: dist
 
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
