@@ -13,12 +13,12 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'pnpm run build && pnpm run preview -- --port 4173 --host 127.0.0.1',
+      command: process.env.CI ? 'pnpm run preview -- --port 4173 --host 127.0.0.1' : 'pnpm run build && pnpm run preview -- --port 4173 --host 127.0.0.1',
       port: 4173,
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'pnpm exec vite --port 5174 tests/e2e/host-stub',
+      command: 'pnpm exec vite --port 5174 --host 127.0.0.1 tests/e2e/host-stub',
       port: 5174,
       reuseExistingServer: !process.env.CI,
     },
