@@ -1,3 +1,3 @@
-export default function OrderTicketwidget() {
+export default function OrderTicketWidget() {
   return <div>Order Ticket widget</div>;
 }

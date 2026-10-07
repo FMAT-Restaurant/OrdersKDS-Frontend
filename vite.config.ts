@@ -30,7 +30,7 @@ export default defineConfig({
     typecheck: {
       tsconfig: './tsconfig.vitest.json',
     },
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'tests/unit/**/*.{test,spec}.{ts,tsx}'],
     reporters: ['default', 'junit'],
     outputFile: 'reports/junit.xml',
     exclude: ['**/node_modules/**', '**/e2e/**'],
