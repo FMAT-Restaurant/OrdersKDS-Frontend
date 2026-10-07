@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 // @originjs/vite-plugin-federation ships CJS only. createRequire bridges the
 // ESM/CJS boundary so TypeScript's nodenext module resolution stays happy.
 const require = createRequire(import.meta.url);
-const federation = (require('@originjs/vite-plugin-federation') as typeof import('@originjs/vite-plugin-federation')).default;
+const federation = require('@originjs/vite-plugin-federation') as typeof import('@originjs/vite-plugin-federation')['default'];
 
 
 
