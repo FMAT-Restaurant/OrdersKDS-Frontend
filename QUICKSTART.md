@@ -33,7 +33,7 @@ Select **Read and write permissions** and save. This is required by the
 | Secret name | Where to get it | Required by |
 |---|---|---|
 | `SONAR_TOKEN` | SonarCloud → My Account → Security → Generate Token (type: **User Token**) | `sonarcloud` job |
-| `DISCORD_WEBHOOK` | Discord → Channel Settings → Integrations → Webhooks → Copy URL | `notify-on-failure` and `build-and-push` jobs |
+| `DISCORD_WEBHOOK` | Discord → Channel Settings → Integrations → Webhooks → Copy URL | `zap-baseline`, `notify-on-failure` and `build-and-push` jobs |
 
 `GITHUB_TOKEN` is injected automatically by GitHub Actions — **do not create it**.
 
@@ -98,7 +98,7 @@ push/PR to develop or main
                         │
                         ├─ e2e          — Playwright (Chromium + WebKit)
                         ├─ a11y         — axe-core via Playwright
-                        └─ zap-baseline — OWASP ZAP baseline against preview server
+                        └─ zap-baseline — OWASP ZAP baseline against preview server (reports to Discord)
 
 Runs after any failure:
         notify-on-failure        — Discord webhook alert
@@ -337,7 +337,7 @@ Selecciona **Read and write permissions** y guarda. Esto es requerido por el job
 | Nombre del secreto | Dónde obtenerlo | Requerido por |
 |---|---|---|
 | `SONAR_TOKEN` | SonarCloud → My Account → Security → Generate Token (tipo: **User Token**) | Job `sonarcloud` |
-| `DISCORD_WEBHOOK` | Discord → Ajustes del canal → Integraciones → Webhooks → Copiar URL | Jobs `notify-on-failure` y `build-and-push` |
+| `DISCORD_WEBHOOK` | Discord → Ajustes del canal → Integraciones → Webhooks → Copiar URL | Jobs `zap-baseline`, `notify-on-failure` y `build-and-push` |
 
 `GITHUB_TOKEN` es inyectado automáticamente por GitHub Actions — **no lo crees**.
 
@@ -397,7 +397,7 @@ push/PR a develop o main
                         │
                         ├─ e2e          — Playwright (Chromium + WebKit)
                         ├─ a11y         — axe-core vía Playwright
-                        └─ zap-baseline — OWASP ZAP baseline contra el preview server
+                        └─ zap-baseline — OWASP ZAP baseline contra el preview server (reporta a Discord)
 
 Se ejecuta tras cualquier fallo:
         notify-on-failure        — alerta por webhook de Discord
