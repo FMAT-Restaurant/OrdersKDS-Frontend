@@ -159,7 +159,7 @@ Design rules:
 - **The identity of the logged-in user is never a form field.** The authenticated user travels in the JWT (issued by Auth, held by the Shell session) and is resolved by the backend. This repository never implements login.
 - **Server state comes from the server.** When the backend pushes a state change through the WebSocket, screens redraw by themselves. No polling.
 - **Asynchronous by nature.** Confirming an order from the Ticket widget returns immediately; the order only changes to "in kitchen" or "rejected" when the WebSocket message arrives (Choreographed Saga).
-- **Kitchen screens are keyboard-only.** Every KDS action must be reachable with the Bump Bar; no interaction may depend on a pointer.
+- **Kitchen screens are touch-first with full keyboard parity.** Touch is the primary input on the large landscape wall monitor; physical Bump Bar keyboard is the secondary input with 100% functional parity (RNF-07, OP-06).
 - **No global styles.** No CSS reset, no `body` / `:root` rules and no unscoped selectors: every exported module styles only its own root container, using the FMAT-RESTAURANT tokens, so it can live next to other micro frontends without clashes.
 - **The widget is not a screen.** The Order Ticket Widget owns no routing and no page layout; its host decides where it is placed and passes it what it needs.
 
@@ -225,7 +225,7 @@ The stand-alone dev harness will be available at `http://localhost:5173`. It mou
 
 > **Daily routine:** `git pull --rebase origin develop && pnpm install --frozen-lockfile && pnpm dev`. No virtual environment activation needed.
 
-> **Tip:** to try the KDS App exactly as the kitchen uses it, open `http://localhost:5173/kds` in a landscape window and operate it only with the keyboard.
+> **Tip:** to try the KDS App exactly as the kitchen uses it, open `http://localhost:5173/kds` in a landscape window and operate it using touch or keyboard.
 
 > **Testing inside the Shell or the Menu micro frontend:** with `@originjs/vite-plugin-federation` the `remoteEntry.js` file is generated at build time, so to consume this remote from another repository run `pnpm build && pnpm preview` and point the host at the URL and port printed by `preview`. The port assigned to each micro frontend will be agreed as they are built.
 
@@ -501,7 +501,7 @@ Reglas de diseño:
 - **La identidad del usuario autenticado nunca es un campo de formulario.** El usuario viaja en el JWT (emitido por Auth y mantenido por la sesión del Shell) y el backend lo resuelve. Este repositorio nunca implementa el login.
 - **El estado del servidor viene del servidor.** Cuando el backend empuja un cambio de estado por WebSocket, las pantallas se redibujan solas. Sin polling.
 - **Asíncrono por naturaleza.** Confirmar una orden desde el widget de Ticket responde de inmediato; la orden solo cambia a "en cocina" o "rechazada" cuando llega el mensaje WebSocket (Saga coreografiada).
-- **Las pantallas de cocina son solo teclado.** Toda acción del KDS debe poder ejecutarse con el Bump Bar; ninguna interacción puede depender de un puntero.
+- **Las pantallas de cocina son táctiles como método principal con paridad total de teclado.** La interacción táctil es la entrada principal en el monitor de pared landscape; el teclado/Bump Bar es la entrada secundaria con 100 % de paridad funcional (RNF-07, OP-06).
 - **Sin estilos globales.** Nada de CSS reset, reglas sobre `body` / `:root` ni selectores sin acotar: cada módulo exportado estiliza únicamente su propio contenedor raíz, usando los tokens de FMAT-RESTAURANT, para convivir con otros micro frontends sin choques.
 - **El widget no es una pantalla.** El Widget de Ticket no maneja rutas ni layout de página; su anfitrión decide dónde colocarlo y qué datos pasarle.
 

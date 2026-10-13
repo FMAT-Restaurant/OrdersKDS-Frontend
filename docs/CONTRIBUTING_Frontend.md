@@ -196,7 +196,7 @@ Reglas de redacción:
 | `perf` | Mejoras el rendimiento (renders, tamaño del bundle, memoización) sin cambiar el comportamiento funcional. | `perf(kds-board): memoize sorted queue to avoid re-render on every tick` |
 | `test` | Agregas, corriges o reorganizas **solo tests** (unitarios, Playwright, axe) sin tocar código de producción. | `test(bump-bar): cover every key in BUMP_BAR_KEY_MAP [RNF-07]` |
 | `build` | Tocas el sistema de build o las dependencias: `package.json`, `pnpm-lock.yaml`, `vite.config.ts` (incluida la configuración de Module Federation), `tsconfig.json`, `tailwind.config`. | `build(deps): bump @tanstack/react-query to the latest 5.x patch` |
-| `ci` | Cambias la configuración de integración continua: `.github/workflows/`, `sonar-project.properties`, umbrales de calidad. | `ci: run Playwright keyboard-only suite on every pull request` |
+| `ci` | Cambias la configuración de integración continua: `.github/workflows/`, `sonar-project.properties`, umbrales de calidad. | `ci: run Playwright a11y and e2e suite on every pull request` |
 | `chore` | Mantenimiento que no encaja en los demás y no toca `src/` ni tests: `.gitignore`, `scripts/`, `.env.example`. | `chore(scripts): add helper to print the preview URL for the Shell` |
 | `revert` | Deshaces un commit anterior. El body indica el hash revertido. | `revert: feat(intermediate-dishes): add chef view route` |
 
@@ -294,7 +294,7 @@ Marca cada punto en el PR (guía §11.6):
 - [ ] Todos los commits y el título del PR siguen Conventional Commits.
 - [ ] Referencia al menos un `RF-XX`/`RNF-XX`; TSDoc con `@satisfies` en cada módulo, hook o componente exportado.
 - [ ] Pruebas unitarias del comportamiento nuevo (éxito **y** al menos un error), etiquetadas con `// @requirement RF-XX`.
-- [ ] Si cambia el comportamiento visible: prueba E2E de Playwright y verificación `axe-core` sin violaciones; si toca el KDS, prueba operada **solo con `page.keyboard`**.
+- [ ] Si cambia el comportamiento visible: prueba E2E de Playwright y verificación `axe-core` sin violaciones; si toca el KDS, prueba con interacción táctil (`locator.tap()`) y de teclado (`page.keyboard`) con paridad total (RNF-07, OP-06).
 - [ ] Si cambia un contrato: tipos TypeScript, esquemas Zod y `errorCodes.ts` actualizados en coordinación con el backend.
 - [ ] `eslint` y `tsc` sin errores; sin `any`; `prettier` aplicado (incluido el orden de clases Tailwind).
 - [ ] Sin estilos globales, sin `!important`, sin `dangerouslySetInnerHTML`; tokens solo en `.orders-kds-root`.
@@ -316,7 +316,7 @@ Marca cada punto en el PR (guía §11.6):
 2. ¿Todo dato de red se valida con Zod en el borde, y el estado del servidor vive solo en TanStack Query?
 3. ¿El WebSocket no hace *polling*, valida cada mensaje y refresca todo al reconectar?
 4. ¿Se respeta el aislamiento de estilos (nada global) y los tokens FMAT-RESTAURANT (sin inventar colores, radios ni espaciado)?
-5. ¿El KDS es operable solo con teclado y el mapeo de teclas vive únicamente en `BUMP_BAR_KEY_MAP`?
+5. ¿El KDS es operable con interacción táctil (principal) y teclado (secundario), y el mapeo de teclas vive únicamente en `BUMP_BAR_KEY_MAP` con paridad total (OP-06)?
 6. ¿El código, los comentarios, las claves de i18n y los tests están en inglés?
 7. ¿Se respetan los contratos con el backend y con los demás micro frontends, y los puntos abiertos?
 
@@ -336,7 +336,7 @@ Marca cada punto en el PR (guía §11.6):
 
 - `develop` con CI y *Quality Gate* en verde.
 - Sin PRs bloqueantes pendientes de mezclar.
-- Verificación funcional de lo acumulado en `develop`: E2E de Playwright (incluida la suite de teclado del KDS) y `axe-core` en verde, y el remoto probado dentro del Shell (`pnpm build && pnpm preview`, guía §14.5).
+- Verificación funcional de lo acumulado en `develop`: E2E de Playwright (interacción táctil y teclado con paridad total) y `axe-core` en verde, y el remoto probado dentro del Shell (`pnpm build && pnpm preview`, guía §14.5).
 - Contratos coordinados con el backend y con los equipos de Shell (Auth), Menú y Sala (sección 9).
 
 **Cómo:**
@@ -446,7 +446,7 @@ Reglas:
 
 Toda decisión de arquitectura no trivial (nueva dependencia relevante, patrón nuevo, cambio en la forma de exponer módulos federados, desviación de un principio) se registra como **ADR**:
 
-- Archivo: `docs/adr/NNNN-short-title.md` (nombre en inglés y `kebab-case`; contenido en español).
+- Archivo: `docs/adr/NNNN-short-title.md` o en el registro consolidado [`docs/Decisiones_Puntos_Abiertos_OP01-OP09.md`](Decisiones_Puntos_Abiertos_OP01-OP09.md) (que agrupa ADR-0001 a ADR-0011).
 - Se propone en el mismo PR que la introduce, o en un PR `docs` previo.
 - Plantilla mínima:
 
@@ -471,18 +471,25 @@ Qué se gana, qué se pierde y qué queda pendiente.
 
 ## 11. Puntos abiertos: no se resuelven en silencio
 
-La guía §1.2 lista decisiones pendientes (`OP-01` … `OP-07`). Ningún PR "elige una" sin dejarlo explícito. En este repositorio afectan sobre todo a:
+La guía §1.2 lista el estado de las decisiones de arquitectura (`OP-01` … `OP-13`). Ningún PR contradice las decisiones aceptadas ni adopta propuestas sin consenso:
 
-| Punto | Qué hacer mientras tanto |
+| Punto | Estado / Qué hacer en el frontend |
 |---|---|
-| OP-02 Alcance de canales WebSocket | Encapsular la suscripción en un único módulo (`realtime`). |
-| OP-03 Hex de Éxito/Advertencia/Error/Información | Usar tokens semánticos (`--color-success`, …) sin inventar el hex; siempre color **+** texto. |
-| OP-04 Contrato de `ordenes.orden.expirada`, `ordenes.platillo_intermedio.preparado` y `motivo` | Reflejarlos en tipos/Zod como *propuestos*. |
-| OP-05 `confirm` sobre una orden ya confirmada | Tratar la acción como idempotente en la UI y documentar el supuesto en el PR. |
-| OP-06 Mapeo exacto de teclas del Bump Bar | Definirlo en una sola constante configurable (`BUMP_BAR_KEY_MAP`). |
-| OP-07 Rutas en español de la Arquitectura §3.2 | Usar las rutas en inglés de la guía §9.1 hasta confirmarse. |
+| OP-01 Timeout de Saga | **Resuelto** (ADR-0001): 60 s máximos desde `confirmed_at`. La UI muestra "pendiente de confirmación de stock". |
+| OP-02 Canales WebSocket | **Resuelto** (ADR-0002): dos endpoints (`/ws/kds`, `/ws/waiter`) con canales `kds:station:{station}`, `kds:all`, `floor`, `user:{userId}` en módulo `realtime`. |
+| OP-03 Colores semánticos | **Resuelto** (ADR-0003): paleta con tokens `--color-success/warning/error/info`; siempre color **+** texto o icono. |
+| OP-04 Contrato de `orden.expirada` y `motivo` | Mantener en tipos/Zod como *propuesto* hasta cierre en INT-01 (S6). |
+| OP-05 `confirm` repetido | **Resuelto** (ADR-0004): acción idempotente en UI; deshabilita edición de ítems tras confirmar. |
+| OP-06 Entrada KDS y Bump Bar | **Resuelto** (ADR-0005): interacción dual táctil principal (≥ 64 px) + teclado secundario con paridad total (`BUMP_BAR_KEY_MAP`). |
+| OP-07 Rutas en inglés | **Resuelto** (ADR-0006): contratos de API REST en inglés (`?status=`, `?station=`, `/void-kitchen-error`, `/intermediate-dishes`, cuerpo `note`). |
+| OP-08 Quién marca "Entregada" | **Resuelto** (ADR-0007): cocina marca listo/entregado; el mesero recoge; sin endpoint `deliver`. |
+| OP-09 Estación y tiempo en catálogo | **Resuelto** (ADR-0008): texto de referencia (`string`), renderizado escapado (sin `dangerouslySetInnerHTML`). |
+| OP-10 RabbitMQ broker | En curso: sin credenciales en el repositorio; el frontend se conecta vía WebSocket (`VITE_WS_URL`). |
+| OP-11 Prioridad en cola KDS | **Propuesto** (ADR-0009): mayor tiempo en cocina primero (`in_preparation_at`); semáforos de retraso configurables. |
+| OP-12 Rehacer con orden `DELIVERED` | **Propuesto** (ADR-0010): orden conserva `DELIVERED`, solo el ítem pasa a `PENDING` y se resalta en el KDS. |
+| OP-13 Aviso `DELIVERED` al mesero | **Pendiente**: monitor de Sala vs. componente propio en frontend (decidir en INT-03, S6). |
 
-Si tu cambio depende de uno, escribe el supuesto en la descripción del PR. Cuando el equipo resuelva un punto, actualiza la guía en el mismo cambio.
+Si tu cambio depende de uno de los puntos pendientes o propuestos, escribe el supuesto en la descripción del PR.
 
 ---
 
@@ -501,7 +508,7 @@ El flujo es el mismo para humanos y agentes (Claude, Copilot, Cursor, etc.):
 
 - El agente trabaja en **tu rama personal** (`nombrerama-personaencargada`), nunca en `develop` ni `main`.
 - Sus commits y el título del PR siguen Conventional Commits, en inglés, con el tipo correcto de la sección 4.2.
-- Debe cumplir la sección 13 de la guía (trazabilidad de requisitos, pruebas, idioma, sin estilos globales, accesibilidad, KDS por teclado, etc.).
+- Debe cumplir la sección 13 de la guía (trazabilidad de requisitos, pruebas, idioma, sin estilos globales, accesibilidad, KDS táctil y por teclado, etc.).
 - **Una persona revisa y es responsable del PR.** El agente no aprueba ni mezcla.
 
 ---
