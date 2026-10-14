@@ -265,6 +265,14 @@ jobs:
             exit 0
           fi
 
+          REPORT_FILE=""
+          if [ -d "playwright-report" ]; then
+            zip -q -r playwright-report.zip playwright-report || true
+            if [ -f "playwright-report.zip" ]; then
+              REPORT_FILE="playwright-report.zip"
+            fi
+          fi
+
           STATUS_TEXT="Success"
           if [ "$TEST_STATUS" != "success" ]; then
             STATUS_TEXT="Failed or Cancelled"
@@ -272,11 +280,19 @@ jobs:
 
           MESSAGE="**Playwright E2E Tests Report ($STATUS_TEXT)**"$'\n'"**Branch:** \`$REF_NAME\` | **Commit:** \`$SHA\`"$'\n'"**Run:** $SERVER_URL/$REPO/actions/runs/$RUN_ID"
 
-          curl -s -S -X POST \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": \"$MESSAGE\"}" \
-            "$DISCORD_WEBHOOK" > /dev/null || echo "Warning: Failed to deliver Discord notification."
-          echo "Playwright notification sent to Discord."
+          if [ -n "$REPORT_FILE" ]; then
+            curl -s -S -X POST \
+              -F "content=$MESSAGE" \
+              -F "file=@$REPORT_FILE" \
+              "$DISCORD_WEBHOOK" > /dev/null || echo "Warning: Failed to deliver Discord notification."
+            echo "Playwright report sent to Discord with attachment: $REPORT_FILE"
+          else
+            curl -s -S -X POST \
+              -H "Content-Type: application/json" \
+              -d "{\"content\": \"$MESSAGE\n*(No report directory found on runner)*\"}" \
+              "$DISCORD_WEBHOOK" > /dev/null || echo "Warning: Failed to deliver Discord notification."
+            echo "Playwright notification sent to Discord without attachment."
+          fi
 
   a11y:
     name: Accessibility Tests
