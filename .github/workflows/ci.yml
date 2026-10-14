@@ -248,6 +248,36 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      - name: Send Playwright Report to Discord
+        if: always()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_REPORTS }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          TEST_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK_REPORTS is not set; skipping notification."
+            exit 0
+          fi
+
+          STATUS_TEXT="Success"
+          if [ "$TEST_STATUS" != "success" ]; then
+            STATUS_TEXT="Failed or Cancelled"
+          fi
+
+          MESSAGE="**Playwright E2E Tests Report ($STATUS_TEXT)**"$'\n'"**Branch:** \`$REF_NAME\` | **Commit:** \`$SHA\`"$'\n'"**Run:** $SERVER_URL/$REPO/actions/runs/$RUN_ID"
+
+          curl -s -S -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"$MESSAGE\"}" \
+            "$DISCORD_WEBHOOK" > /dev/null || echo "Warning: Failed to deliver Discord notification."
+          echo "Playwright notification sent to Discord."
+
   a11y:
     name: Accessibility Tests
     needs: build-federation
@@ -367,7 +397,7 @@ jobs:
       - name: Send ZAP Report to Discord
         if: always()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_REPORTS }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
           SERVER_URL: ${{ github.server_url }}
@@ -377,7 +407,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
-            echo "DISCORD_WEBHOOK is not set; skipping notification."
+            echo "DISCORD_WEBHOOK_REPORTS is not set; skipping notification."
             exit 0
           fi
 
@@ -419,7 +449,7 @@ jobs:
     steps:
       - name: Send Discord Alert
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_ALERTS }}
           REF_NAME: ${{ github.ref_name }}
           SERVER_URL: ${{ github.server_url }}
           REPO: ${{ github.repository }}
@@ -427,7 +457,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
-            echo "DISCORD_WEBHOOK is not set; skipping notification."
+            echo "DISCORD_WEBHOOK_ALERTS is not set; skipping notification."
             exit 0
           fi
           MESSAGE="The pipeline has failed on branch ${REF_NAME}! Check the logs here: ${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
@@ -483,16 +513,33 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Notify Release
-        if: always()
+        if: success()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_RELEASES }}
           SHA: ${{ github.sha }}
           STATUS: ${{ job.status }}
         shell: bash
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
-            echo "DISCORD_WEBHOOK is not set; skipping notification."
+            echo "DISCORD_WEBHOOK_RELEASES is not set; skipping notification."
             exit 0
           fi
           MESSAGE="Docker image build and push completed for ${SHA}. Status: ${STATUS}"
+          curl -s -S -X POST -H "Content-Type: application/json" -d "{\"content\": \"$MESSAGE\"}" "$DISCORD_WEBHOOK" > /dev/null || echo "Warning: Failed to deliver Discord notification."
+
+      - name: Notify Release Failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_ALERTS }}
+          SHA: ${{ github.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK_ALERTS is not set; skipping notification."
+            exit 0
+          fi
+          MESSAGE="Docker image build and push FAILED for ${SHA}! Check the logs here: ${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
           curl -s -S -X POST -H "Content-Type: application/json" -d "{\"content\": \"$MESSAGE\"}" "$DISCORD_WEBHOOK" > /dev/null || echo "Warning: Failed to deliver Discord notification."
