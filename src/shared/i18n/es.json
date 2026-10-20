@@ -1,0 +1,24 @@
+{
+  "errors": {
+    "VALIDATION_ERROR": "Los datos enviados no son válidos.",
+    "UNAUTHENTICATED": "Su sesión ha expirado o no es válida. Por favor inicie sesión nuevamente.",
+    "FORBIDDEN_ROLE": "No tiene los permisos necesarios para realizar esta acción.",
+    "ORDER_NOT_FOUND": "La comanda solicitada no existe o ya no está disponible.",
+    "INVALID_STATE_TRANSITION": "La comanda no puede cambiar al estado solicitado en este momento.",
+    "VERSION_CONFLICT": "La comanda fue actualizada por otro usuario. Se han recargado los datos más recientes.",
+    "NOTE_REQUIRED": "Debe ingresar una nota obligatoria para continuar.",
+    "DISH_UNAVAILABLE": "El platillo seleccionado ya no se encuentra disponible.",
+    "INTERNAL_ERROR": "Ocurrió un error inesperado en el servidor. Por favor intente más tarde.",
+    "FORBIDDEN_CHANNEL": "No tiene autorización para suscribirse a este canal de cocina.",
+    "NETWORK_ERROR": "Error de comunicación con el servidor. Verifique su conexión.",
+    "UNKNOWN_ERROR": "Ocurrió un error inesperado."
+  },
+  "realtime": {
+    "connecting": "Conectando al servidor...",
+    "connected": "Conectado exitosamente",
+    "disconnected": "Sin conexión",
+    "reconnecting": "Reconectando...",
+    "tokenExpired": "Renovando sesión...",
+    "accessDenied": "Acceso restringido a este monitor"
+  }
+}
