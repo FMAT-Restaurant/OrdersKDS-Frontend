@@ -43,6 +43,7 @@ Screens of the original four-view scope that this repository **does not** build:
 - [Team Members](#team-members)
 - [Technology Stack](#technology-stack)
 - [Architecture Overview](#architecture-overview)
+- [Inter-Service Communication & Event Contracts](#inter-service-communication--event-contracts)
 - [Quick Start](#quick-start)
 - [Project Structure](#project-structure)
 - [Running Tests](#running-tests)
@@ -162,6 +163,51 @@ Design rules:
 - **Kitchen screens are touch-first with full keyboard parity.** Touch is the primary input on the large landscape wall monitor; physical Bump Bar keyboard is the secondary input with 100% functional parity (RNF-07, OP-06).
 - **No global styles.** No CSS reset, no `body` / `:root` rules and no unscoped selectors: every exported module styles only its own root container, using the FMAT-RESTAURANT tokens, so it can live next to other micro frontends without clashes.
 - **The widget is not a screen.** The Order Ticket Widget owns no routing and no page layout; its host decides where it is placed and passes it what it needs.
+
+---
+
+### Inter-Service Communication & Event Contracts
+
+Orders & KDS interacts with external microservices exclusively through asynchronous events over RabbitMQ (topic exchange) backed by the PostgreSQL Transactional Outbox pattern. State changes are pushed to client devices via WebSockets (`/ws/kds` and `/ws/waiter`).
+
+#### Master Event Mapping (Spanish / English / Code)
+
+To preserve consistency between architectural specifications (Spanish), backend constants (`app/messaging/events.py` in English), and inter-service agreements (e.g., Billing contract with Edwin), the canonical event mapping is established as follows:
+
+| Broker Routing Key (ES) | English Routing Key / Alias | Event Constant / Key | Direction | Target Microservice | Contract Status |
+|---|---|---|---|---|---|
+| `ordenes.orden.creada` | `orders.order.created` | `ORDER_CREATED` | Publish | Inventory | Confirmed |
+| `ordenes.orden.cancelada` | `orders.order.cancelled` | `ORDER_CANCELLED` | Publish | Inventory | Confirmed |
+| `ordenes.platillo.preparado` | `orders.dish.prepared` | `DISH_PREPARED` | Publish | Inventory | Confirmed |
+| `ordenes.comanda.mermada` | `orders.order.wasted` | `ORDER_WASTED` | Publish | Inventory | Confirmed (`ADMINISTRATIVE` \| `KITCHEN_ERROR`) |
+| `ordenes.cuenta.solicitada` | `orders.bill.requested` | `BILL_REQUESTED` | Publish | Billing (Pagos) | **Confirmed (Edwin Contract)** |
+| `ordenes.cobro.solicitado` | `orders.charge.requested` | `CHARGE_REQUESTED` | Publish | Billing (Pagos) | **Confirmed (Edwin Contract)** |
+| `ordenes.orden.expirada` | `orders.order.expired` | `ORDER_EXPIRED` | Publish | Inventory | Proposed (OP-04) |
+| `sala.dining_session.iniciada` | `dining.session.started` | `DINING_SESSION_STARTED` | Consume | Floor (Sala) | Confirmed |
+| `inventario.stock.reservado` | `inventory.stock.reserved` | `STOCK_RESERVED` | Consume | Inventory | Confirmed |
+| `inventario.stock.insuficiente` | `inventory.stock.insufficient` | `STOCK_INSUFFICIENT` | Consume | Inventory | Confirmed |
+| `menu.platillo.precio_actualizado` | `menu.dish.price_updated` | `DISH_PRICE_UPDATED` | Consume | Menu & Catalog | Confirmed |
+| `menu.catalogo.actualizado` | `menu.catalog.updated` | `CATALOG_UPDATED` | Consume | Menu & Catalog | Confirmed |
+| `pagos.pago.completado` | `payments.payment.completed` | `PAYMENT_COMPLETED` | Consume | Billing (Pagos) | **Confirmed (Edwin Contract)** |
+
+#### Key Integration Agreements
+
+1. **Billing & Payments (`docs/API_COMUNICACIONES.md` §2.3, `contrato_ordenes_pagos_edwin.md`):**
+   - Normal bill requests (`orders.bill.requested`) occur when all items are delivered (`DELIVERED`).
+   - Wasted orders with cost recovery (`orders.charge.requested`) occur on administrative voids during preparation (`WASTED`, RF-26, RF-27).
+   - Voided orders due to kitchen errors (`VOIDED`) are absorbed by the restaurant and **never** charged to customers.
+   - Dual correlation: Orders provides both `orderId` and `sessionId`; Billing must return `orderId` in `payments.payment.completed`.
+   - Prices are frozen at order confirmation (`unitPrice`); Menu catalog is never queried during payment.
+2. **Real-Time WebSockets (ADR-0002 & ADR-0011):**
+   - Segregated endpoints: `/ws/kds` (roles `kitchen`, `chef`, `admin`) and `/ws/waiter` (roles `waiter`, `admin`).
+   - Channels: `kds:station:{station}`, `kds:all`, `floor`, and `user:{userId}`.
+   - Close codes: `4401` (missing/invalid token) and `4403` (forbidden role).
+   - Signature verification is offloaded to the API Gateway; the service validates claims only without holding a signing key.
+3. **Saga Timeout (ADR-0001):**
+   - 60 seconds maximum from `confirmed_at`; watcher checks every 5 seconds.
+4. **Intermediate Dishes (ADR-0011 / TASK-27 NO-GO):**
+   - Excluded from the 7-sprint scope (`INTERMEDIATE_DISHES_ENABLED=false`).
+   - The design, REST route (`POST /intermediate-dishes`), event schema (`ordenes.platillo_intermedio.preparado`), and feature toggle remain fully preserved for future implementation without architectural redesign.
 
 ---
 
@@ -630,19 +676,21 @@ La documentación completa se encuentra en la carpeta [`docs/`](docs/):
 | Documento | Descripción |
 |---|---|
 | [`ERS_ordeneskds.md`](docs/ERS_ordeneskds.md) | Especificación de Requisitos de Software (v4) |
+| [`funcionalidades_ordeneskds.md`](docs/funcionalidades_ordeneskds.md) | Requisitos funcionales detallados y sincronizados |
 | [`Arquitectura_ordeneskds.md`](docs/Arquitectura_ordeneskds.md) | Arquitectura completa: API interna y eventos publicados |
-| [`Comunicaciones_API_ordenes_y_KDS.md`](docs/Comunicaciones_API_ordenes_y_KDS.md) | Comunicación REST, WebSocket y broker |
+| [`API_COMUNICACIONES.md`](docs/API_COMUNICACIONES.md) | Comunicación REST, WebSocket y mapeo canónico de eventos broker |
+| [`Decisiones_Puntos_Abiertos_OP01-OP09.md`](docs/Decisiones_Puntos_Abiertos_OP01-OP09.md) | Registro de Decisiones de Arquitectura (ADR-0001 a ADR-0011) |
 | [`Especificaciones_UI_Ordenes_Consolidado.md`](docs/Especificaciones_UI_Ordenes_Consolidado.md) | Especificación de hardware e interfaz del alcance original de cuatro vistas (las vistas del mesero ahora viven en los micro frontends de Sala y Menú) |
 | `FMAT-RESTAURANT Guía visual de componentes` | Guía visual compartida por todos los micro frontends (colores como `#C2410C`, radios, espaciado) |
 | [`DEVELOPMENT_GUIDELINES.md`](docs/DEVELOPMENT_GUIDELINES.md) | Estándares de código y reglas para humanos y agentes IA |
 | [`VyV_OrdenesKDS.md`](docs/VyV_OrdenesKDS.md) | Plan de Verificación y Validación |
-| [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) | Guías de contribución y flujo de trabajo |
+| [`CONTRIBUTING_Frontend.md`](docs/CONTRIBUTING_Frontend.md) | Guías de contribución para el frontend y flujo de trabajo |
 
 ---
 
 ### Contribución
 
-1. Lee [`docs/DEVELOPMENT_GUIDELINES.md`](docs/DEVELOPMENT_GUIDELINES.md) y [`CONTRIBUTING.md`](CONTRIBUTING.md) antes de contribuir.
+1. Lee [`docs/DEVELOPMENT_GUIDELINES.md`](docs/DEVELOPMENT_GUIDELINES.md) y [`docs/CONTRIBUTING_Frontend.md`](docs/CONTRIBUTING_Frontend.md) antes de contribuir.
 2. Crea una rama a partir de `develop`:
    ```bash
    git checkout -b feat/nombre-de-la-funcionalidad
