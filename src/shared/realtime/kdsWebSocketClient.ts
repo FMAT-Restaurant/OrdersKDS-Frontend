@@ -36,7 +36,13 @@ export class KdsWebSocketClient {
   ) {
     this.options = options;
     this.tracker = tracker;
-    this.WebSocketClass = options.WebSocketClass ?? (typeof WebSocket !== 'undefined' ? WebSocket : (null as unknown as typeof WebSocket));
+    let wsClass: typeof WebSocket | null = null;
+    if (options.WebSocketClass !== undefined) {
+      wsClass = options.WebSocketClass;
+    } else if (typeof WebSocket !== 'undefined') {
+      wsClass = WebSocket;
+    }
+    this.WebSocketClass = wsClass as typeof WebSocket;
     this.currentReconnectDelay = options.minReconnectDelayMs ?? 500;
 
     if (options.initialChannels) {

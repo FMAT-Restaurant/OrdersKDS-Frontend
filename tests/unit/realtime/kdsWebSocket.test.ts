@@ -331,6 +331,16 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
         }),
       );
 
+      // Inbound item.status_changed with version 2 (stale) -> DISCARD
+      ws.simulateMessage({
+        type: 'item.status_changed',
+        orderId: 'order-1',
+        itemId: 'item-10',
+        status: ItemStatus.PENDING,
+        version: 2,
+      });
+      expect(itemListener).toHaveBeenCalledTimes(1);
+
       // 5. Inbound malformed message -> ignored gracefully
       ws.simulateMessage({ invalid: 'data' });
       expect(orderListener).toHaveBeenCalledTimes(1);
@@ -375,6 +385,160 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
       // Manual disconnect
       client.disconnect();
       expect(client.getStatus()).toBe(WebSocketStatus.DISCONNECTED);
+    });
+
+    it('ignores subsequent connect() calls when already CONNECTING or CONNECTED', async () => {
+      const client = new KdsWebSocketClient({
+        role: UserRole.KITCHEN,
+        tokenProvider: mockTokenProvider,
+        WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+      });
+
+      await client.connect();
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      // Calling connect while CONNECTING
+      await client.connect();
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      MockWebSocket.instances[0].simulateOpen();
+
+      // Calling connect while CONNECTED
+      await client.connect();
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      client.disconnect();
+    });
+
+    it('handles missing WebSocket API environment gracefully', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const client = new KdsWebSocketClient({
+        role: UserRole.KITCHEN,
+        tokenProvider: mockTokenProvider,
+        WebSocketClass: null as unknown as typeof WebSocket,
+      });
+
+      await client.connect();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'WebSocket API is not available in the current environment.',
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('proceeds with connection when tokenProvider throws an error', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockTokenProvider.mockRejectedValue(new Error('Token fetch failed'));
+
+      const client = new KdsWebSocketClient({
+        role: UserRole.KITCHEN,
+        tokenProvider: mockTokenProvider,
+        baseUrl: 'ws://localhost:8000',
+        WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+      });
+
+      await client.connect();
+      expect(MockWebSocket.instances).toHaveLength(1);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+      client.disconnect();
+    });
+
+    it('handles WebSocket constructor throwing an exception', async () => {
+      const onError = vi.fn();
+      class FailingWebSocket {
+        constructor() {
+          throw new Error('Invalid WebSocket URL');
+        }
+      }
+
+      const client = new KdsWebSocketClient({
+        role: UserRole.KITCHEN,
+        tokenProvider: mockTokenProvider,
+        WebSocketClass: FailingWebSocket as unknown as typeof WebSocket,
+        onError,
+      });
+
+      await client.connect();
+      expect(onError).toHaveBeenCalledWith(expect.any(Error));
+      expect(client.getStatus()).toBe(WebSocketStatus.RECONNECTING);
+    });
+
+    it('resolves full wss URL when window protocol is https', () => {
+      const originalLocation = window.location;
+      try {
+        Object.defineProperty(window, 'location', {
+          value: {
+            ...originalLocation,
+            protocol: 'https:',
+            host: 'kds.restaurant.com',
+          },
+          writable: true,
+          configurable: true,
+        } as PropertyDescriptor);
+
+        const client = new KdsWebSocketClient({
+          role: UserRole.KITCHEN,
+          tokenProvider: mockTokenProvider,
+        });
+
+        expect(client.resolveFullUrl()).toBe('wss://kds.restaurant.com/ws/kds');
+      } finally {
+        Object.defineProperty(window, 'location', {
+          value: originalLocation,
+          writable: true,
+          configurable: true,
+        } as PropertyDescriptor);
+      }
+    });
+
+    it('supports unregistering event listeners via returned unsubscribe callbacks', async () => {
+      const orderListener = vi.fn();
+      const itemListener = vi.fn();
+      const errorListener = vi.fn();
+
+      const client = new KdsWebSocketClient({
+        role: UserRole.KITCHEN,
+        tokenProvider: mockTokenProvider,
+        WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+      });
+
+      const unsubOrder = client.onOrderStatusChanged(orderListener);
+      const unsubItem = client.onItemStatusChanged(itemListener);
+      const unsubError = client.onError(errorListener);
+
+      // Unregister immediately
+      unsubOrder();
+      unsubItem();
+      unsubError();
+
+      await client.connect();
+      const ws = MockWebSocket.instances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'order.status_changed',
+        orderId: 'ord-unsub',
+        status: OrderStatus.IN_PREPARATION,
+        version: 1,
+      });
+      ws.simulateMessage({
+        type: 'item.status_changed',
+        orderId: 'ord-unsub',
+        itemId: 'item-unsub',
+        status: ItemStatus.READY,
+        version: 2,
+      });
+      ws.simulateMessage({
+        type: 'error',
+        code: 'SOME_ERROR',
+        message: 'Something went wrong',
+      });
+
+      expect(orderListener).not.toHaveBeenCalled();
+      expect(itemListener).not.toHaveBeenCalled();
+      expect(errorListener).not.toHaveBeenCalled();
+
+      client.disconnect();
     });
   });
 });

@@ -70,8 +70,7 @@ export class ApiClient {
     let details: unknown;
 
     try {
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('application/json')) {
+      if (response.headers.get('content-type')?.includes('application/json')) {
         const json = await response.json();
         const parsed = ApiErrorResponseSchema.safeParse(json);
         if (parsed.success) {

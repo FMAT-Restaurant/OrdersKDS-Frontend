@@ -33,6 +33,22 @@ describe('queryClient TanStack Query Configuration (RNF-04, RNF-09)', () => {
       expect(retryFn(0, err403)).toBe(false);
       expect(retryFn(0, err404)).toBe(false);
       expect(retryFn(0, err409)).toBe(false);
+
+      // Status 0 or other status with critical error codes
+      const errCodeUnauth = new ApiError(0, ErrorCode.UNAUTHENTICATED, 'unauthenticated');
+      const errCodeForbidden = new ApiError(0, ErrorCode.FORBIDDEN_ROLE, 'forbidden');
+      const errCodeNotFound = new ApiError(0, ErrorCode.ORDER_NOT_FOUND, 'not found');
+      const errCodeConflict = new ApiError(0, ErrorCode.VERSION_CONFLICT, 'conflict');
+      expect(retryFn(0, errCodeUnauth)).toBe(false);
+      expect(retryFn(0, errCodeForbidden)).toBe(false);
+      expect(retryFn(0, errCodeNotFound)).toBe(false);
+      expect(retryFn(0, errCodeConflict)).toBe(false);
+
+      // Status 500 should be retried up to 2 times
+      const err500 = new ApiError(500, ErrorCode.INTERNAL_ERROR, 'server error');
+      expect(retryFn(0, err500)).toBe(true);
+      expect(retryFn(1, err500)).toBe(true);
+      expect(retryFn(2, err500)).toBe(false);
     } else {
       expect.fail('retry should be a function');
     }

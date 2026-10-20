@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ErrorCode } from '../../../src/shared/api/errorCodes.ts';
-import { getErrorMessage, getTypedErrorMessage } from '../../../src/shared/i18n/translate.ts';
+import {
+  getErrorMessage,
+  getRealtimeStatusMessage,
+  getTypedErrorMessage,
+} from '../../../src/shared/i18n/translate.ts';
 
 describe('UT-FE-13: ErrorCode catalogue and i18n mapping', () => {
   it('contains all required canonical error codes including FORBIDDEN_CHANNEL', () => {
@@ -31,5 +35,12 @@ describe('UT-FE-13: ErrorCode catalogue and i18n mapping', () => {
   it('returns fallback UNKNOWN_ERROR message for undefined or unknown codes', () => {
     expect(getErrorMessage(undefined)).toBe('Ocurrió un error inesperado.');
     expect(getErrorMessage('RANDOM_NON_EXISTENT_CODE')).toBe('Ocurrió un error inesperado.');
+  });
+
+  it('translates realtime status keys correctly with fallback to empty string', () => {
+    expect(getRealtimeStatusMessage('connecting')).toBe('Conectando al servidor...');
+    expect(getRealtimeStatusMessage('connected')).toBe('Conectado exitosamente');
+    // @ts-expect-error Testing fallback for unknown key
+    expect(getRealtimeStatusMessage('unknown_key')).toBe('');
   });
 });
