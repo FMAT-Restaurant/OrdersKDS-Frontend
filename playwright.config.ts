@@ -32,6 +32,30 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      grepInvert: /@touch/,
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+      grepInvert: /@touch/,
+    },
+    {
+      name: 'chromium-touch',
+      use: {
+        ...devices['Desktop Chrome'],
+        hasTouch: true,
+        viewport: { width: 1920, height: 1080 },
+      },
+      grep: /@touch/,
+    },
+    {
+      name: 'webkit-touch',
+      use: {
+        ...devices['Desktop Safari'],
+        hasTouch: true,
+        viewport: { width: 1920, height: 1080 },
+      },
+      grep: /@touch/,
     },
   ],
 });
