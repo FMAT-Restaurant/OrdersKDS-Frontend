@@ -33,13 +33,11 @@ const config: Config = {
           // Base tokens for FMAT design
           primary: '#1E40AF',
           secondary: '#DB2777',
-
-          // Semantic tokens — pending OP-03 (to be agreed upon with other teams)
-          // success: '#???',
-          // warning: '#???',
-          // error:   '#???',
-          // info:    '#???',
         },
+        success: 'var(--color-success)',
+        warning: 'var(--color-warning)',
+        error: 'var(--color-error)',
+        info: 'var(--color-info)',
       },
       borderRadius: {
         fmat: '8px',
