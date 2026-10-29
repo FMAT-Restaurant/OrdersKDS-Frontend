@@ -55,6 +55,8 @@ Los documentos fuente describen las capacidades funcionales y las vistas de UI, 
 | `PATCH` | `/orders/{orderId}/items/{itemId}/redo` | 5 | Regresa un ítem de "Entregado" a "Pendiente"; requiere cuerpo `{ "note": "..." }` obligatorio (la orden conserva "Entregada", OP-12) |
 | `POST` | `/orders/{orderId}/request-bill` | — | Dispara `ordenes.cuenta.solicitada` |
 
+**Integración de `OrderTicketWidget` (frontend):** el host del menú entrega `orderId`, `userId`, un `tokenProvider`, la URL opcional de REST/WebSocket y `onCreateNewOrder`. El widget consulta `GET /orders/{orderId}`, actualiza la comanda al recibir eventos de `floor` o `user:{userId}` en `/ws/waiter`, y usa los endpoints propuestos de edición, confirmación y cancelación de esta tabla. La edición envía `{ "items": [...] }` y solo se permite mientras `status = CREATED` y no exista `confirmedAt`; cancelar permanece disponible en `CREATED` aunque exista `confirmedAt`. Una confirmación exitosa en `CREATED` muestra “Pendiente de confirmación de stock” hasta el evento de estado posterior. `REJECTED` y `EXPIRED` anuncian la alerta y delegan la creación de otra comanda al host; `DELIVERED` anuncia “Entregada por cocina — recoger”. El widget no lista órdenes de otras mesas. Las rutas/payloads anteriores continúan siendo una propuesta a validar con el equipo de backend.
+
 **Vista 3 — Pantalla KDS (cocina: monitor táctil principal, teclado/Bump Bar secundario)**
 | Método | Ruta propuesta | Requisito | Nota |
 |---|---|---|---|
