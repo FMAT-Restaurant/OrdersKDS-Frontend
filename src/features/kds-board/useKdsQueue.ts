@@ -7,10 +7,10 @@ import type { TokenProvider } from '../../shared/types/auth.ts';
 export type KdsViewType = 'active' | 'delivered';
 
 export interface UseKdsQueueOptions {
-  view?: KdsViewType;
-  client?: ApiClient;
-  tokenProvider?: TokenProvider;
-  enabled?: boolean;
+  readonly view?: KdsViewType;
+  readonly client?: ApiClient;
+  readonly tokenProvider?: TokenProvider;
+  readonly enabled?: boolean;
 }
 
 /**
@@ -25,7 +25,7 @@ export function useKdsQueue({
   client,
   tokenProvider,
   enabled = true,
-}: UseKdsQueueOptions = {}): UseQueryResult<Order[], Error> {
+}: Readonly<UseKdsQueueOptions> = {}): UseQueryResult<Order[], Error> {
   const effectiveClient = useMemo(() => {
     if (client) {
       return client;
@@ -38,13 +38,11 @@ export function useKdsQueue({
 
   return useQuery<Order[], Error>({
     queryKey: ['kds', 'queue', view],
-    queryFn: async () => {
-      return effectiveClient.get<Order[]>(
+    queryFn: () =>
+      effectiveClient.get<Order[]>(
         `/kds/queue?view=${view}`,
         KdsQueueResponseSchema,
-      );
-    },
+      ),
     enabled,
   });
 }
-

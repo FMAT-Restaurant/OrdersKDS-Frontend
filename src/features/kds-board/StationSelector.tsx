@@ -1,9 +1,9 @@
 import type { KeyboardEvent } from 'react';
 
 export interface StationSelectorProps {
-  stations: string[];
-  selectedStation: string;
-  onSelectStation: (station: string) => void;
+  readonly stations: readonly string[];
+  readonly selectedStation: string;
+  readonly onSelectStation: (station: string) => void;
 }
 
 /**
@@ -14,7 +14,7 @@ export function StationSelector({
   stations,
   selectedStation,
   onSelectStation,
-}: StationSelectorProps) {
+}: Readonly<StationSelectorProps>) {
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, station: string) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -53,4 +53,3 @@ export function StationSelector({
     </div>
   );
 }
-

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
 import type { ApiClient } from '../../shared/api/client.ts';
@@ -10,13 +11,13 @@ import { StationSelector } from './StationSelector.tsx';
 import { type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 
 export interface KdsBoardProps {
-  client?: ApiClient;
-  tokenProvider?: TokenProvider;
-  queryClient?: QueryClient;
-  pageSize?: number;
-  initialView?: KdsViewType;
-  initialStation?: string;
-  onOrderSelect?: (order: Order) => void;
+  readonly client?: ApiClient;
+  readonly tokenProvider?: TokenProvider;
+  readonly queryClient?: QueryClient;
+  readonly pageSize?: number;
+  readonly initialView?: KdsViewType;
+  readonly initialStation?: string;
+  readonly onOrderSelect?: (order: Order) => void;
 }
 
 function KdsBoardContent({
@@ -26,7 +27,7 @@ function KdsBoardContent({
   initialView = 'active',
   initialStation = 'general',
   onOrderSelect,
-}: Omit<KdsBoardProps, 'queryClient'>) {
+}: Readonly<Omit<KdsBoardProps, 'queryClient'>>) {
   const [view, setView] = useState<KdsViewType>(initialView);
   const [selectedStation, setSelectedStation] = useState<string>(initialStation);
   const [page, setPage] = useState<number>(1);
@@ -55,7 +56,10 @@ function KdsBoardContent({
       }
     }
     const allList = Array.from(extracted);
-    return ['general', ...allList.filter((s) => s !== 'general').sort()];
+    const sortedStations = allList
+      .filter((s) => s !== 'general')
+      .sort((a, b) => a.localeCompare(b));
+    return ['general', ...sortedStations];
   }, [data]);
 
   // Derive effective station: fallback to 'general' if selected station is not in queue
@@ -145,6 +149,54 @@ function KdsBoardContent({
     ),
   );
 
+  // Render grid content without nested ternaries for SonarCloud compliance
+  let gridContent: ReactNode;
+  if (isLoading) {
+    gridContent = (
+      <output
+        data-testid="kds-loading"
+        aria-live="polite"
+        className="flex items-center justify-center h-full text-2xl font-semibold text-gray-400"
+      >
+        Loading queue...
+      </output>
+    );
+  } else if (isError) {
+    gridContent = (
+      <div
+        data-testid="kds-error"
+        role="alert"
+        className="flex items-center justify-center h-full text-xl font-semibold text-error"
+      >
+        Failed to load queue: {error?.message ?? 'Unknown error'}
+      </div>
+    );
+  } else if (paginatedOrders.length === 0) {
+    gridContent = (
+      <div
+        data-testid="kds-empty"
+        className="flex items-center justify-center h-full text-2xl font-semibold text-gray-500"
+      >
+        No orders in this view
+      </div>
+    );
+  } else {
+    gridContent = (
+      <div
+        data-testid="kds-grid"
+        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 h-full auto-rows-fr content-start"
+      >
+        {paginatedOrders.map((order) => (
+          <OrderCardStub
+            key={order.id ?? order.orderId ?? order.publicId}
+            order={order}
+            onClick={onOrderSelect}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="kds-board-container"
@@ -203,51 +255,14 @@ function KdsBoardContent({
         />
       </header>
 
-      {/* Main Order Grid (No scroll permitted) */}
-      <main
+      {/* Main Order Grid (Semantic section, no scroll permitted) */}
+      <section
         id="panel-kds-grid"
-        role="region"
         aria-label="KDS Order Cards Grid"
         className="flex-1 p-6 overflow-hidden flex flex-col justify-center"
       >
-        {isLoading ? (
-          <div
-            data-testid="kds-loading"
-            role="status"
-            className="flex items-center justify-center h-full text-2xl font-semibold text-gray-400"
-          >
-            Loading queue...
-          </div>
-        ) : isError ? (
-          <div
-            data-testid="kds-error"
-            role="alert"
-            className="flex items-center justify-center h-full text-xl font-semibold text-error"
-          >
-            Failed to load queue: {error?.message ?? 'Unknown error'}
-          </div>
-        ) : paginatedOrders.length === 0 ? (
-          <div
-            data-testid="kds-empty"
-            className="flex items-center justify-center h-full text-2xl font-semibold text-gray-500"
-          >
-            No orders in this view
-          </div>
-        ) : (
-          <div
-            data-testid="kds-grid"
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 h-full auto-rows-fr content-start"
-          >
-            {paginatedOrders.map((order) => (
-              <OrderCardStub
-                key={order.id ?? order.orderId ?? order.publicId}
-                order={order}
-                onClick={onOrderSelect}
-              />
-            ))}
-          </div>
-        )}
-      </main>
+        {gridContent}
+      </section>
 
       {/* Touch Pagination Footer */}
       <footer className="h-20 px-8 py-3 bg-gray-950 border-t border-gray-800 flex items-center justify-between">
@@ -284,7 +299,7 @@ function KdsBoardContent({
 /**
  * Top-level KdsBoard component providing automatic TanStack QueryClient context.
  */
-export function KdsBoard(props: KdsBoardProps) {
+export function KdsBoard(props: Readonly<KdsBoardProps>) {
   const effectiveQueryClient = props.queryClient ?? defaultQueryClient;
   return (
     <QueryClientProvider client={effectiveQueryClient}>
