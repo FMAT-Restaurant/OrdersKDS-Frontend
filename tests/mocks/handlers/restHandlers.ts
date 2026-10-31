@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { ErrorCode } from '../../../src/shared/api/errorCodes.ts';
-import { mockKdsQueue, mockOrder1 } from '../fixtures/orderFixtures.ts';
+import { mockDeliveredQueue, mockKdsQueue, mockOrder1 } from '../fixtures/orderFixtures.ts';
 
 export const restHandlers = [
   // GET /kds/queue
@@ -28,6 +28,12 @@ export const restHandlers = [
         },
         { status: 403 },
       );
+    }
+
+    const url = new URL(request.url);
+    const view = url.searchParams.get('view');
+    if (view === 'delivered') {
+      return HttpResponse.json(mockDeliveredQueue);
     }
 
     return HttpResponse.json(mockKdsQueue);

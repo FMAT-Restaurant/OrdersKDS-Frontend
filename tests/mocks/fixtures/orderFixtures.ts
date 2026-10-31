@@ -64,3 +64,28 @@ export const mockOrder2: Order = {
 };
 
 export const mockKdsQueue: Order[] = [mockOrder1, mockOrder2];
+
+export const mockDeliveredOrder: Order = {
+  id: 'ord-103',
+  orderId: 'ord-103',
+  tableNumber: 2,
+  isTakeaway: false,
+  status: OrderStatus.DELIVERED,
+  version: 4,
+  totalAmount: 200.0,
+  items: [
+    {
+      id: 'item-4',
+      itemId: 'item-4',
+      name: 'Tacos de Pastor',
+      quantity: 3,
+      unitPrice: 60.0,
+      status: ItemStatus.DELIVERED,
+      station: 'taqueria',
+      version: 1,
+    },
+  ],
+  createdAt: '2026-10-19T20:00:00Z',
+};
+
+export const mockDeliveredQueue: Order[] = [mockDeliveredOrder];
