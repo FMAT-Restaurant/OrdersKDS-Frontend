@@ -14,6 +14,7 @@
 /** State values for an order. */
 export const OrderStatus = {
   CREATED:        'CREATED',
+  RESERVED:       'RESERVED',
   IN_PREPARATION: 'IN_PREPARATION',
   DELIVERED:      'DELIVERED',
   PAID:           'PAID',

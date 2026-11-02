@@ -7,7 +7,7 @@ export interface StatusConfig {
 }
 
 /**
- * Token-based status configuration mapping all 9 domain order statuses to semantic tokens (TASK-C08).
+ * Token-based status configuration mapping domain order statuses to semantic tokens (TASK-C08, ADR-0012).
  * Ensures accessible, high-contrast visual status cues with both text and semantic background.
  */
 export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
@@ -15,6 +15,11 @@ export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
     label: 'Created',
     token: 'var(--color-warning)',
     className: 'bg-warning text-white',
+  },
+  RESERVED: {
+    label: 'Reservado / Por iniciar',
+    token: 'var(--color-info)',
+    className: 'bg-info text-white',
   },
   IN_PREPARATION: {
     label: 'In Preparation',
@@ -57,4 +62,3 @@ export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
     className: 'bg-error text-white',
   },
 };
-

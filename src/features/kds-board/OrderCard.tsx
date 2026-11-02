@@ -6,6 +6,8 @@ import { useElapsedTime } from './useElapsedTime.ts';
 export interface OrderCardProps {
   readonly order: Order;
   readonly onClick?: (order: Order) => void;
+  readonly onStartPreparation?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order) => void;
   readonly isFocused?: boolean;
 }
 
@@ -79,20 +81,27 @@ function OrderCardItem({ item, index }: Readonly<{ item: OrderItem; index: numbe
 }
 
 /**
- * Production-ready OrderCard component for the KDS (TASK-15 Phase 2).
+ * Production-ready OrderCard component for the KDS (TASK-15 Phase 2, ADR-0012).
  * Displays large table number, order ID, live delay stopwatch (OP-11), StatusBadge,
- * and high-contrast kitchen items list.
+ * high-contrast kitchen items list, and action buttons for RESERVED status.
  */
 export function OrderCard({
   order,
   onClick,
+  onStartPreparation,
+  onRejectSupplies,
   isFocused = false,
 }: Readonly<OrderCardProps>) {
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
 
-  // OP-11: Live stopwatch starts strictly from `in_preparation_at` or `inPreparationAt`, NEVER from `createdAt`.
+  // OP-11 & ADR-0012: Live stopwatch starts strictly from `in_preparation_at` or `inPreparationAt`.
+  // If absent, falls back to `stock_reserved_at` or `stockReservedAt`. NEVER from `createdAt`.
   const inPrepAt = order.in_preparation_at ?? order.inPreparationAt ?? null;
-  const { formattedTime, delayStatus, delayLabel, delayColorToken } = useElapsedTime(inPrepAt);
+  const stockReservedAt = order.stock_reserved_at ?? order.stockReservedAt ?? null;
+  const { formattedTime, delayStatus, delayLabel, delayColorToken } = useElapsedTime(
+    inPrepAt,
+    stockReservedAt,
+  );
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -128,7 +137,11 @@ export function OrderCard({
     <article
       data-testid={`order-card-${displayId}`}
       aria-label={`Order ${displayId}`}
-      className="h-full flex flex-col"
+      className={`h-full flex flex-col rounded-fmat border transition-all duration-150 select-none overflow-hidden ${
+        isFocused
+          ? 'bg-gray-800 border-fmat-primary ring-2 ring-fmat-primary shadow-xl'
+          : 'bg-gray-800/95 border-gray-700 hover:border-gray-500 shadow-md'
+      }`}
     >
       <button
         type="button"
@@ -136,11 +149,9 @@ export function OrderCard({
         aria-label={`Order ${displayId}`}
         onClick={() => onClick?.(order)}
         onKeyDown={handleKeyDown}
-        className={`w-full h-full p-5 rounded-fmat border transition-all duration-150 select-none cursor-pointer flex flex-col justify-between min-h-[220px] text-left ${
-          isFocused
-            ? 'bg-gray-800 border-fmat-primary ring-2 ring-fmat-primary shadow-xl'
-            : 'bg-gray-800/95 border-gray-700 hover:border-gray-500 shadow-md'
-        } focus:outline-none focus:ring-2 focus:ring-fmat-primary`}
+        className={`w-full flex-1 p-5 select-none cursor-pointer flex flex-col justify-between min-h-[200px] text-left bg-transparent border-0 focus:outline-none ${
+          isFocused ? 'ring-2 ring-fmat-primary' : ''
+        }`}
       >
         {/* Card Header: Table Number / Takeaway, Order ID, StatusBadge */}
         <div className="w-full pb-3 border-b border-gray-700 flex flex-col gap-2">
@@ -219,9 +230,35 @@ export function OrderCard({
           <span>Click to select</span>
         </div>
       </button>
+
+      {/* Action Buttons for RESERVED status (ADR-0012) */}
+      {order.status === 'RESERVED' && (
+        <div
+          data-testid={`order-actions-${displayId}`}
+          className="px-5 pb-5 pt-1 flex items-center gap-3 w-full bg-transparent"
+        >
+          <button
+            type="button"
+            data-testid={`order-action-start-${displayId}`}
+            aria-label={`Iniciar preparación para la orden ${displayId}`}
+            onClick={() => onStartPreparation?.(order)}
+            className="min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none"
+          >
+            Iniciar preparación
+          </button>
+          <button
+            type="button"
+            data-testid={`order-action-reject-${displayId}`}
+            aria-label={`Rechazar insumo para la orden ${displayId}`}
+            onClick={() => onRejectSupplies?.(order)}
+            className="min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none"
+          >
+            Rechazar insumo
+          </button>
+        </div>
+      )}
     </article>
   );
 }
 
 export default OrderCard;
-

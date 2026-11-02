@@ -103,23 +103,39 @@ export function computeDelayInfo(
 }
 
 /**
- * Hook to manage live elapsed time calculation starting strictly from `in_preparation_at` (OP-11).
- * Never uses `createdAt`.
+ * Hook to manage live elapsed time calculation (OP-11, ADR-0012).
+ * Primary base time is `in_preparation_at`.
+ * If `in_preparation_at` is absent, falls back to `stock_reserved_at`.
+ * If neither exists, stays at 00:00. Never uses `createdAt`.
  * Updates every 1000ms.
  */
 export function useElapsedTime(
   inPreparationAt?: string | null,
+  stockReservedAt?: string | null | Readonly<UseElapsedTimeOptions>,
   options?: Readonly<UseElapsedTimeOptions>,
 ): ElapsedTimeResult {
+  const isSecondParamOptions =
+    typeof stockReservedAt === 'object' && stockReservedAt !== null;
+
+  const fallbackStockReservedAt = isSecondParamOptions
+    ? null
+    : (stockReservedAt as string | null | undefined);
+
+  const effectiveOptions = isSecondParamOptions
+    ? (stockReservedAt as Readonly<UseElapsedTimeOptions>)
+    : options;
+
   const { warningSeconds, lateSeconds } = getDelayThresholds(
-    options?.warningAfterSeconds,
-    options?.lateAfterSeconds,
+    effectiveOptions?.warningAfterSeconds,
+    effectiveOptions?.lateAfterSeconds,
   );
+
+  const effectiveStartTime = inPreparationAt || fallbackStockReservedAt || null;
 
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
 
   useEffect(() => {
-    if (!inPreparationAt) {
+    if (!effectiveStartTime) {
       return;
     }
 
@@ -130,10 +146,10 @@ export function useElapsedTime(
     return () => {
       clearInterval(timerId);
     };
-  }, [inPreparationAt]);
+  }, [effectiveStartTime]);
 
-  const prepTimeMs = inPreparationAt ? new Date(inPreparationAt).getTime() : Number.NaN;
-  const isInvalidPrep = !inPreparationAt || Number.isNaN(prepTimeMs);
+  const prepTimeMs = effectiveStartTime ? new Date(effectiveStartTime).getTime() : Number.NaN;
+  const isInvalidPrep = !effectiveStartTime || Number.isNaN(prepTimeMs);
 
   const elapsedSeconds = isInvalidPrep
     ? 0

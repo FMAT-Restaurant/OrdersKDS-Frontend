@@ -13,7 +13,7 @@ import {
 import type { Order } from '../../src/shared/api/schemas.ts';
 import { ItemStatus, OrderStatus } from '../../src/shared/types/order.ts';
 
-describe('OrderCard Component & Hook Suite (TASK-15 Phase 2)', () => {
+describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
   const baseTimestamp = new Date('2026-10-31T12:00:00Z').getTime();
 
   beforeEach(() => {
@@ -207,11 +207,12 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // UT-FE-06: StatusBadge and all 9 domain order states with semantic tokens
+  // UT-FE-06: StatusBadge and domain order states with semantic tokens
   // -------------------------------------------------------------------------
-  describe('UT-FE-06: StatusBadge y sus 9 estados con tokens', () => {
+  describe('UT-FE-06: StatusBadge y estados con tokens', () => {
     const expectedTokens: Record<OrderStatus, { label: string; token: string }> = {
       CREATED: { label: 'Created', token: 'var(--color-warning)' },
+      RESERVED: { label: 'Reservado / Por iniciar', token: 'var(--color-info)' },
       IN_PREPARATION: { label: 'In Preparation', token: 'var(--color-info)' },
       DELIVERED: { label: 'Delivered', token: 'var(--color-success)' },
       PAID: { label: 'Paid', token: 'var(--color-success)' },
@@ -236,10 +237,12 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2)', () => {
       },
     );
 
-    it('exports all 9 statuses in STATUS_CONFIG matching TASK-C08 tokens', () => {
+    it('exports all 10 domain statuses in STATUS_CONFIG matching TASK-C08 tokens and ADR-0012', () => {
       const keys = Object.keys(STATUS_CONFIG);
-      expect(keys).toHaveLength(9);
+      expect(keys).toHaveLength(10);
       expect(STATUS_CONFIG.CREATED.token).toBe('var(--color-warning)');
+      expect(STATUS_CONFIG.RESERVED.token).toBe('var(--color-info)');
+      expect(STATUS_CONFIG.RESERVED.label).toBe('Reservado / Por iniciar');
       expect(STATUS_CONFIG.IN_PREPARATION.token).toBe('var(--color-info)');
       expect(STATUS_CONFIG.DELIVERED.token).toBe('var(--color-success)');
       expect(STATUS_CONFIG.PAID.token).toBe('var(--color-success)');
@@ -259,9 +262,9 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // UT-FE-07: Live Stopwatch strictly based on in_preparation_at (OP-11)
+  // UT-FE-07: Live Stopwatch strictly based on in_preparation_at (OP-11, ADR-0012)
   // -------------------------------------------------------------------------
-  describe('UT-FE-07: Cronómetro basado en in_preparation_at (OP-11)', () => {
+  describe('UT-FE-07: Cronómetro basado en in_preparation_at y fallback stock_reserved_at (OP-11, ADR-0012)', () => {
     it('strictly counts from in_preparation_at and ignores createdAt', () => {
       const twoHoursAgo = new Date(baseTimestamp - 7200 * 1000).toISOString();
       const fiveMinutesAgo = new Date(baseTimestamp - 300 * 1000).toISOString();
@@ -301,7 +304,55 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2)', () => {
       expect(screen.getByTestId('order-timer-ord-camel')).toHaveTextContent('03:00');
     });
 
-    it('defaults to 00:00 when neither in_preparation_at nor inPreparationAt is present', () => {
+    it('uses stock_reserved_at as fallback when in_preparation_at is absent (ADR-0012)', () => {
+      const fiveMinutesAgo = new Date(baseTimestamp - 300 * 1000).toISOString();
+      const reservedOrder: Order = {
+        id: 'ord-reserved-fallback',
+        tableNumber: 15,
+        status: OrderStatus.RESERVED,
+        version: 1,
+        items: [{ name: 'Corte New York', quantity: 1, unitPrice: 320, status: ItemStatus.PENDING }],
+        createdAt: new Date(baseTimestamp - 3600 * 1000).toISOString(),
+        stock_reserved_at: fiveMinutesAgo,
+      };
+
+      render(<OrderCard order={reservedOrder} />);
+      expect(screen.getByTestId('order-timer-ord-reserved-fallback')).toHaveTextContent('05:00');
+    });
+
+    it('supports camelCase stockReservedAt as fallback when in_preparation_at is absent', () => {
+      const fourMinutesAgo = new Date(baseTimestamp - 240 * 1000).toISOString();
+      const reservedOrder: Order = {
+        id: 'ord-reserved-camel',
+        tableNumber: 16,
+        status: OrderStatus.RESERVED,
+        version: 1,
+        items: [{ name: 'Costillas BBQ', quantity: 1, unitPrice: 280, status: ItemStatus.PENDING }],
+        stockReservedAt: fourMinutesAgo,
+      };
+
+      render(<OrderCard order={reservedOrder} />);
+      expect(screen.getByTestId('order-timer-ord-reserved-camel')).toHaveTextContent('04:00');
+    });
+
+    it('prioritizes in_preparation_at over stock_reserved_at when both are present', () => {
+      const twoMinutesAgo = new Date(baseTimestamp - 120 * 1000).toISOString();
+      const tenMinutesAgo = new Date(baseTimestamp - 600 * 1000).toISOString();
+      const orderBoth: Order = {
+        id: 'ord-both-times',
+        tableNumber: 17,
+        status: OrderStatus.IN_PREPARATION,
+        version: 1,
+        items: [{ name: 'Pasta Carbonara', quantity: 1, unitPrice: 190, status: ItemStatus.PENDING }],
+        in_preparation_at: twoMinutesAgo,
+        stock_reserved_at: tenMinutesAgo,
+      };
+
+      render(<OrderCard order={orderBoth} />);
+      expect(screen.getByTestId('order-timer-ord-both-times')).toHaveTextContent('02:00');
+    });
+
+    it('defaults to 00:00 when neither in_preparation_at nor stock_reserved_at is present', () => {
       const createdOrder: Order = {
         id: 'ord-no-prep',
         tableNumber: 5,
@@ -357,6 +408,98 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2)', () => {
         vi.advanceTimersByTime(5000);
       });
       expect(result.current.elapsedSeconds).toBe(0);
+    });
+
+    it('supports useElapsedTime with options as second argument', () => {
+      const twoMinutesAgo = new Date(baseTimestamp - 120 * 1000).toISOString();
+      const { result } = renderHook(() =>
+        useElapsedTime(twoMinutesAgo, { warningAfterSeconds: 100, lateAfterSeconds: 200 }),
+      );
+
+      expect(result.current.elapsedSeconds).toBe(120);
+      expect(result.current.delayStatus).toBe('warning');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // ADR-0012: Action buttons for RESERVED status
+  // -------------------------------------------------------------------------
+  describe('ADR-0012: Botones de Acción exclusivos en estado RESERVED', () => {
+    it('renders both action buttons with >= 48px height exclusively when status is RESERVED', () => {
+      const onStartPreparation = vi.fn();
+      const onRejectSupplies = vi.fn();
+      const reservedOrder: Order = {
+        id: 'ord-res-act',
+        tableNumber: 22,
+        status: OrderStatus.RESERVED,
+        version: 1,
+        items: [{ name: 'Ramen', quantity: 1, unitPrice: 160, status: ItemStatus.PENDING }],
+      };
+
+      const { rerender } = render(
+        <OrderCard
+          order={reservedOrder}
+          onStartPreparation={onStartPreparation}
+          onRejectSupplies={onRejectSupplies}
+        />,
+      );
+
+      // Buttons must be present
+      const startBtn = screen.getByTestId('order-action-start-ord-res-act');
+      const rejectBtn = screen.getByTestId('order-action-reject-ord-res-act');
+
+      expect(startBtn).toBeInTheDocument();
+      expect(startBtn).toHaveTextContent('Iniciar preparación');
+      expect(startBtn).toHaveClass('min-h-[48px]');
+
+      expect(rejectBtn).toBeInTheDocument();
+      expect(rejectBtn).toHaveTextContent('Rechazar insumo');
+      expect(rejectBtn).toHaveClass('min-h-[48px]');
+
+      // Click start preparation
+      fireEvent.click(startBtn);
+      expect(onStartPreparation).toHaveBeenCalledTimes(1);
+      expect(onStartPreparation).toHaveBeenCalledWith(reservedOrder);
+
+      // Click reject supplies
+      fireEvent.click(rejectBtn);
+      expect(onRejectSupplies).toHaveBeenCalledTimes(1);
+      expect(onRejectSupplies).toHaveBeenCalledWith(reservedOrder);
+
+      // Does NOT render buttons when status is NOT RESERVED
+      const inPrepOrder: Order = {
+        ...reservedOrder,
+        status: OrderStatus.IN_PREPARATION,
+      };
+      rerender(
+        <OrderCard
+          order={inPrepOrder}
+          onStartPreparation={onStartPreparation}
+          onRejectSupplies={onRejectSupplies}
+        />,
+      );
+
+      expect(screen.queryByTestId('order-action-start-ord-res-act')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('order-action-reject-ord-res-act')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('order-actions-ord-res-act')).not.toBeInTheDocument();
+    });
+
+    it('safely handles action clicks when handlers are omitted', () => {
+      const reservedOrder: Order = {
+        id: 'ord-res-no-handlers',
+        tableNumber: 23,
+        status: OrderStatus.RESERVED,
+        version: 1,
+        items: [{ name: 'Sushi', quantity: 1, unitPrice: 210, status: ItemStatus.PENDING }],
+      };
+
+      render(<OrderCard order={reservedOrder} />);
+
+      const startBtn = screen.getByTestId('order-action-start-ord-res-no-handlers');
+      const rejectBtn = screen.getByTestId('order-action-reject-ord-res-no-handlers');
+
+      expect(() => fireEvent.click(startBtn)).not.toThrow();
+      expect(() => fireEvent.click(rejectBtn)).not.toThrow();
     });
   });
 
@@ -486,4 +629,3 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2)', () => {
     });
   });
 });
-

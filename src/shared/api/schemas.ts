@@ -23,6 +23,7 @@ export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
  */
 export const OrderStatusSchema = z.enum([
   OrderStatus.CREATED,
+  OrderStatus.RESERVED,
   OrderStatus.IN_PREPARATION,
   OrderStatus.DELIVERED,
   OrderStatus.PAID,
@@ -80,6 +81,8 @@ export const OrderSchema = z.object({
   confirmedBy: z.string().nullable().optional(),
   inPreparationAt: z.string().nullable().optional(),
   in_preparation_at: z.string().nullable().optional(),
+  stockReservedAt: z.string().nullable().optional(),
+  stock_reserved_at: z.string().nullable().optional(),
   responsibleWaiterId: z.string().nullable().optional(),
   awaitingStockConfirmation: z.boolean().optional(),
   createdAt: z.string().optional(),
