@@ -319,5 +319,66 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
         return true;
       });
     });
+
+    it('supports put, delete, and relative path without leading slash', async () => {
+      const mockFetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        expect(url).toBe('http://localhost:8000/orders/ord-test');
+        if (init?.method === 'PUT') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ ok: true, method: 'PUT' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        if (init?.method === 'DELETE') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ ok: true, method: 'DELETE' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
+      });
+
+      const client = new ApiClient({
+        baseUrl: 'http://localhost:8000',
+        fetchFn: mockFetch,
+      });
+
+      const putResult = await client.put<{ ok: boolean; method: string }>('orders/ord-test', {
+        sample: 123,
+      });
+      expect(putResult.ok).toBe(true);
+      expect(putResult.method).toBe('PUT');
+
+      const delResult = await client.delete<{ ok: boolean; method: string }>('orders/ord-test');
+      expect(delResult.ok).toBe(true);
+      expect(delResult.method).toBe('DELETE');
+    });
+
+    it('falls back to status code when JSON error response does not match ApiErrorResponseSchema', async () => {
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            somethingElse: 'not conforming to schema',
+          }),
+          {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      );
+      const client = new ApiClient({ fetchFn: mockFetch });
+
+      await expect(client.get('/not-found')).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(404);
+        expect(apiErr.code).toBe(ErrorCode.ORDER_NOT_FOUND);
+        return true;
+      });
+    });
   });
 });

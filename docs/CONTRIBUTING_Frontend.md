@@ -446,7 +446,7 @@ Reglas:
 
 Toda decisión de arquitectura no trivial (nueva dependencia relevante, patrón nuevo, cambio en la forma de exponer módulos federados, desviación de un principio) se registra como **ADR**:
 
-- Archivo: `docs/adr/NNNN-short-title.md` o en el registro consolidado [`docs/Decisiones_Puntos_Abiertos_OP01-OP09.md`](Decisiones_Puntos_Abiertos_OP01-OP09.md) (que agrupa ADR-0001 a ADR-0011).
+- Archivo: `docs/adr/NNNN-short-title.md` o en los registros consolidados [`docs/Decisiones_Puntos_Abiertos_OP01-OP09.md`](Decisiones_Puntos_Abiertos_OP01-OP09.md) (ADR-0001 a ADR-0011) y [`docs/adr/Decisiones_Puntos_Abiertos_Sprint4_Reunion_Inventario.md`](adr/Decisiones_Puntos_Abiertos_Sprint4_Reunion_Inventario.md) (ADR-0012 a ADR-0018).
 - Se propone en el mismo PR que la introduce, o en un PR `docs` previo.
 - Plantilla mínima:
 
