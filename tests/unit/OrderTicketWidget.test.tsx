@@ -515,4 +515,285 @@ describe('OrderTicketWidget', () => {
 
     expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
   });
+
+  it('discards edits and reverts to view mode when user clicks Descartar', async () => {
+    renderTicket();
+    const modifyBtn = await screen.findByRole('button', { name: 'Modificar' });
+    fireEvent.click(modifyBtn);
+    expect(screen.getByRole('button', { name: 'Descartar' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Notas de Ensalada César'), {
+      target: { value: 'Modificación temporal no guardada' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    expect(screen.queryByRole('button', { name: 'Descartar' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Modificar' })).toBeInTheDocument();
+    expect(screen.getByText('Nota: Sin tomate')).toBeInTheDocument();
+  });
+
+  it('displays error banner when confirmMutation or cancelMutation fails', async () => {
+    server.use(
+      http.post('*/orders/:orderId/confirm', () =>
+        HttpResponse.json(
+          { error: { code: 'INVALID_STATE_TRANSITION', message: 'Fail' } },
+          { status: 409 },
+        ),
+      ),
+      http.patch('*/orders/:orderId/cancel', () =>
+        HttpResponse.json(
+          { error: { code: 'INTERNAL_ERROR', message: 'Fail' } },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderTicket();
+    const confirmButton = await screen.findByRole('button', { name: 'Confirmar' });
+    fireEvent.click(confirmButton);
+    expect(
+      await screen.findByText('La comanda no puede cambiar al estado solicitado en este momento.'),
+    ).toBeInTheDocument();
+
+    const cancelButton = screen.getByRole('button', { name: 'Cancelar' });
+    fireEvent.click(cancelButton);
+    expect(
+      await screen.findByText('Ocurrió un error inesperado en el servidor. Por favor intente más tarde.'),
+    ).toBeInTheDocument();
+  });
+
+  it('displays error banner when editMutation fails', async () => {
+    server.use(
+      http.patch('*/orders/:orderId/items', () =>
+        HttpResponse.json(
+          { error: { code: 'DISH_UNAVAILABLE', message: 'Fail' } },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderTicket();
+    fireEvent.click(await screen.findByRole('button', { name: 'Modificar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(
+      await screen.findByText('El platillo seleccionado ya no se encuentra disponible.'),
+    ).toBeInTheDocument();
+  });
+
+  it('displays session expired alert on 401 and allows retry', async () => {
+    let requests = 0;
+    server.use(
+      http.get('*/orders/:orderId', () => {
+        requests += 1;
+        if (requests === 1) {
+          return HttpResponse.json(
+            { error: { code: 'UNAUTHENTICATED', message: 'Auth failed' } },
+            { status: 401 },
+          );
+        }
+        return HttpResponse.json(order);
+      }),
+    );
+    renderTicket();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Su sesión ha expirado o no es válida. Por favor inicie sesión nuevamente.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+  });
+
+  it('ignores WebSocket events for a different orderId or older/equal version', async () => {
+    renderTicket();
+    await screen.findByRole('heading', { name: 'Comanda ord-102' });
+    const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
+
+    // Different orderId -> ignored
+    options.onOrderStatusChanged?.({
+      type: 'order.status_changed',
+      orderId: 'other-order-999',
+      status: OrderStatus.CANCELLED,
+      version: order.version + 10,
+    });
+    expect(screen.queryByText('Cancelada')).not.toBeInTheDocument();
+
+    // Older version -> ignored
+    options.onOrderStatusChanged?.({
+      type: 'order.status_changed',
+      orderId: 'ord-102',
+      status: OrderStatus.CANCELLED,
+      version: order.version - 1,
+    });
+    expect(screen.queryByText('Cancelada')).not.toBeInTheDocument();
+
+    // Equal version -> ignored
+    options.onOrderStatusChanged?.({
+      type: 'order.status_changed',
+      orderId: 'ord-102',
+      status: OrderStatus.CANCELLED,
+      version: order.version,
+    });
+    expect(screen.queryByText('Cancelada')).not.toBeInTheDocument();
+  });
+
+  it('handles WebSocket events with rejectionDetails and preserving awaitingStockConfirmation in CREATED', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          awaitingStockConfirmation: true,
+        }),
+      ),
+    );
+    renderTicket();
+    await screen.findByText('Pendiente de confirmación de stock');
+    const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
+
+    // Event updating version while still in CREATED preserves awaitingStockConfirmation
+    options.onOrderStatusChanged?.({
+      type: 'order.status_changed',
+      orderId: 'ord-102',
+      status: OrderStatus.CREATED,
+      version: order.version + 1,
+    });
+    expect(await screen.findByText('Pendiente de confirmación de stock')).toBeInTheDocument();
+
+    // Then transition to REJECTED with rejectionDetails
+    options.onOrderStatusChanged?.({
+      type: 'order.status_changed',
+      orderId: 'ord-102',
+      status: OrderStatus.REJECTED,
+      version: order.version + 2,
+      rejectionDetails: {
+        source: 'kitchen',
+        faltantes: ['Lechuga'],
+        rejectedItems: [{ itemId: 'item-1', reason: 'Agotado' }, { name: 'Torta' }],
+        reservedItems: [{ offerId: 'unknown', reservedQuantity: 1 }],
+      },
+    });
+    expect(await screen.findByText('Lechuga')).toBeInTheDocument();
+    expect(screen.getByText('Torta')).toBeInTheDocument();
+    expect(screen.queryByText('Pendiente de confirmación de stock')).not.toBeInTheDocument();
+  });
+
+  it('renders connection status messages for various websocket states', async () => {
+    realtime.useOrderEvents.mockReturnValue({ status: 'CONNECTING' });
+    const { unmount: unmount1 } = renderTicket();
+    expect(await screen.findByText('Conectando al servidor...')).toBeInTheDocument();
+    unmount1();
+
+    realtime.useOrderEvents.mockReturnValue({ status: 'RECONNECTING' });
+    const { unmount: unmount2 } = renderTicket();
+    expect(await screen.findByText('Reconectando...')).toBeInTheDocument();
+    unmount2();
+
+    realtime.useOrderEvents.mockReturnValue({ status: 'DISCONNECTED' });
+    const { unmount: unmount3 } = renderTicket();
+    expect(await screen.findByText('Sin conexión')).toBeInTheDocument();
+    unmount3();
+
+    realtime.useOrderEvents.mockReturnValue({ status: 'TERMINATED' });
+    const { unmount: unmount4 } = renderTicket();
+    expect(await screen.findByText('Sin conexión')).toBeInTheDocument();
+    unmount4();
+  });
+
+  it('renders takeaway label and prop diningSessionId when order does not specify them', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          isTakeaway: true,
+          diningSessionId: undefined,
+        }),
+      ),
+    );
+    renderTicket(vi.fn(), 'prop-session-abc');
+    expect(await screen.findByText(/Para llevar/)).toBeInTheDocument();
+    expect(screen.getByText(/Sesión prop-ses/)).toBeInTheDocument();
+  });
+
+  it('handles rejectionDetails with source only and without items or missing ingredients', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.REJECTED,
+          rejectionDetails: {
+            source: 'kitchen',
+          },
+        }),
+      ),
+    );
+    renderTicket();
+    expect(
+      await screen.findByText(
+        'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('handles rejectionDetails as null or empty object', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.REJECTED,
+          rejectionDetails: {},
+        }),
+      ),
+    );
+    renderTicket();
+    expect(
+      await screen.findByText(
+        'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Detalle de rechazo de stock')).not.toBeInTheDocument();
+  });
+
+  it('handles order with status PAID, WASTED, and VOIDED with correct labels and no alert', async () => {
+    for (const st of [OrderStatus.PAID, OrderStatus.WASTED, OrderStatus.VOIDED]) {
+      server.use(
+        http.get('*/orders/:orderId', () =>
+          HttpResponse.json({
+            ...order,
+            status: st,
+          }),
+        ),
+      );
+      const { unmount } = renderTicket();
+      expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+      expect(document.querySelector('.order-ticket__alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
+      unmount();
+    }
+  });
+
+  it('hides Quitar platillo when only one item and handles modifier and note inputs', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          items: [
+            {
+              ...order.items[0],
+              id: 'single-item',
+              modifiers: ['Queso'],
+              notes: 'Nota 1',
+            },
+          ],
+        }),
+      ),
+    );
+    renderTicket();
+    fireEvent.click(await screen.findByRole('button', { name: 'Modificar' }));
+    expect(screen.queryByRole('button', { name: 'Quitar platillo' })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Modificadores de Ensalada César'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Notas de Ensalada César'), {
+      target: { value: 'Nueva nota' },
+    });
+    expect(screen.getByLabelText('Modificadores de Ensalada César')).toHaveValue('');
+    expect(screen.getByLabelText('Notas de Ensalada César')).toHaveValue('Nueva nota');
+  });
 });
