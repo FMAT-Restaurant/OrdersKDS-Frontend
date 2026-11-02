@@ -1,323 +1,264 @@
-# Arquitectura de Comunicación — Microservicio de Órdenes y Cocina (Orders & KDS)
+# Arquitectura de Comunicación e Integración de Clientes — Frontend de Órdenes y Cocina (orders-frontend)
 
-> Este documento complementa `ordenes-kds-diagramas-secuencia.md`. Ese documento cubre **qué** eventos se intercambian con otros microservicios; este documento cubre **cómo** funciona internamente la API de Órdenes y Cocina para producir y consumir esos mensajes — tanto la capa síncrona (REST, hacia los clientes de este microservicio) como la capa asíncrona (broker, hacia/desde otros microservicios).
-
----
-
-## 0. Aclaración previa: no hay llamadas síncronas hacia otros microservicios de negocio
-
-Antes de listar cualquier llamada síncrona, vale dejar constancia de una restricción de diseño que ya está fijada en los tres documentos base del proyecto:
-
-- El documento de diagramas de secuencia establece como supuesto de arquitectura que el proyecto es **100% orientado a eventos**, **sin llamadas síncronas entre microservicios de negocio**.
-- El documento de requisitos funcionales no describe ningún endpoint que Órdenes deba invocar en Inventario, Pagos o Catálogo; toda interacción con esos dominios se describe como publicar o consumir eventos del broker.
-- La especificación de UI lo confirma explícitamente al corregir el Requisito 7: el envío de la comanda a la cola del KDS **no ocurre de forma directa** al confirmar el pedido, sino **tras consumir** el evento `inventario.stock.reservado` — es decir, ni siquiera ese flujo interno usa una llamada síncrona esperando respuesta HTTP; es una reacción a un evento.
-
-**Conclusión para este documento:** en el camino de cada request de usuario (crear orden, ver catálogo, marcar platillo listo, etc.) la lista de "llamadas API síncronas de Órdenes hacia otros microservicios" sigue siendo, por diseño, una lista vacía — eso no cambia. Sí se identificó **una única excepción legítima y acotada**: una llamada síncrona saliente hacia Catálogo y Menú, pero exclusivamente para **arranque inicial y reconciliación periódica** de la vista materializada del diagrama 7, nunca como parte de atender a un mesero o a la pantalla KDS (ver sección 1.4). Cualquier otra necesidad de consulta síncrona que surja más adelante sigue representando una **desviación de la arquitectura acordada** y debería documentarse y aprobarse explícitamente, no añadirse silenciosamente.
-
-Lo que sí existe — y es el tema central de este documento — son tres superficies de comunicación **dentro** de este microservicio:
-
-| Capa | Dirección | Protocolo | Hacia quién |
-|---|---|---|---|
-| API síncrona | Entrante | HTTP/REST (FastAPI) | Clientes de este microservicio: app del mesero, pantalla KDS |
-| Sincronización de arranque (excepción) | Saliente, fuera del camino de request de usuario | HTTP/REST síncrono | Catálogo y Menú — solo bootstrap/reconciliación (ver 1.4) |
-| Mensajería asíncrona | Saliente y entrante | AMQP vía RabbitMQ (Broker) | Otros microservicios de negocio: Inventario, Pagos, Catálogo/Menú, Sala |
+> Este documento define la arquitectura y los contratos de comunicación desde la perspectiva del **cliente frontend (`orders-frontend`)**, que agrupa las aplicaciones cliente del restaurante: la **App móvil/tablet del mesero** (incluyendo el widget federado `OrderTicketWidget`), el **Monitor de Mesas / Mapa de Sala** y la **Pantalla KDS de Cocina** (`KdsBoard`).  
+> Especifica cómo interactúan estos componentes con la API REST y los canales en tiempo real WebSocket expuestos por `orders-backend`, los esquemas Zod de validación en la frontera del cliente, el ciclo de vida de los 10 estados de comanda (`OrderStatus`) y el impacto en la interfaz de usuario de las decisiones del Sprint 4 (ADR-0012 a ADR-0018).
 
 ---
 
-## 1. Capa síncrona: API REST expuesta por Órdenes y Cocina
+## 0. Aclaración previa: comunicación del frontend y frontera del sistema
 
-Esta es la única superficie síncrona real del microservicio. No comunica microservicios entre sí — comunica a los **dispositivos físicos del restaurante** (handhelds Android del mesero, monitores táctiles con teclado/Bump Bar secundario en cocina) con el backend de Órdenes.
+1. **El frontend interactúa exclusivamente con la API de Órdenes y Cocina:** Los clientes web y módulos federados no se conectan directamente a la base de datos PostgreSQL, a Redis ni al broker RabbitMQ. Todas las operaciones de usuario se realizan mediante:
+   - **Peticiones HTTP/REST síncronas:** Para emitir comandos de usuario (crear comanda, agregar/quitar ítems, confirmar, iniciar preparación física en cocina, rechazar insumos en cocina, marcar platillos listos o cancelar).
+   - **Canales bidireccionales WebSocket:** Para recibir en tiempo real las actualizaciones de estado de órdenes y platillos empujadas por el backend tras consolidar transacciones o consumir eventos asíncronos de otros microservicios (Inventario, Pagos, Sala, Menú).
+2. **Desacoplamiento asíncrono y reactividad de UI:**
+   - Cuando el mesero pulsa "Confirmar" en la app/widget, la respuesta HTTP `200 OK` indica únicamente que la comanda fue recibida y está en espera de validación de existencias (`awaitingStockConfirmation: true` en estado `CREATED`).
+   - El paso a la cola de cocina **no es inmediato ni síncrono**: ocurre cuando Inventario valida y reserva stock emitiendo `inventario.stock.reservado`. En ese instante, el backend transiciona la orden a `RESERVED` (`stock_reserved_at`) y empuja la actualización por WebSocket a la pantalla KDS y a la tablet del mesero.
+   - El descuento definitivo de inventario se ejecuta cuando el Chef inicia la preparación física en la pantalla KDS (`PATCH /orders/{orderId}/start-preparation`), lo cual emite `ordenes.orden.en_preparacion`.
+3. **Manejo de identidad y seguridad:** El frontend adjunta el token JWT obtenido del proveedor de autenticación (`tokenProvider`) en el encabezado `Authorization: Bearer <token>` de cada petición REST y en el handshake de WebSocket. La validación criptográfica de firma es responsabilidad del API Gateway (ADR-0011); el frontend nunca envía `userId`, `role` ni marcas de tiempo en el cuerpo de peticiones de mutación.
 
-### 1.1 Principios de diseño de esta capa
-
-- **Autenticación por token JWT en el encabezado HTTP.** El identificador del usuario autenticado (mesero, cocinero, administrador) que exige el Requisito 4 de trazabilidad **no** se captura como campo de formulario en ninguna vista — se extrae del token en cada petición. Esto significa que el middleware de autenticación debe inyectar `usuarioId` (y su rol) en el contexto de cada request antes de que llegue al controlador, para que la lógica de negocio pueda registrar quién ejecutó cada transición de estado.
-- **Cada endpoint que cambia estado dispara una transacción, no una llamada a otro microservicio.** El controlador nunca necesita esperar una respuesta remota síncrona para responder al cliente; responde en cuanto el cambio de estado y el registro en la tabla `outbox` quedan confirmados en PostgreSQL (ver sección 2).
-- **Los efectos de fondo (reserva de stock, cálculo de cuenta, etc.) no son parte de la respuesta HTTP.** El mesero recibe `200 OK` a "confirmar orden" cuando la orden queda en estado `Pendiente de confirmación de stock`, no cuando Inventario ya respondió. La actualización real a "en KDS" o "Rechazada" llega después, empujada por WebSocket (sección 1.3).
-- **Autorización por rol** debe validarse en el controlador antes de la lógica de negocio: mesero vs. administrador tienen distintos permisos sobre comandas ya avanzadas a "En preparación" o "Listo" (Requisito 6).
-
-### 1.2 Endpoints propuestos por vista
-
-Los documentos fuente describen las capacidades funcionales y las vistas de UI, pero no fijan nombres exactos de rutas/payloads — estos endpoints son una **propuesta a validar con el equipo**, derivada directamente de los requisitos y de las tres vistas de la especificación de UI:
-
-**Vista 1 — Monitor de Mesas Activas (mesero)**
-| Método | Ruta propuesta | Requisito | Nota |
+| Canal en el Frontend | Protocolo | Endpoint / Destino | Propósito en la UI |
 |---|---|---|---|
-| `GET` | `/orders?status=` | 5 | Estado por color de cada mesa/comanda |
-| `POST` | `/orders` | 4 | Crea comanda vinculada a mesa, o `tipo: "para_llevar"` sin mesa física |
+| **API REST (FastAPI)** | HTTP/JSON | `https://<api-host>/api/v1/...` | Comandos de usuario, consultas de catálogo/cola y cambios de estado |
+| **Stream en Tiempo Real** | WebSocket | `wss://<api-host>/ws/waiter` | Notificaciones en piso/sala para meseros (`floor`, `user:{userId}`) |
+| **Stream en Tiempo Real** | WebSocket | `wss://<api-host>/ws/kds` | Notificaciones de cocina por estación (`kds:station:{station}`, `kds:all`) |
 
-**Vista 2 — Gestor de Comanda (mesero)**
-| Método | Ruta propuesta | Requisito | Nota |
-|---|---|---|---|
-| `PATCH` | `/orders/{orderId}/items` | 4 | Agrega platillos, modificadores, notas — solo si `estado = Creada` y sin `confirmed_at` |
-| `PATCH` | `/orders/{orderId}/transfer` | 4 | Cambia la mesa asociada a la comanda |
-| `POST` | `/orders/{orderId}/confirm` | 7 | Idempotente: fija `confirmed_at` y dispara la publicación de `ordenes.orden.creada` vía outbox (OP-05) |
-| `PATCH` | `/orders/{orderId}/cancel` | 6 | Solo permitido si `estado = Creada`; dispara `ordenes.orden.cancelada` |
-| `PATCH` | `/orders/{orderId}/items/{itemId}/redo` | 5 | Regresa un ítem de "Entregado" a "Pendiente"; requiere cuerpo `{ "note": "..." }` obligatorio (la orden conserva "Entregada", OP-12) |
-| `POST` | `/orders/{orderId}/request-bill` | — | Dispara `ordenes.cuenta.solicitada` |
+---
 
-**Integración de `OrderTicketWidget` (frontend):** el host del menú entrega `orderId`, `userId`, un `tokenProvider`, la URL opcional de REST/WebSocket y `onCreateNewOrder`. El widget consulta `GET /orders/{orderId}`, actualiza la comanda al recibir eventos de `floor` o `user:{userId}` en `/ws/waiter`, y usa los endpoints propuestos de edición, confirmación y cancelación de esta tabla. La edición envía `{ "items": [...] }` y solo se permite mientras `status = CREATED` y no exista `confirmedAt`; cancelar permanece disponible en `CREATED` aunque exista `confirmedAt`. Una confirmación exitosa en `CREATED` muestra “Pendiente de confirmación de stock” hasta el evento de estado posterior. `REJECTED` y `EXPIRED` anuncian la alerta y delegan la creación de otra comanda al host; `DELIVERED` anuncia “Entregada por cocina — recoger”. El widget no lista órdenes de otras mesas. Las rutas/payloads anteriores continúan siendo una propuesta a validar con el equipo de backend.
+## 1. Capa síncrona: API REST y Contratos de Cliente
 
-**Vista 3 — Pantalla KDS (cocina: monitor táctil principal, teclado/Bump Bar secundario)**
-| Método | Ruta propuesta | Requisito | Nota |
-|---|---|---|---|
-| `GET` | `/kds/queue?station=&view=` | 1, 2 | Comandas ordenadas por mayor tiempo en cocina primero (OP-11); filtradas por estación (OP-09); vista principal activa (`view=active`, por defecto) vs apartado de entregadas (`view=delivered`); excluye "Pagada" |
-| `PATCH` | `/orders/{orderId}/items/{itemId}/ready` | 3 | Marca un platillo como "Listo"; dispara `ordenes.platillo.preparado` |
-| `PATCH` | `/orders/{orderId}/ready` | 3 | Marca la comanda completa como "Listo" |
+Esta capa atiende a los dispositivos físicos del restaurante: handhelds/tablets Android de meseros y monitores táctiles landscape 1920×1080 (con soporte secundario de teclado/Bump Bar) en cocina.
 
-**Acciones administrativas**
-| Método | Ruta propuesta | Requisito | Nota |
-|---|---|---|---|
-| `PATCH` | `/orders/{orderId}/void` (o `/items/{itemId}/void`) | 6 | Solo rol admin, sobre comandas ya en "EnPreparacion"; dispara `ordenes.comanda.mermada` + `ordenes.cobro.solicitado` (Mermada) |
-| `PATCH` | `/orders/{orderId}/void-kitchen-error` | — | Rol admin o chef; cuerpo `{ "note": "..." }` obligatorio; cancela la comanda completa por error de cocina (Anulada); dispara `ordenes.comanda.mermada` sin cobro (OP-07) |
+### 1.1 Principios de diseño para el frontend
 
-**Vista 4 — Preparación de Platillos Intermedios (chef) — [NO-GO en fase actual / Abierto a futuro]**
-| Método | Ruta propuesta | Requisito | Nota |
-|---|---|---|---|
-| `POST` | `/intermediate-dishes` | — | **Descartado para el horizonte de 7 sprints (ADR-0011):** Funcionalidad opcional desactivada (`INTERMEDIATE_DISHES_ENABLED=false`). **Queda abierta la posibilidad de implementarse en una fase futura o posterior release**, reactivando el feature flag y publicando el evento asíncrono `ordenes.platillo_intermedio.preparado` sin alterar la arquitectura base. |
-
-> Cualquier endpoint de esta tabla que no coincida exactamente con lo que finalmente implemente el equipo de frontend debe corregirse aquí — esta tabla es la propuesta de contrato, no el contrato firmado.
-
-### 1.3 Notificación de vuelta al cliente: canales WebSocket (OP-02 / ADR-0002)
-
-Cuando un cambio de estado ocurre por reacción a un evento del broker (por ejemplo, `inventario.stock.reservado` llega y la comanda pasa a la cola del KDS), no hay ninguna petición HTTP en curso a la cual responder. Por eso la especificación indica que Órdenes informa al frontend **vía WebSocket** para que la pantalla se redibuje sola, sin que el cliente tenga que hacer polling.
-
-Se definen dos endpoints y canales estructurados por rol:
-
-| Canal | Endpoint | Roles | Modo de suscripción | Contenido recibido |
-|---|---|---|---|---|
-| `kds:station:{station}` | `/ws/kds` | `kitchen`, `chef`, `admin` | Solicitado por el cliente con mensaje `subscribe`; cambio de estación sin reconectar | Cambios de estado de órdenes con ítems de esa estación y de sus platillos |
-| `kds:all` | `/ws/kds` | `kitchen`, `chef`, `admin` | Solicitado por el cliente (vista global) | Todas las órdenes activas en cocina |
-| `floor` | `/ws/waiter` | `waiter`, `admin` | Automático al conectar | Cambios de estado de todas las órdenes activas para monitores de Sala y Menú |
-| `user:{userId}` | `/ws/waiter` | `waiter`, `admin` | Automático al conectar (`userId` del JWT) | Alertas de órdenes del usuario: `REJECTED`, `EXPIRED` y `DELIVERED` ("lista para recoger") |
-
-- **Tipos de mensaje:** `order.status_changed` e `item.status_changed`, con sobre en formato camelCase y `version` monótona para descartar eventos fuera de orden.
-- **Seguridad y autenticación (ADR-0011):** La firma del JWT es verificada exclusivamente en el API Gateway; el backend únicamente extrae `user_id` y `role` de las claims del token sin mantener llaves locales ni `JWT_SECRET`. El token no viaja en la URL; cierre con código `4401` ante token ausente o inválido y `4403` si el rol no corresponde al endpoint; respuesta con error `{ "error": "FORBIDDEN_CHANNEL" }` ante suscripciones a canales no autorizados.
+- **Validación estricta con esquemas Zod en la frontera del cliente (`src/shared/api/schemas.ts`):** Todas las respuestas del backend son parseadas y validadas con Zod antes de alimentar el estado de React. Respuestas que violen el contrato generan fallos explícitos en tiempo de desarrollo/pruebas y evitan estados inconsistentes en la UI.
+- **Ciclo de vida formal de 10 estados de comanda (`OrderStatus`) y 4 estados de ítem (`ItemStatus`):**
+  - `OrderStatus`: `CREATED`, `RESERVED`, `IN_PREPARATION`, `DELIVERED`, `PAID`, `CANCELLED`, `REJECTED`, `WASTED`, `VOIDED`, `EXPIRED`.
+  - `ItemStatus`: `PENDING`, `READY`, `DELIVERED`, `CANCELLED`.
+- **Precios congelados y validación previa de disponibilidad (`< 1 ms`):** El backend valida la disponibilidad del platillo contra su caché en Redis antes de agregarlo al borrador. Si un platillo fue agotado o rechazado físicamente en cocina, el backend responde `422 Unprocessable Entity` con código `DISH_UNAVAILABLE`, impidiendo que el mesero agregue productos sin existencia física.
+- **Transiciones optimistas vs confirmadas:** Las acciones de la interfaz actualizan el estado visual tras recibir el `200 OK` del endpoint REST y sincronizan cualquier cambio concurrente a través del stream WebSocket utilizando el campo `version` monótono para evitar condiciones de carrera.
 
 ```mermaid
-sequenceDiagram
-    participant M as App Mesero / KDS
-    participant API as API REST (FastAPI)
-    participant WS as Canal WebSocket
-    participant DB as PostgreSQL
+stateDiagram-v2
+    [*] --> CREATED: POST /orders (Borrador inicial o sesión de mesa)
+    CREATED --> CREATED: POST /orders/{id}/confirm (awaitingStockConfirmation: true)
+    CREATED --> RESERVED: WebSocket order.status_changed (Stock reservado por Inventario)
+    CREATED --> REJECTED: WebSocket order.status_changed (Stock insuficiente parcial Opción A)
+    CREATED --> CANCELLED: PATCH /orders/{id}/cancel (Cancelación por mesero)
+    CREATED --> EXPIRED: WebSocket order.status_changed (Timeout de saga >= 60s sin respuesta)
 
-    M->>API: POST /orders/{id}/confirm (JWT)
-    API->>DB: INSERT/UPDATE orden + outbox (misma transacción)
-    API-->>M: 200 OK (estado: pendiente de confirmación)
-    Note over API,DB: Ver sección 2 — el Outbox Worker<br/>publica el evento de forma independiente
+    REJECTED --> CREATED: PATCH /orders/{id}/items (Mesero ajusta platillos -> reopen_as_draft)
+    REJECTED --> CANCELLED: PATCH /orders/{id}/cancel (Mesero descarta comanda rechazada)
 
-    Note over DB: ...tiempo después, llega inventario.stock.reservado (broker)...
-    DB->>WS: Estado actualizado a "En cola KDS"
-    WS-->>M: push: comanda visible en pantalla de cocina
+    RESERVED --> IN_PREPARATION: PATCH /orders/{id}/start-preparation (Chef inicia preparación en KDS)
+    RESERVED --> REJECTED: PATCH /orders/{id}/items/{itemId}/kitchen-reject (Chef rechaza físicamente insumo)
+    RESERVED --> CANCELLED: PATCH /orders/{id}/cancel (Cliente cancela antes de que empiece la cocción)
+
+    IN_PREPARATION --> DELIVERED: Cocina marca todos los platillos READY
+    IN_PREPARATION --> WASTED: PATCH /orders/{id}/void (Admin anula en cocción -> Merma con cobro)
+    IN_PREPARATION --> VOIDED: PATCH /orders/{id}/void-kitchen-error (Chef/Admin anula por error de cocina -> Merma sin cobro)
+
+    DELIVERED --> PAID: WebSocket order.status_changed (Pago completado en caja)
+    WASTED --> PAID: WebSocket order.status_changed (Cobro de merma completado)
 ```
 
-### 1.4 Excepción documentada: llamada síncrona saliente hacia Catálogo y Menú (bootstrap y reconciliación)
-
-Los eventos `menu.platillo.precio_actualizado` y `menu.catalogo.actualizado` (sección 2.2) son **deltas**: solo informan qué cambió. Eso funciona bien mientras Órdenes ya tiene una copia local completa y consistente para irle aplicando esos cambios — pero deja dos huecos que los eventos por sí solos no resuelven:
-
-- **Arranque inicial**: la primera vez que el microservicio se despliega, o si su base de datos se restaura desde cero, no existe todavía ninguna copia local sobre la cual aplicar deltas. No hay forma de "reproducir" desde eventos pasados a menos que Menú ofrezca un log de eventos re-consumible desde el origen, lo cual no está documentado como parte de su arquitectura.
-- **Reconciliación por drift**: si en algún momento se pierde un evento (una caída del consumer, un mensaje mal encolado, etc.), la vista local queda desalineada del catálogo real de forma silenciosa — nadie se entera hasta que un mesero intenta vender un platillo con precio o disponibilidad incorrectos.
-
-Para ambos casos, la solución es una llamada síncrona **acotada a un proceso de sistema, nunca a una request de usuario**:
-
-- **Disparadores**: (a) rutina de arranque del microservicio (`on startup`), antes de aceptar tráfico si la tabla local está vacía; (b) job programado de reconciliación (por ejemplo, cada N horas) — frecuencia a definir con el equipo según qué tan seguido cambia el menú en producción.
-- **Endpoint propuesto en Menú**: `GET /menu/catalogo/completo` (o equivalente) — una llamada síncrona real hacia otro microservicio, y por eso debe quedar explícitamente aprobada por el equipo de Catálogo y Menú, no asumida.
-- **Comportamiento al recibir la respuesta**: comparar el snapshot completo contra la vista local; aplicar upserts fila por fila; si un ítem local no aparece en el snapshot (fue eliminado del catálogo) o viceversa, registrar la discrepancia. Un volumen alto de discrepancias en una reconciliación es una señal de que se están perdiendo eventos aguas arriba y merece alerta, no solo corrección silenciosa.
-- **No debe pisar cambios más recientes**: si un evento en tiempo real actualizó un ítem después de que arrancó la reconciliación pero antes de que termine, la reconciliación no debe sobrescribirlo con un dato más viejo. Conviene comparar por timestamp (`updated_at` local vs. el que traiga el snapshot) antes de aplicar cada upsert, no reemplazar la tabla completa a ciegas.
-- **Tolerancia a fallos**: si Menú no responde durante el arranque o la reconciliación, Órdenes debe seguir funcionando con su última copia local conocida (aunque esté algo desactualizada) en vez de bloquear su propia disponibilidad — la meta es no propagar una caída de Menú hacia el mesero o la cocina. Reintentar la sincronización más tarde y alertar si el atraso se vuelve significativo.
-- **Fuera de alcance de esta llamada**: la Vista 2 (pestaña de catálogo del mesero) y el filtrado del KDS por estación siguen leyendo exclusivamente la vista local, tal como está en la sección 2.2 — esta llamada síncrona nunca se ejecuta como parte de atender esas pantallas.
-
 ---
 
-## 2. Capa asíncrona: cómo esta API produce y consume eventos
+### 1.2 Catálogo de Endpoints por Vista y Componente
 
-Esta es la parte que efectivamente conecta a Órdenes con Inventario, Pagos, Catálogo/Menú y Sala — y es asíncrona en ambos sentidos.
+#### Vista 1 — Monitor de Mesas y Listado de Comandas (Sala / Mesero)
 
-### 2.0 Matriz Resumen de Comunicaciones (Español ↔ Inglés ↔ Código ↔ Broker)
-
-Para mantener la alineación estricta entre la documentación de diseño (en español por entendimiento de equipo), el código fuente (`app/messaging/events.py` y `DEVELOPMENT_GUIDELINES.md` §2.4, formalizados en inglés) y los contratos pactados con otros microservicios (como el contrato acordado con Edwin para Pagos), se establece la siguiente matriz canónica de equivalencias:
-
-| Evento en Broker (Routing Key ES) | Routing Key / Contrato EN | Constante en Código (`EventName`) | Dirección | Microservicio | Estado del Contrato |
-|---|---|---|---|---|---|
-| `ordenes.orden.creada` | `orders.order.created` | `ORDER_CREATED` | Publica | Inventario | Confirmado |
-| `ordenes.orden.cancelada` | `orders.order.cancelled` | `ORDER_CANCELLED` | Publica | Inventario | Confirmado |
-| `ordenes.platillo.preparado` | `orders.dish.prepared` | `DISH_PREPARED` | Publica | Inventario | Confirmado |
-| `ordenes.comanda.mermada` | `orders.order.wasted` | `ORDER_WASTED` | Publica | Inventario | Confirmado (`ADMINISTRATIVE` \| `KITCHEN_ERROR`) |
-| `ordenes.cuenta.solicitada` | `orders.bill.requested` | `BILL_REQUESTED` | Publica | Pagos | **Confirmado (Contrato Edwin)** |
-| `ordenes.cobro.solicitado` | `orders.charge.requested` | `CHARGE_REQUESTED` | Publica | Pagos | **Confirmado (Contrato Edwin)** |
-| `ordenes.orden.expirada` | `orders.order.expired` | `ORDER_EXPIRED` | Publica | Inventario | Propuesto (OP-04) |
-| `sala.dining_session.iniciada` | `dining.session.started` | `DINING_SESSION_STARTED` | Consume | Sala | Confirmado |
-| `inventario.stock.reservado` | `inventory.stock.reserved` | `STOCK_RESERVED` | Consume | Inventario | Confirmado |
-| `inventario.stock.insuficiente` | `inventory.stock.insufficient` | `STOCK_INSUFFICIENT` | Consume | Inventario | Confirmado |
-| `menu.platillo.precio_actualizado` | `menu.dish.price_updated` | `DISH_PRICE_UPDATED` | Consume | Catálogo y Menú | Confirmado |
-| `menu.catalogo.actualizado` | `menu.catalog.updated` | `CATALOG_UPDATED` | Consume | Catálogo y Menú | Confirmado |
-| `pagos.pago.completado` | `payments.payment.completed` | `PAYMENT_COMPLETED` | Consume | Pagos | **Confirmado (Contrato Edwin)** |
-
-> **Regla de nomenclatura (`DEVELOPMENT_GUIDELINES.md` §2.4):** Las cadenas de enrutamiento en español residen exclusivamente aisladas en `app/messaging/events.py` y `contracts/events/`. En toda la lógica de negocio, repositorios y servicios se utilizan únicamente los identificadores tipados en inglés (`EventName.BILL_REQUESTED`, `EventName.PAYMENT_COMPLETED`, etc.).
-
----
-
-### 2.1 Publicación: patrón Transactional Outbox
-
-Ningún endpoint de la sección 1 publica directamente al broker. En su lugar:
-
-1. El controlador ejecuta la lógica de negocio dentro de **una sola transacción** de PostgreSQL.
-2. Esa transacción hace dos cosas atómicamente: (a) escribe el cambio de estado en las tablas de dominio (`orders`, `order_items`), y (b) inserta una fila en la tabla `outbox` con el evento a publicar (tipo, payload, `orderId`/`sessionId`, timestamp).
-3. Un proceso independiente, el **Event Outbox Worker**, hace polling (o escucha vía CDC) de filas no publicadas en `outbox`, las publica al exchange de RabbitMQ con el routing key correspondiente, y marca la fila como publicada.
-
-Esto garantiza que **nunca** se publique un evento sin que el cambio de estado correspondiente ya esté confirmado en base de datos, y viceversa — no hay escenario de "evento publicado pero orden no guardada" ni al revés.
-
-Eventos que salen de este microservicio por Transactional Outbox:
-
-| Evento (Routing Key) | Disparado por | Payload resumen | Consumidor | Estado |
+| Método | Ruta | Roles | Esquema Zod / DTO | Comportamiento y Uso en el Frontend |
 |---|---|---|---|---|
-| `ordenes.orden.creada` | `POST /orders/{id}/confirm` | `{orderId, items[]}` | Inventario | Confirmado |
-| `ordenes.orden.cancelada` | `PATCH /orders/{id}/cancel` | `{orderId, itemsCancelados[]}` | Inventario | Confirmado |
-| `ordenes.platillo.preparado` | `PATCH /orders/{id}/items/{itemId}/ready` | `{orderId, itemId}` | Inventario | Confirmado |
-| `ordenes.comanda.mermada` | `PATCH /orders/{id}/void` o `/void-kitchen-error` | `{orderId, itemsAfectados[], reason}` | Inventario | Confirmado (`reason`: `ADMINISTRATIVE` \| `KITCHEN_ERROR`) |
-| `orders.bill.requested` (`ordenes.cuenta.solicitada`) | `POST /orders/{id}/request-bill` | `{orderId, sessionId, tableId, waiterId, totalAmount, items[]}` | Pagos | **Confirmado (Contrato Edwin)** |
-| `orders.charge.requested` (`ordenes.cobro.solicitado`) | `PATCH /orders/{id}/void` (solo `WASTED`) | `{orderId, sessionId, tableId, waiterId, totalAmount, items[]}` | Pagos | **Confirmado (Contrato Edwin)** |
-| `ordenes.orden.expirada` | Watcher tras 60 s desde `confirmed_at` | `{orderId, elapsedSeconds}` | Inventario | Propuesto (OP-04) |
+| `GET` | `/orders?status=&diningSessionId=` | `waiter`, `admin` | `z.array(OrderSchema)` | Lista comandas activas. Permite filtrar por estado (`status`) y/o por sesión de mesa (`diningSessionId`). Soporta la relación **`1:N` entre sesión de mesa y órdenes** para renderizar todas las rondas de pedido de los comensales. |
+| `GET` | `/orders/{orderId}` | `waiter`, `admin` | `OrderSchema` | Obtiene el detalle completo de la orden para inicializar o refrescar `OrderTicketWidget`. Incluye `stockReservedAt`, `inPreparationAt`, `rejectionDetails` y el desglose de ítems con sus modificadores y notas. |
+| `POST` | `/orders` | `waiter`, `admin` | `CreateOrderInputSchema` → `OrderSchema` | Crea una comanda en borrador (`CREATED`). Acepta `tableId` (mesa física), `orderType: "dine_in" \| "takeaway"` y el identificador opcional `diningSessionId`. |
 
 ---
 
-### 2.2 Consumo: listeners reaccionando a eventos externos
+#### Vista 2 — Gestor de Comanda (`OrderTicketWidget` — Mesero)
 
-En sentido inverso, Órdenes mantiene *consumers* suscritos a las colas del broker para los eventos de otros dominios. Cada consumer:
+`OrderTicketWidget` es un componente React exportado como Microfrontend (Module Federation) e integrable en la app host del menú o tablet del mesero.
 
-- Recibe el mensaje del broker.
-- Valida idempotencia (ver 2.4) antes de tocar la base de datos.
-- Ejecuta la actualización de estado dentro de una transacción.
-- Si esa actualización debe reflejarse en la UI en vivo, dispara el push por WebSocket descrito en 1.3.
+```typescript
+export interface OrderTicketWidgetProps {
+  readonly orderId: string;
+  readonly userId?: string;
+  readonly tokenProvider?: () => Promise<string> | string;
+  readonly apiBaseUrl?: string;
+  readonly wsBaseUrl?: string;
+  readonly diningSessionId?: string;
+  readonly onCreateNewOrder?: () => void;
+}
+```
 
-Eventos consumidos por este microservicio:
+##### Operaciones REST del Widget:
 
-| Evento consumido | Origen | Efecto en Órdenes | Estado |
+1. **Actualización de Ítems y Reapertura de Borrador (`PATCH /orders/{orderId}/items`):**
+   - **En `CREATED` sin `confirmedAt`:** Actualiza la lista de platillos, cantidades, notas y modificadores en el borrador.
+   - **En `CREATED` con `confirmedAt`:** El backend rechaza con `409 Conflict` (`INVALID_STATE_TRANSITION`) ya que la orden está bloqueada esperando respuesta de Inventario.
+   - **En `REJECTED` (Reapertura Editable Opción A · ADR-0016):** Al enviar la modificación de ítems, el backend ejecuta automáticamente `order.reopen_as_draft()`, regresando la orden a `CREATED` y limpiando `confirmedAt` y `rejectionDetails` sobre el **mismo `orderId`**. Esto permite al mesero ajustar la cantidad o sustituir el platillo agotado sin perder el identificador de orden ni crear una comanda desde cero.
+2. **Confirmación de Comanda (`POST /orders/{orderId}/confirm`):**
+   - **Idempotente.** Fija `confirmedAt` y `confirmedBy`. Si la orden ya estaba confirmada o en preparación, responde `200 OK` sin duplicar eventos.
+   - Si la comanda estaba en `REJECTED`, el botón de confirmar permanece inactivo hasta que se ejecute la modificación de ítems (reapertura a `CREATED`).
+3. **Cancelación de Comanda (`PATCH /orders/{orderId}/cancel` o `POST`):**
+   - **Permitido en:** `CREATED`, `RESERVED` y `REJECTED`.
+   - Si la orden tenía reservas en Inventario (`RESERVED` o pre-reserva parcial en `REJECTED`), el backend emite `ordenes.orden.cancelada` para liberarlas.
+   - **Bloqueado en `IN_PREPARATION`:** Si la cocción ya inició, el backend responde `409 Conflict`. La orden solo podrá cancelarse administrativamente con merma (`WASTED`) o por error de cocina (`VOIDED`).
+4. **Transferencia de Mesa (`PATCH /orders/{orderId}/transfer`):**
+   - Cambia el `tableId` enviando `{ "newTableId": string, "version": number }`. Controla concurrencia mediante `version`.
+5. **Rehechura de Ítem Entregado (`PATCH /orders/{orderId}/items/{itemId}/redo` · OP-12):**
+   - Disponible sobre órdenes en `DELIVERED` cuando un comensal devuelve un platillo por insatisfacción. Exige cuerpo `{ "note": string }`. La orden matriz conserva el estado `DELIVERED` y el ítem transiciona a `PENDING`.
+
+##### Comportamiento Visual y Accesibilidad del Widget:
+
+- **Estado `RESERVED`:** Muestra la insignia visual con estilo advertencia/reserva "Reservado en cocina" (`[data-status="RESERVED"]`). El botón "Cancelar comanda" se mantiene activo porque aún no entra a cocción física.
+- **Estado `REJECTED` con Pre-Reserva Parcial:**
+  - Renderiza una sección destacada con `role="alert"` y `aria-live="assertive"` conteniendo el desglose de `rejectionDetails`:
+    - **Platillos rechazados (`rejectedItems`):** Nombre/oferta, cantidad solicitada y cantidad disponible (ej. *"Solicitados: 3, Disponibles: 1"*).
+    - **Platillos pre-reservados (`reservedItems`):** Platillos que sí alcanzaron y se mantienen apartados temporalmente en cocina.
+    - **Ingredientes faltantes (`missingIngredients`):** Lista de insumos agotados reportados por Inventario o por el Chef.
+  - Habilita el botón **"Modificar comanda"**, permitiendo ajustar cantidades en línea o quitar ítems para reabrir automáticamente la comanda a `CREATED`.
+- **Estado `EXPIRED`:** Muestra alerta de tiempo de espera agotado (timeout de saga 60 s) e invoca `onCreateNewOrder` si el usuario decide iniciar una nueva comanda.
+- **Estado `DELIVERED`:** Muestra el banner informativo *"Entregada por cocina — lista para recoger"* alertando al mesero para llevar la charola a la mesa.
+
+---
+
+#### Vista 3 — Pantalla KDS (Cocina: Monitor Táctil Landscape 1920×1080 y Bump Bar)
+
+| Método | Ruta | Roles | Comportamiento y Uso en Cocina |
 |---|---|---|---|
-| `sala.dining_session.iniciada` (`dining.session.started`) | Sala | Crea el registro base de la orden (semilla), usando `sessionId` como identificador de correlación | Confirmado |
-| `inventario.stock.reservado` | Inventario | Pasa la comanda a `IN_PREPARATION`, estampa `in_preparation_at` y envía a la cola del KDS | Confirmado |
-| `inventario.stock.insuficiente` | Inventario | Marca la comanda como `REJECTED` + alerta WebSocket a mesero | Confirmado |
-| `menu.platillo.precio_actualizado` | Catálogo y Menú | Actualiza precio en la vista materializada local (Redis/DB) | Confirmado |
-| `menu.catalogo.actualizado` | Catálogo y Menú | Actualiza disponibilidad, categoría y estación en la vista local | Confirmado |
-| `payments.payment.completed` (`pagos.pago.completado`) | Pagos y Facturación | Marca la comanda como `PAID` (estado terminal) y la retira de KDS | **Confirmado (Contrato Edwin)** |
+| `GET` | `/kds/queue?station=&view=` | `kitchen`, `chef`, `admin` | Devuelve la cola de comandas de cocina.<br>• `view=active` (por defecto): Incluye órdenes en **`RESERVED`**, **`IN_PREPARATION`** y aquellas **`DELIVERED` con al menos un ítem `PENDING`** (rehechuras OP-12).<br>• **Ordenamiento FIFO por antigüedad en cocina (OP-11 cerrado):** `COALESCE(in_preparation_at, stock_reserved_at, created_at) ASC`, desempatando por `created_at ASC` y `public_id ASC`.<br>• Permite filtrar por estación (`station`: parrilla, barra, fría). |
+| `PATCH` | `/orders/{orderId}/start-preparation` | `kitchen`, `chef`, `admin` | **Inicio manual de cocción (ADR-0014):** El Chef pulsa "Iniciar preparación" sobre una tarjeta en `RESERVED`. La orden pasa a `IN_PREPARATION`, estampa `inPreparationAt` y emite `ordenes.orden.en_preparacion` hacia Inventario para el descuento definitivo de insumos. |
+| `PATCH` | `/orders/{orderId}/items/{itemId}/kitchen-reject` | `kitchen`, `chef`, `admin` | **Rechazo físico de insumo en cocina (ADR-0015):** Si el Chef detecta en `RESERVED` que no hay insumo físico, abre el diálogo de rechazo enviando `{ "reason": string }`. La orden regresa a `REJECTED`, el platillo queda bloqueado en Redis local (`422 DISH_UNAVAILABLE`) y el mesero recibe la alerta en tiempo real en su tablet. |
+| `PATCH` | `/orders/{orderId}/items/{itemId}/cancel` | `kitchen`, `chef`, `admin` | Cancela un renglón individual (`PENDING -> CANCELLED`) recalculando el total de la orden. |
+| `PATCH` | `/orders/{orderId}/items/{itemId}/ready` | `kitchen`, `chef`, `admin` | Marca un platillo como `READY`. Si todos los ítems activos de la orden quedan listos, la orden transiciona automáticamente a `DELIVERED`. |
+| `PATCH` | `/orders/{orderId}/ready` | `kitchen`, `chef`, `admin` | Marca la comanda completa como `READY` pasando la orden a `DELIVERED`. |
 
 ---
 
-### 2.3 Especificación del Contrato de Integración con Pagos (Contrato con Edwin)
+#### Acciones Administrativas y de Merma (Solo sobre órdenes en preparación)
 
-A partir del acuerdo formal con el equipo de Pagos y Facturación (`contrato_ordenes_pagos_edwin.md`), se establecen los siguientes flujos operativos y estructuras de datos:
+| Método | Ruta | Roles | Comportamiento y Uso |
+|---|---|---|---|
+| `PATCH` | `/orders/{orderId}/void` | `admin` | Anulación administrativa con cobro (`IN_PREPARATION -> WASTED`). Requiere rol `admin`. Si la comanda aún estaba en `RESERVED`, no genera merma sino cancelación limpia (`/cancel`). |
+| `PATCH` | `/orders/{orderId}/void-kitchen-error` | `admin`, `chef` | Anulación por error o accidente de cocina sin cobro al cliente (`IN_PREPARATION -> VOIDED`). Requiere cuerpo `{ "note": string }`. |
 
-#### A. Flujos hacia Pagos
-1. **Solicitud Normal de Cuenta (`orders.bill.requested` / `ordenes.cuenta.solicitada`):**
-   - **Disparador:** El mesero solicita la cuenta desde su app móvil una vez que todos los platillos han sido completados (`status = DELIVERED`).
-2. **Cobro por Merma Administrativa (`orders.charge.requested` / `ordenes.cobro.solicitado`):**
-   - **Disparador:** Un administrador anula una comanda ya en preparación (`status = WASTED`). Dado que los insumos fueron elaborados y el restaurante no asume la pérdida (RF-26, RF-27), se envía a Pagos con el total acumulado de lo elaborado.
-   - **Exclusión por Error de Cocina:** Si la orden se cancela por error interno de cocina (`status = VOIDED`), el restaurante absorbe el coste y **no se envía ningún evento a Pagos**.
+---
 
-#### B. Estructura del Payload Emitido hacia Pagos
-Ambos eventos comparten el mismo esquema estandarizado:
+### 1.3 Notificación en Tiempo Real: Canales WebSocket y Flujo de Cliente
 
+El frontend establece conexión WebSocket persistente para evitar polling repetitivo. Todas las mutaciones relevantes de base de datos disparan notificaciones push inmediatamente después de confirmarse en PostgreSQL.
+
+#### Topología de Canales WebSocket
+
+| Canal | Endpoint | Roles | Modo de suscripción | Uso en el Frontend |
+|---|---|---|---|---|
+| `floor` | `/ws/waiter` | `waiter`, `admin` | Automático al conectar | Monitor de mesas y vistas de sala. Notifica cambios de todas las órdenes activas. |
+| `user:{userId}` | `/ws/waiter` | `waiter`, `admin` | Automático desde claim JWT | `OrderTicketWidget` y alertas personales del mesero (`RESERVED`, `REJECTED`, `EXPIRED`, `DELIVERED`). |
+| `kds:station:{station}` | `/ws/kds` | `kitchen`, `chef`, `admin` | Solicitado por el cliente con `{ "type": "subscribe", "channels": [...] }` | Tarjetas KDS asignadas a una estación específica (parrilla, barra, etc.). |
+| `kds:all` | `/ws/kds` | `kitchen`, `chef`, `admin` | Solicitado por el cliente | Vista global del jefe de cocina/admin con todas las órdenes activas. |
+
+#### Esquemas de Mensajes WebSocket (`src/shared/realtime/schemas.ts`)
+
+##### 1. Cambio de Estado de Orden (`order.status_changed`) — Caso Estándar:
 ```json
 {
-  "eventId": "b9f2a41d-9e33-4a12-8f2c-123456789abc",
-  "eventType": "orders.bill.requested",
-  "timestamp": "2026-10-14T12:00:00Z",
-  "data": {
-    "orderId": "d3b07384-d113-4674-87f5-a7b290eb4e51",
-    "sessionId": "a1c2e3f4-5678-90ab-cdef-1234567890ab",
-    "tableId": "MESA-04",
-    "waiterId": "f8a12345-6789-abcd-ef01-234567890123",
-    "status": "DELIVERED",
-    "totalAmount": 485.50,
-    "items": [
+  "type": "order.status_changed",
+  "eventId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "occurredAt": "2026-10-31T14:22:10Z",
+  "orderId": "9c25e121-8623-4084-9c25-52d1906d4dfb",
+  "tableId": "MESA-04",
+  "status": "RESERVED",
+  "version": 3,
+  "rejectionDetails": null
+}
+```
+
+##### 2. Cambio de Estado de Orden (`order.status_changed`) — Rechazo con Pre-Reserva Parcial (Opción A):
+```json
+{
+  "type": "order.status_changed",
+  "eventId": "3f8b12a0-55c1-4890-b123-9876543210fe",
+  "occurredAt": "2026-10-31T14:20:05Z",
+  "orderId": "9c25e121-8623-4084-9c25-52d1906d4dfb",
+  "tableId": "MESA-04",
+  "status": "REJECTED",
+  "version": 2,
+  "rejectionDetails": {
+    "missingIngredients": ["carne-res"],
+    "rejectedItems": [
       {
-        "itemId": "e1f2a3b4-1111-2222-3333-444455556666",
-        "plateId": "PLT-101",
-        "name": "Hamburguesa Clásica",
-        "quantity": 2,
-        "unitPrice": 180.00,
-        "subtotal": 360.00,
-        "modifiers": [
-          {
-            "modifierId": "MOD-01",
-            "name": "Extra Queso",
-            "additionalPrice": 25.00
-          }
-        ],
-        "notes": "Término medio, sin cebolla"
+        "offerId": "b57f7e2a-02a4-4fb7-bb41-55f2d974b101",
+        "requestedQuantity": 3,
+        "availableQuantity": 1
+      }
+    ],
+    "reservedItems": [
+      {
+        "offerId": "b57f7e2a-02a4-4fb7-bb41-55f2d974b101",
+        "quantity": 1
+      },
+      {
+        "offerId": "a12b34c5-67d8-49e0-f123-456789abcdef",
+        "quantity": 2
       }
     ]
   }
 }
 ```
 
-#### C. Evento de Respuesta Recibido desde Pagos (`payments.payment.completed`)
-Al confirmarse la transacción monetaria en Pagos:
-
+##### 3. Cambio de Estado de Ítem (`item.status_changed`):
 ```json
 {
-  "eventId": "c7a8b9d0-1234-5678-90ab-cdef12345678",
-  "eventType": "payments.payment.completed",
-  "timestamp": "2026-10-14T12:05:00Z",
-  "data": {
-    "orderId": "d3b07384-d113-4674-87f5-a7b290eb4e51",
-    "sessionId": "a1c2e3f4-5678-90ab-cdef-1234567890ab",
-    "paymentId": "PAY-987654",
-    "paymentMethod": "CARD",
-    "totalPaid": 485.50,
-    "status": "PAID"
-  }
+  "type": "item.status_changed",
+  "eventId": "f1d2c3b4-a596-4877-8123-456789abcdef",
+  "occurredAt": "2026-10-31T14:25:30Z",
+  "orderId": "9c25e121-8623-4084-9c25-52d1906d4dfb",
+  "tableId": "MESA-04",
+  "itemId": "11223344-5566-7788-99aa-bbccddeeff00",
+  "status": "READY",
+  "version": 5
 }
 ```
 
-#### D. Principios Clave del Contrato con Pagos
-1. **Doble Identificador:** Se envían tanto `orderId` (clave primaria de Órdenes) como `sessionId` (sesión activa de Sala). Pagos debe devolver **obligatoriamente `orderId`** para que Órdenes actualice la comanda a `PAID`.
-2. **Precios Congelados:** El cobro se realiza con `unitPrice`, `quantity` y `modifiers` provistos en el mensaje; no se re-consulta Menú durante el cobro.
-3. **Divisas e Impuestos:** Órdenes no maneja multidivisa ni facturación; el cálculo de IVA, propinas y pasarelas es competencia exclusiva de Pagos.
+#### Reglas de Cliente WebSocket en React
+
+1. **Autenticación en el Handshake:** El token se envía mediante el protocolo acordado con el Gateway (subprotocolo o cabecera). Si el token no es válido o expira, el socket se cierra con código `4401`. Si el rol del usuario no tiene acceso al endpoint, se cierra con `4403`.
+2. **Reconexión con Backoff Exponencial:** Si la conexión se pierde, el cliente intenta reconectar a intervalos incrementales (1s, 2s, 4s, 8s, hasta un máximo de 30s) y realiza un `GET /orders/{orderId}` de reconciliación al recuperar la sesión.
+3. **Ordenamiento por Versión Monótona:** Si llega un mensaje con `version <= currentOrder.version`, el frontend lo descarta silenciosamente para prevenir sobrescrituras por mensajes fuera de orden.
 
 ---
 
-### 2.4 Idempotencia y Deduplicación
+## 2. Visibilidad del Ciclo Asíncrono de Mensajería (RabbitMQ)
 
-Como el broker puede reentregar mensajes, tanto los publicados como los consumidos deben validarse contra una clave de deduplicación antes de aplicar efecto:
-- `orderId + eventId` para los flujos de creación, reserva, cobro y cancelación.
-- `sessionId + eventId` específicamente para el consumo de `sala.dining_session.iniciada`, ya que en ese punto todavía no existe un `orderId`.
+Aunque el frontend no se conecta a RabbitMQ, los desarrolladores de interfaz deben comprender los eventos que intercambia el backend con otros microservicios, ya que **cada uno de ellos determina las transiciones visibles en la UI**.
 
----
+### 2.1 Matriz de Eventos de Dominio y su Efecto en la Interfaz
 
-### 2.5 Diagrama combinado: de la petición HTTP al evento en el broker
-
-```mermaid
-flowchart TB
-    subgraph Sincrono["Capa síncrona (dentro de Órdenes y Cocina)"]
-        C[Cliente: App Mesero / KDS] -->|HTTP + JWT| CTRL[Controlador REST]
-        CTRL --> BL[Lógica de negocio]
-        BL --> TX[(Transacción PostgreSQL:<br/>estado + outbox)]
-    end
-
-    subgraph Asincrono["Capa asíncrona (hacia/desde otros microservicios)"]
-        TX -.->|polling| WORKER[Event Outbox Worker]
-        WORKER -->|publish| BROKER{{Broker RabbitMQ}}
-        BROKER -->|consume| CONSUMER[Consumers de Órdenes]
-        CONSUMER --> TX2[(Transacción PostgreSQL:<br/>actualiza estado)]
-    end
-
-    BROKER -->|hacia| OTROS[Inventario / Pagos / Menú]
-    OTROS -->|desde| BROKER
-
-    TX2 -.->|push| WS[Canal WebSocket]
-    WS -.-> C
-```
+| Evento en RabbitMQ | Origen / Destino | Causa en Backend | Efecto Resultante en la Interfaz de Usuario |
+|---|---|---|---|
+| `ordenes.orden.creada` | Publica a Inventario | Mesero pulsa "Confirmar" (`POST /confirm`) | La orden muestra el banner *"Pendiente de confirmación de stock"* en estado `CREATED`. Edición bloqueada. |
+| `inventario.stock.reservado` | Consume de Inventario | Inventario aparta insumos con TTL | Orden pasa a `RESERVED`. La tarjeta aparece en la cola activa del KDS. En la tablet del mesero se muestra la insignia "Reservado en cocina". |
+| `inventario.stock.insuficiente` | Consume de Inventario | Insumos insuficientes (Opción A) | Orden pasa a `REJECTED`. El mesero recibe alerta instantánea (`< 500 ms`) con el desglose de faltantes y el botón para modificar cantidades sin reiniciar la orden. |
+| `ordenes.orden.en_preparacion` | Publica a Inventario | Chef pulsa "Iniciar preparación" en KDS | Orden pasa a `IN_PREPARATION`. Se apaga la posibilidad de cancelar sin merma en la tablet del mesero. El cronómetro de cocción comienza a correr. |
+| `ordenes.platillo.rechazado_cocina` | Publica a Inventario y Menú | Chef detecta falta física de insumo en KDS | Orden regresa de `RESERVED` a `REJECTED`. El platillo se bloquea en la app del mesero (`422 DISH_UNAVAILABLE`). Se alerta al mesero para sustituir el platillo. |
+| `ordenes.platillo.preparado` | Publica a Inventario | Cocinero marca ítem listo en KDS | El renglón cambia a estado `READY` en la pantalla KDS. Si todos los ítems concluyen, la orden pasa a `DELIVERED`. |
+| `ordenes.orden.cancelada` | Publica a Inventario | Mesero cancela en `CREATED`, `RESERVED` o `REJECTED` | La comanda se archiva como `CANCELLED`. Se libera cualquier reserva en Inventario. |
+| `ordenes.orden.expirada` | Publica a Inventario | Watcher supera 60s sin respuesta | La orden pasa a `EXPIRED`. El widget del mesero muestra alerta de tiempo agotado y habilita crear una nueva orden. |
+| `pagos.pago.completado` | Consume de Pagos | Comensal paga su cuenta en caja | La orden pasa a `PAID` (estado terminal) y desaparece definitivamente del monitor de mesas activas y KDS. |
 
 ---
 
-## 3. Puntos abiertos y estado de resolución
+## 3. Estado de Puntos Abiertos y Acuerdos de Arquitectura
 
-1. ~~**Contratos de los endpoints REST de la sección 1.2**~~ — **[RESUELTO]** Rutas y parámetros estandarizados en inglés (`?status=`, `?station=`, `/void-kitchen-error`, `/intermediate-dishes` descartado, cuerpo `note`; OP-07 / ADR-0006).
-2. ~~**Timeout de Saga**~~ — **[RESUELTO]** Fijado en 60 s como máximo desde `confirmed_at` con watcher cada 5 s (OP-01 / ADR-0001); Inventario consume `ordenes.orden.expirada` (OP-04) para liberar reservas tardías.
-3. ~~**Alcance exacto del canal WebSocket**~~ — **[RESUELTO]** Conexión en dos endpoints (`/ws/kds` y `/ws/waiter`) con canales `kds:station:{station}`, `kds:all`, `floor` y `user:{userId}` (OP-02 / ADR-0002).
-4. ~~**Contrato con Pagos y Facturación**~~ — **[RESUELTO]** Especificación cerrada y validada con Edwin (`contrato_ordenes_pagos_edwin.md`), formalizando `orders.bill.requested`, `orders.charge.requested` y `payments.payment.completed` (§2.3).
-5. ~~**Autenticación y firmas JWT**~~ — **[RESUELTO]** Validación de firma delegada al API Gateway; sin gestión de `JWT_SECRET` en este servicio (ADR-0011).
-6. **Contrato del endpoint `GET /menu/catalogo/completo` (sección 1.4)** — Pendiente de aprobación final con el equipo de Catálogo y Menú para la sincronización de arranque / reconciliación.
-7. **Frecuencia del job de reconciliación** (sección 1.4) — Pendiente de acordar según la volatilidad de precios en producción.
-8. **OP-04: Contrato de `ordenes.orden.expirada` y campo `motivo`** — Pendiente de confirmar con Inventario (Saga timeout vs rechazo).
-9. **OP-13: Notificación de orden entregada al mesero** — Pendiente de definir con Sala si se consume en monitor de Sala o en widget de mesero.
+1. **OP-01: `SAGA_TIMEOUT_SECONDS` (ADR-0001)** — **[Cerrado]** Límite estricto de 60 segundos tras pulsar "Confirmar". Si expira, la interfaz refleja el estado terminal `EXPIRED`.
+2. **OP-02: Canales WebSocket y Roles (ADR-0002)** — **[Cerrado]** Endpoints `/ws/kds` y `/ws/waiter` estructurados por canal (`kds:station:{station}`, `kds:all`, `floor`, `user:{userId}`).
+3. **OP-03: Colores Semánticos y Tokens de UI (ADR-0003)** — **[Cerrado]** Tokens de paleta bajo el selector `.orders-kds-root` (`--color-success`, `--color-warning`, `--color-error`, `--color-info`).
+4. **OP-05: Idempotencia de Confirmación y Reapertura (ADR-0004 / ADR-0016)** — **[Cerrado]** `POST /confirm` es idempotente. Si la orden fue rechazada (`REJECTED`), editar ítems mediante `PATCH /items` reabre a borrador `CREATED` sobre el mismo `orderId`.
+5. **OP-06: Interacción Táctil y Bump Bar en KDS (ADR-0005)** — **[Cerrado]** Monitor táctil como interfaz primaria (objetivos de 64 px), teclado/Bump Bar secundario con paridad total.
+6. **OP-07: Rutas y Esquemas REST en Inglés (ADR-0006)** — **[Cerrado]** Endpoints, parámetros y contratos en inglés (`/orders`, `/kds/queue`, `note`, `reason`).
+7. **OP-08: Quién Marca "Entregado" (ADR-0007)** — **[Cerrado]** Cocina marca el último platillo `READY` y la orden pasa automáticamente a `DELIVERED`. No existe endpoint `deliver` para el mesero.
+8. **OP-09: Metadatos de Menú como Texto de Referencia (ADR-0008)** — **[Cerrado]** `station` y `preparationTime` son strings informativos sanitizados contra inyecciones XSS.
+9. **OP-11: Prioridad de Cola KDS y Estado `RESERVED` (ADR-0009 / ADR-0013)** — **[Cerrado]** Cola activa incluye órdenes en `RESERVED` e `IN_PREPARATION`, ordenadas por `COALESCE(in_preparation_at, stock_reserved_at, created_at) ASC`.
+10. **OP-12: Rehechura de Platillo en Orden `DELIVERED` (Sprint 5 · TASK-32 / TASK-23)** — **[Pendiente de evento final con Inventario]** La orden matriz se mantiene en `DELIVERED` y el ítem regresa a `PENDING` solicitando nota obligatoria en la UI del mesero.
+11. **OP-13: Recepción de Aviso `DELIVERED` para Meseros (Sprint 6 · INT-03)** — **[Pendiente de definir con Sala]** Definir si el aviso de recoger charola se muestra en el mapa de mesas de Sala o mediante el componente flotante `ReadyOrdersAlert` (`TASK-42`).
