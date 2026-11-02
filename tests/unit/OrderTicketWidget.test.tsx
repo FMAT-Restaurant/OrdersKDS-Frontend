@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,7 +27,7 @@ const order = {
   ],
 };
 
-function renderTicket(onCreateNewOrder = vi.fn()) {
+function renderTicket(onCreateNewOrder = vi.fn(), diningSessionId?: string) {
   return render(
     <OrderTicketWidget
       orderId={order.id ?? 'ord-102'}
@@ -34,6 +35,7 @@ function renderTicket(onCreateNewOrder = vi.fn()) {
       tokenProvider={async () => 'test-token'}
       apiBaseUrl="http://localhost"
       webSocketBaseUrl="ws://localhost"
+      diningSessionId={diningSessionId}
       onCreateNewOrder={onCreateNewOrder}
     />,
   );
@@ -69,13 +71,14 @@ describe('OrderTicketWidget', () => {
     );
   });
 
-  it('renders a table ticket and optional item fields with editable defaults', async () => {
+  it('renders a table ticket, optional item fields with editable defaults, and dining session', async () => {
     server.use(
       http.get('*/orders/:orderId', () =>
         HttpResponse.json({
           ...order,
           isTakeaway: false,
           tableNumber: 12,
+          diningSessionId: 'session-12345678',
           items: [
             {
               ...order.items[0],
@@ -89,7 +92,8 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket();
 
-    expect(await screen.findByText('Mesa 12')).toBeInTheDocument();
+    expect(await screen.findByText(/Mesa 12/)).toBeInTheDocument();
+    expect(screen.getByText(/Sesión session-/)).toBeInTheDocument();
     expect(screen.getByText('Listo')).toBeInTheDocument();
     expect(screen.queryByText(/Modificadores:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Nota:/)).not.toBeInTheDocument();
@@ -122,9 +126,18 @@ describe('OrderTicketWidget', () => {
     expect(screen.getByText('En preparación')).toBeInTheDocument();
   });
 
-  it('edits quantities, modifiers, and notes before confirmation', async () => {
+  it('edits quantities, modifiers, and notes before confirmation and can remove items', async () => {
     let updatedItems: unknown;
     server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          items: [
+            { ...order.items[0], id: 'item-1', name: 'Ensalada César' },
+            { ...order.items[0], id: 'item-2', name: 'Sopa del día' },
+          ],
+        }),
+      ),
       http.patch('*/orders/:orderId/items', async ({ request }) => {
         updatedItems = await request.json();
         return HttpResponse.json({
@@ -136,6 +149,9 @@ describe('OrderTicketWidget', () => {
     renderTicket();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Modificar' }));
+    expect(screen.getAllByRole('button', { name: 'Quitar platillo' })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quitar platillo' })[1]);
+
     fireEvent.change(screen.getByLabelText('Cantidad de Ensalada César'), {
       target: { value: '3' },
     });
@@ -151,7 +167,7 @@ describe('OrderTicketWidget', () => {
       expect(updatedItems).toEqual({
         items: [
           {
-            id: 'item-3',
+            id: 'item-1',
             itemId: 'item-3',
             dishId: undefined,
             name: 'Ensalada César',
@@ -180,7 +196,7 @@ describe('OrderTicketWidget', () => {
       target: { value: '0' },
     });
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'La cantidad de cada platillo debe ser un entero mayor que cero.',
+      'La cantidad de cada platillo debe ser un entero mayor que cero',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
@@ -210,7 +226,7 @@ describe('OrderTicketWidget', () => {
     expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
   });
 
-  it('allows cancellation when confirmed but keeps modification and confirmation disabled', async () => {
+  it('allows cancellation when confirmed in CREATED status (DoD)', async () => {
     server.use(
       http.get('*/orders/:orderId', () =>
         HttpResponse.json({
@@ -228,37 +244,231 @@ describe('OrderTicketWidget', () => {
     expect(await screen.findByText('Pendiente de confirmación de stock')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
 
     expect(await screen.findByText('Cancelada')).toBeInTheDocument();
   });
 
-  it.each([
-    [OrderStatus.REJECTED, 'La comanda fue rechazada. Crea una nueva comanda.'],
-    [OrderStatus.EXPIRED, 'La comanda expiró. Crea una nueva comanda.'],
-    [OrderStatus.DELIVERED, 'Entregada por cocina — recoger.'],
-  ] as const)('announces %s and offers a new order action when applicable', async (status, message) => {
+  it('allows cancellation in RESERVED status (DoD)', async () => {
+    let cancelCalled = false;
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.RESERVED,
+          stockReservedAt: '2026-10-31T10:00:00Z',
+        }),
+      ),
+      http.patch('*/orders/:orderId/cancel', () => {
+        cancelCalled = true;
+        return HttpResponse.json({ ...order, status: OrderStatus.CANCELLED });
+      }),
+    );
+    renderTicket();
+
+    expect(await screen.findByText('Reservado en cocina')).toBeInTheDocument();
+    const cancelButton = screen.getByRole('button', { name: 'Cancelar' });
+    expect(cancelButton).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
+
+    fireEvent.click(cancelButton);
+    await waitFor(() => expect(cancelCalled).toBe(true));
+    expect(await screen.findByText('Cancelada')).toBeInTheDocument();
+  });
+
+  it('allows cancellation in REJECTED status (DoD)', async () => {
+    let cancelCalled = false;
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.REJECTED,
+        }),
+      ),
+      http.patch('*/orders/:orderId/cancel', () => {
+        cancelCalled = true;
+        return HttpResponse.json({ ...order, status: OrderStatus.CANCELLED });
+      }),
+    );
+    renderTicket();
+
+    expect(await screen.findByText('Rechazada')).toBeInTheDocument();
+    const cancelButton = screen.getByRole('button', { name: 'Cancelar' });
+    expect(cancelButton).toBeEnabled();
+
+    fireEvent.click(cancelButton);
+    await waitFor(() => expect(cancelCalled).toBe(true));
+    expect(await screen.findByText('Cancelada')).toBeInTheDocument();
+  });
+
+  it('blocks cancellation and modification in IN_PREPARATION status (DoD)', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.IN_PREPARATION,
+          inPreparationAt: '2026-10-31T10:05:00Z',
+        }),
+      ),
+    );
+    renderTicket();
+
+    expect(await screen.findByText('En preparación')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
+  });
+
+  it('allows modifying order in REJECTED status and reopens to CREATED as draft (DoD / ADR-0016)', async () => {
+    let itemsUpdated = false;
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.REJECTED,
+          items: [
+            {
+              ...order.items[0],
+              dishId: 'dish-salad',
+              quantity: 2,
+            },
+          ],
+        }),
+      ),
+      http.patch('*/orders/:orderId/items', async () => {
+        itemsUpdated = true;
+        // Backend executes order.reopen_as_draft() -> status CREATED, confirmedAt null
+        return HttpResponse.json({
+          ...order,
+          status: OrderStatus.CREATED,
+          confirmedAt: null,
+          rejectionDetails: null,
+          items: [
+            {
+              ...order.items[0],
+              dishId: 'dish-salad',
+              quantity: 1,
+            },
+          ],
+        });
+      }),
+    );
+    renderTicket();
+
+    expect(await screen.findByText('Rechazada')).toBeInTheDocument();
+    const modifyButton = screen.getByRole('button', { name: 'Modificar' });
+    expect(modifyButton).toBeEnabled();
+
+    fireEvent.click(modifyButton);
+    expect(screen.getByLabelText('Cantidad de Ensalada César')).toHaveValue(2);
+    fireEvent.change(screen.getByLabelText('Cantidad de Ensalada César'), {
+      target: { value: '1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(itemsUpdated).toBe(true));
+
+    // After reopen, order is back in CREATED draft state: Confirmar is now enabled
+    expect(await screen.findByText('Creada')).toBeInTheDocument();
+    expect(screen.getByText('1 × Ensalada César')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeEnabled();
+  });
+
+  it('displays visual breakdown of rejectionDetails and announces in aria-live (DoD)', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.REJECTED,
+          rejectionDetails: {
+            missingIngredients: ['Queso Parmesano', 'Crutones'],
+            rejectedItems: [
+              {
+                dishId: 'dish-salad',
+                name: 'Ensalada César',
+                requestedQuantity: 3,
+                availableQuantity: 1,
+              },
+            ],
+            reservedItems: [
+              {
+                dishId: 'dish-soup',
+                name: 'Sopa de Tomate',
+                quantity: 2,
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    renderTicket();
+
+    expect(await screen.findByText('Detalle de rechazo de stock')).toBeInTheDocument();
+    expect(screen.getAllByText(/Queso Parmesano, Crutones/)).toHaveLength(2);
+    expect(screen.getAllByText(/solicitados: 3, disponibles: 1/i)).toHaveLength(2);
+    expect(screen.getByText('Sopa de Tomate')).toBeInTheDocument();
+    expect(screen.getByText(/: 2 apartados temporalmente/)).toBeInTheDocument();
+
+    const alertLive = document.querySelector('.order-ticket__alert[aria-live="assertive"]');
+    expect(alertLive).toBeInTheDocument();
+    expect(alertLive).toHaveTextContent('Ensalada César (solicitados: 3, disponibles: 1)');
+    expect(alertLive).toHaveTextContent('Queso Parmesano, Crutones');
+  });
+
+  it('renders badge Reservado en cocina for RESERVED status (DoD)', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.RESERVED,
+        }),
+      ),
+    );
+    renderTicket();
+
+    const badge = await screen.findByText('Reservado en cocina');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute('data-status', 'RESERVED');
+  });
+
+  it('announces EXPIRED with action to create a new order (DoD)', async () => {
     const createOrder = vi.fn();
     server.use(
-      http.get('*/orders/:orderId', () => HttpResponse.json({ ...order, status })),
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.EXPIRED,
+        }),
+      ),
     );
     renderTicket(createOrder);
 
-    const alert = await screen.findByText(message);
+    const alert = await screen.findByText('La comanda expiró. Crea una nueva comanda.');
     expect(alert).toBeInTheDocument();
     expect(alert.closest('[aria-live="assertive"]')).toBeInTheDocument();
-    const newOrderButton = screen.queryByRole('button', { name: 'Crear una nueva comanda' });
-    if (status === OrderStatus.DELIVERED) {
-      expect(newOrderButton).not.toBeInTheDocument();
-      return;
-    }
-
+    const newOrderButton = screen.getByRole('button', { name: 'Crear una nueva comanda' });
     expect(newOrderButton).toBeInTheDocument();
-    if (!newOrderButton) {
-      return;
-    }
     fireEvent.click(newOrderButton);
     expect(createOrder).toHaveBeenCalledOnce();
+  });
+
+  it('announces DELIVERED without new order button (DoD)', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.DELIVERED,
+        }),
+      ),
+    );
+    renderTicket();
+
+    const alert = await screen.findByText('Entregada por cocina — recoger.');
+    expect(alert).toBeInTheDocument();
+    expect(alert.closest('[aria-live="assertive"]')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crear una nueva comanda' })).not.toBeInTheDocument();
   });
 
   it('applies a newer waiter status event to the displayed order', async () => {

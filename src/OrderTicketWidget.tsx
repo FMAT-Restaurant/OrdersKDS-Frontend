@@ -26,28 +26,55 @@ import {
 import './features/order-ticket/OrderTicketWidget.css';
 
 export interface OrderTicketWidgetProps {
-  orderId: string;
-  userId: string;
-  tokenProvider: TokenProvider;
-  onCreateNewOrder: () => void;
-  apiBaseUrl?: string;
-  webSocketBaseUrl?: string;
+  readonly orderId: string;
+  readonly userId: string;
+  readonly tokenProvider: TokenProvider;
+  readonly onCreateNewOrder: () => void;
+  readonly apiBaseUrl?: string;
+  readonly webSocketBaseUrl?: string;
+  readonly diningSessionId?: string;
 }
 
 interface EditableOrderItem {
-  id?: string;
-  itemId?: string;
-  dishId?: string;
-  name: string;
-  quantity: number;
-  modifiers: string[];
-  notes: string;
+  readonly id?: string;
+  readonly itemId?: string;
+  readonly dishId?: string;
+  readonly name: string;
+  readonly quantity: number;
+  readonly modifiers: string[];
+  readonly notes: string;
+}
+
+interface RejectedItemDetail {
+  readonly offerId?: string;
+  readonly dishId?: string;
+  readonly itemId?: string;
+  readonly name?: string;
+  readonly reason?: string;
+  readonly requestedQuantity?: number | null;
+  readonly availableQuantity?: number;
+}
+
+interface ReservedItemDetail {
+  readonly offerId?: string;
+  readonly dishId?: string;
+  readonly name?: string;
+  readonly quantity?: number;
+  readonly reservedQuantity?: number;
+}
+
+interface ParsedRejectionDetails {
+  readonly source?: string;
+  readonly missingIngredients?: string[];
+  readonly rejectedItems: readonly RejectedItemDetail[];
+  readonly reservedItems: readonly ReservedItemDetail[];
 }
 
 const ORDER_QUERY_PREFIX = ['order'] as const;
 
 const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   [OrderStatus.CREATED]: 'Creada',
+  [OrderStatus.RESERVED]: 'Reservado en cocina',
   [OrderStatus.IN_PREPARATION]: 'En preparación',
   [OrderStatus.DELIVERED]: 'Entregada por cocina',
   [OrderStatus.PAID]: 'Pagada',
@@ -65,6 +92,7 @@ const ITEM_STATUS_LABELS: Record<
   [ItemStatus.PENDING]: 'Pendiente',
   [ItemStatus.READY]: 'Listo',
   [ItemStatus.DELIVERED]: 'Entregado',
+  [ItemStatus.CANCELLED]: 'Cancelado',
 };
 
 const WEBSOCKET_STATUS_TRANSLATIONS: Record<
@@ -78,7 +106,7 @@ const WEBSOCKET_STATUS_TRANSLATIONS: Record<
   [WebSocketStatus.TERMINATED]: 'disconnected',
 };
 
-function toEditableItems(items: OrderItem[]): EditableOrderItem[] {
+function toEditableItems(items: readonly OrderItem[]): EditableOrderItem[] {
   return items.map((item) => ({
     id: item.id,
     itemId: item.itemId,
@@ -97,10 +125,89 @@ function getDisplayError(error: unknown): string {
   return getErrorMessage(undefined);
 }
 
-function getOrderAlert(status: OrderStatusValue): string {
+function parseRejectionDetails(details: unknown): ParsedRejectionDetails | null {
+  if (!details || typeof details !== 'object') {
+    return null;
+  }
+  const raw = details as Record<string, unknown>;
+  const missing =
+    (Array.isArray(raw.missingIngredients) ? raw.missingIngredients : null) ??
+    (Array.isArray(raw.faltantes) ? raw.faltantes : []);
+  const rejected = Array.isArray(raw.rejectedItems)
+    ? (raw.rejectedItems as RejectedItemDetail[])
+    : [];
+  const reserved = Array.isArray(raw.reservedItems)
+    ? (raw.reservedItems as ReservedItemDetail[])
+    : [];
+
+  if (missing.length === 0 && rejected.length === 0 && reserved.length === 0 && !raw.source) {
+    return null;
+  }
+
+  return {
+    source: typeof raw.source === 'string' ? raw.source : undefined,
+    missingIngredients: missing.map(String),
+    rejectedItems: rejected,
+    reservedItems: reserved,
+  };
+}
+
+function resolveDishName(
+  dishIdOrOfferId: string | undefined,
+  orderItems: readonly OrderItem[],
+): string {
+  if (!dishIdOrOfferId) return 'Platillo';
+  const found = orderItems.find(
+    (item) =>
+      item.dishId === dishIdOrOfferId ||
+      item.id === dishIdOrOfferId ||
+      item.itemId === dishIdOrOfferId,
+  );
+  return found?.name ?? dishIdOrOfferId;
+}
+
+function formatRejectionAlert(
+  parsed: ParsedRejectionDetails,
+  orderItems: readonly OrderItem[],
+): string {
+  const parts: string[] = [];
+  if (parsed.rejectedItems.length > 0) {
+    const itemsSummary = parsed.rejectedItems
+      .map((item) => {
+        const name = item.name ?? resolveDishName(item.dishId ?? item.offerId, orderItems);
+        if (item.availableQuantity !== undefined && item.requestedQuantity !== undefined) {
+          return `${name} (solicitados: ${item.requestedQuantity}, disponibles: ${item.availableQuantity})`;
+        }
+        if (item.reason) {
+          return `${name} (${item.reason})`;
+        }
+        return name;
+      })
+      .join(', ');
+    parts.push(`Insumos no disponibles: ${itemsSummary}.`);
+  }
+  if (parsed.missingIngredients && parsed.missingIngredients.length > 0) {
+    parts.push(`Ingredientes faltantes: ${parsed.missingIngredients.join(', ')}.`);
+  }
+  if (parts.length > 0) {
+    return `Comanda rechazada. ${parts.join(' ')} Modifica la comanda para ajustar cantidades o cancela.`;
+  }
+  return 'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.';
+}
+
+function getOrderAlert(
+  status: OrderStatusValue,
+  rejectionDetails?: unknown,
+  orderItems: readonly OrderItem[] = [],
+): string {
   switch (status) {
-    case OrderStatus.REJECTED:
-      return 'La comanda fue rechazada. Crea una nueva comanda.';
+    case OrderStatus.REJECTED: {
+      const parsed = parseRejectionDetails(rejectionDetails);
+      if (parsed) {
+        return formatRejectionAlert(parsed, orderItems);
+      }
+      return 'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.';
+    }
     case OrderStatus.EXPIRED:
       return 'La comanda expiró. Crea una nueva comanda.';
     case OrderStatus.DELIVERED:
@@ -110,6 +217,256 @@ function getOrderAlert(status: OrderStatusValue): string {
   }
 }
 
+function getTableOrTakeawayLabel(order: Order): string {
+  if (order.isTakeaway) {
+    return 'Para llevar';
+  }
+  if (order.tableNumber) {
+    return `Mesa ${order.tableNumber}`;
+  }
+  return 'Mesa sin asignar';
+}
+
+interface RejectionBreakdownProps {
+  readonly details: ParsedRejectionDetails;
+  readonly orderItems: readonly OrderItem[];
+}
+
+function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdownProps>) {
+  return (
+    <div className="order-ticket__rejection-breakdown">
+      <h3>Detalle de rechazo de stock</h3>
+      {details.missingIngredients && details.missingIngredients.length > 0 && (
+        <p className="order-ticket__missing-ingredients">
+          <strong>Ingredientes faltantes:</strong> {details.missingIngredients.join(', ')}
+        </p>
+      )}
+      {details.rejectedItems.length > 0 && (
+        <div className="order-ticket__rejected-list">
+          <h4>Platillos no disponibles</h4>
+          <ul>
+            {details.rejectedItems.map((item, idx) => {
+              const dishName =
+                item.name ?? resolveDishName(item.dishId ?? item.offerId, orderItems);
+              return (
+                <li key={`rejected-${item.offerId ?? item.itemId ?? idx}`}>
+                  <strong>{dishName}</strong>
+                  {item.availableQuantity !== undefined &&
+                    item.requestedQuantity !== undefined && (
+                      <span>
+                        {' '}— Solicitados: {item.requestedQuantity}, Disponibles:{' '}
+                        {item.availableQuantity}
+                      </span>
+                    )}
+                  {item.reason && <span> — {item.reason}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      {details.reservedItems.length > 0 && (
+        <div className="order-ticket__reserved-list">
+          <h4>Platillos pre-apartados (con stock)</h4>
+          <ul>
+            {details.reservedItems.map((item, idx) => {
+              const dishName =
+                item.name ?? resolveDishName(item.dishId ?? item.offerId, orderItems);
+              const qty = item.quantity ?? item.reservedQuantity ?? 1;
+              return (
+                <li key={`reserved-${item.offerId ?? idx}`}>
+                  <strong>{dishName}</strong>: {qty} apartados temporalmente
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface OrderItemsListProps {
+  readonly items: readonly OrderItem[];
+  readonly isEditing: boolean;
+  readonly draftItems: readonly EditableOrderItem[];
+  readonly onUpdateDraftItem: (index: number, update: Partial<EditableOrderItem>) => void;
+  readonly onRemoveDraftItem: (index: number) => void;
+}
+
+function OrderItemsList({
+  items,
+  isEditing,
+  draftItems,
+  onUpdateDraftItem,
+  onRemoveDraftItem,
+}: Readonly<OrderItemsListProps>) {
+  if (items.length === 0) {
+    return (
+      <div className="order-ticket__items">
+        <h3>Platillos</h3>
+        <p>Esta comanda todavía no tiene platillos.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="order-ticket__items">
+      <h3>Platillos</h3>
+      <ul>
+        {items.map((item, index) => {
+          const key = item.id ?? item.itemId ?? `${item.name}-${index}`;
+          const draft = draftItems[index];
+
+          if (isEditing && draft) {
+            return (
+              <li className="order-ticket__item" key={key}>
+                <div className="order-ticket__item-editor">
+                  <strong>{draft.name}</strong>
+                  <label>
+                    Cantidad de {draft.name}
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={draft.quantity}
+                      onChange={(event) =>
+                        onUpdateDraftItem(index, { quantity: Number(event.target.value) })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Modificadores de {draft.name}
+                    <input
+                      type="text"
+                      value={draft.modifiers.join(', ')}
+                      onChange={(event) =>
+                        onUpdateDraftItem(index, {
+                          modifiers: event.target.value
+                            .split(',')
+                            .map((modifier) => modifier.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Notas de {draft.name}
+                    <textarea
+                      value={draft.notes}
+                      onChange={(event) =>
+                        onUpdateDraftItem(index, { notes: event.target.value })
+                      }
+                    />
+                  </label>
+                  {draftItems.length > 1 && (
+                    <button
+                      type="button"
+                      className="order-ticket__button-secondary order-ticket__item-remove"
+                      onClick={() => onRemoveDraftItem(index)}
+                    >
+                      Quitar platillo
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          }
+
+          return (
+            <li className="order-ticket__item" key={key}>
+              <div className="order-ticket__item-title">
+                <strong>
+                  {item.quantity} × {item.name}
+                </strong>
+                <span>{ITEM_STATUS_LABELS[item.status]}</span>
+              </div>
+              {item.modifiers && item.modifiers.length > 0 && (
+                <p>Modificadores: {item.modifiers.join(', ')}</p>
+              )}
+              {item.notes && <p>Nota: {item.notes}</p>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+interface OrderTicketActionsProps {
+  readonly isEditing: boolean;
+  readonly isMutating: boolean;
+  readonly isEditPending: boolean;
+  readonly isConfirmPending: boolean;
+  readonly isCancelPending: boolean;
+  readonly canConfirm: boolean;
+  readonly canCancel: boolean;
+  readonly canEdit: boolean;
+  readonly onConfirm: () => void;
+  readonly onCancel: () => void;
+  readonly onStartEditing: () => void;
+  readonly onSubmitEdits: () => void;
+  readonly onDiscardEdits: () => void;
+}
+
+function OrderTicketActions({
+  isEditing,
+  isMutating,
+  isEditPending,
+  isConfirmPending,
+  isCancelPending,
+  canConfirm,
+  canCancel,
+  canEdit,
+  onConfirm,
+  onCancel,
+  onStartEditing,
+  onSubmitEdits,
+  onDiscardEdits,
+}: Readonly<OrderTicketActionsProps>) {
+  if (isEditing) {
+    return (
+      <footer className="order-ticket__actions">
+        <button type="button" onClick={onSubmitEdits} disabled={isMutating}>
+          {isEditPending ? 'Guardando…' : 'Guardar cambios'}
+        </button>
+        <button
+          type="button"
+          className="order-ticket__button-secondary"
+          disabled={isMutating}
+          onClick={onDiscardEdits}
+        >
+          Descartar
+        </button>
+      </footer>
+    );
+  }
+
+  return (
+    <footer className="order-ticket__actions">
+      <button type="button" onClick={onConfirm} disabled={!canConfirm || isMutating}>
+        {isConfirmPending ? 'Confirmando…' : 'Confirmar'}
+      </button>
+      <button
+        type="button"
+        className="order-ticket__button-secondary"
+        onClick={onCancel}
+        disabled={!canCancel || isMutating}
+      >
+        {isCancelPending ? 'Cancelando…' : 'Cancelar'}
+      </button>
+      <button
+        type="button"
+        className="order-ticket__button-secondary"
+        onClick={onStartEditing}
+        disabled={!canEdit || isMutating}
+      >
+        Modificar
+      </button>
+    </footer>
+  );
+}
+
 function OrderTicket({
   orderId,
   userId,
@@ -117,13 +474,14 @@ function OrderTicket({
   onCreateNewOrder,
   apiBaseUrl,
   webSocketBaseUrl,
-}: OrderTicketWidgetProps) {
+  diningSessionId: propDiningSessionId,
+}: Readonly<OrderTicketWidgetProps>) {
   const client = useQueryClient();
   const api = useMemo(
     () => createApiClient({ baseUrl: apiBaseUrl, tokenProvider }),
     [apiBaseUrl, tokenProvider],
   );
-  const queryKey = [...ORDER_QUERY_PREFIX, orderId];
+  const queryKey = useMemo(() => [...ORDER_QUERY_PREFIX, orderId], [orderId]);
   const channels = useMemo(() => ['floor', `user:${userId}`], [userId]);
   const [isEditing, setIsEditing] = useState(false);
   const [draftItems, setDraftItems] = useState<EditableOrderItem[]>([]);
@@ -208,6 +566,10 @@ function OrderTicket({
         ...currentOrder,
         status: event.status,
         version: event.version,
+        rejectionDetails:
+          event.rejectionDetails !== undefined
+            ? event.rejectionDetails
+            : currentOrder.rejectionDetails,
         awaitingStockConfirmation:
           event.status === OrderStatus.CREATED
             ? currentOrder.awaitingStockConfirmation
@@ -238,7 +600,7 @@ function OrderTicket({
   if (orderQuery.isPending) {
     return (
       <section className="order-ticket" aria-busy="true">
-        <p role="status">Cargando comanda…</p>
+        <output>Cargando comanda…</output>
       </section>
     );
   }
@@ -258,13 +620,26 @@ function OrderTicket({
 
   const order = orderQuery.data;
   const isCreated = order.status === OrderStatus.CREATED;
-  const canEdit = isCreated && !order.confirmedAt;
+  const isReserved = order.status === OrderStatus.RESERVED;
+  const isRejected = order.status === OrderStatus.REJECTED;
+
+  // "Cancelar" activo en CREATED (incluso confirmada), en RESERVED y en REJECTED (DoD)
+  const canCancel = isCreated || isReserved || isRejected;
+
+  // "Modificar" habilitado en CREATED sin confirmedAt, y en REJECTED (DoD / ADR-0016)
+  const canEdit = (isCreated && !order.confirmedAt) || isRejected;
+
+  // "Confirmar" habilitado en CREATED sin confirmedAt
   const canConfirm = isCreated && !order.confirmedAt;
-  const canCancel = isCreated;
-  const alertMessage = getOrderAlert(order.status);
+
+  const rejectionDetailsParsed = parseRejectionDetails(order.rejectionDetails);
+  const alertMessage = getOrderAlert(order.status, order.rejectionDetails, order.items);
   const connectionMessage = getRealtimeStatusMessage(
     WEBSOCKET_STATUS_TRANSLATIONS[connectionStatus],
   );
+
+  const effectiveDiningSessionId = order.diningSessionId || propDiningSessionId;
+  const tableOrTakeawayLabel = getTableOrTakeawayLabel(order);
 
   const updateDraftItem = (
     index: number,
@@ -277,13 +652,20 @@ function OrderTicket({
     );
   };
 
+  const removeDraftItem = (index: number) => {
+    setDraftItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
+  };
+
   const startEditing = () => {
     setDraftItems(toEditableItems(order.items));
     setIsEditing(true);
   };
 
   const submitEdits = () => {
-    if (draftItems.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1)) {
+    if (
+      draftItems.length === 0 ||
+      draftItems.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1)
+    ) {
       return;
     }
     runMutation(() => editMutation.mutate());
@@ -297,11 +679,12 @@ function OrderTicket({
             Comanda {order.publicId ?? order.id ?? order.orderId ?? orderId}
           </h2>
           <p>
-            {order.isTakeaway
-              ? 'Para llevar'
-              : order.tableNumber
-                ? `Mesa ${order.tableNumber}`
-                : 'Mesa sin asignar'}
+            {tableOrTakeawayLabel}
+            {effectiveDiningSessionId && (
+              <span className="order-ticket__session">
+                {' '}· Sesión {effectiveDiningSessionId.slice(0, 8)}
+              </span>
+            )}
           </p>
         </div>
         <span className="order-ticket__status" data-status={order.status}>
@@ -310,20 +693,19 @@ function OrderTicket({
       </header>
 
       {order.awaitingStockConfirmation && (
-        <p className="order-ticket__stock-status" role="status">
+        <output className="order-ticket__stock-status">
           Pendiente de confirmación de stock
-        </p>
+        </output>
       )}
 
-      <p className="order-ticket__connection" role="status" aria-live="polite">
+      <output className="order-ticket__connection" aria-live="polite">
         {connectionMessage}
-      </p>
+      </output>
 
       {alertMessage && (
         <div className="order-ticket__alert" role="status" aria-live="assertive">
           <p>{alertMessage}</p>
-          {(order.status === OrderStatus.REJECTED ||
-            order.status === OrderStatus.EXPIRED) && (
+          {order.status === OrderStatus.EXPIRED && (
             <button type="button" onClick={onCreateNewOrder}>
               Crear una nueva comanda
             </button>
@@ -331,75 +713,17 @@ function OrderTicket({
         </div>
       )}
 
-      <div className="order-ticket__items">
-        <h3>Platillos</h3>
-        {order.items.length === 0 ? (
-          <p>Esta comanda todavía no tiene platillos.</p>
-        ) : (
-          <ul>
-            {order.items.map((item, index) => {
-              const key = item.id ?? item.itemId ?? `${item.name}-${index}`;
-              const draft = draftItems[index];
-              return (
-                <li className="order-ticket__item" key={key}>
-                  {isEditing && draft ? (
-                    <div className="order-ticket__item-editor">
-                      <strong>{draft.name}</strong>
-                      <label>
-                        Cantidad de {draft.name}
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={draft.quantity}
-                          onChange={(event) =>
-                            updateDraftItem(index, { quantity: Number(event.target.value) })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Modificadores de {draft.name}
-                        <input
-                          type="text"
-                          value={draft.modifiers.join(', ')}
-                          onChange={(event) =>
-                            updateDraftItem(index, {
-                              modifiers: event.target.value
-                                .split(',')
-                                .map((modifier) => modifier.trim())
-                                .filter(Boolean),
-                            })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Notas de {draft.name}
-                        <textarea
-                          value={draft.notes}
-                          onChange={(event) =>
-                            updateDraftItem(index, { notes: event.target.value })
-                          }
-                        />
-                      </label>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="order-ticket__item-title">
-                        <strong>{item.quantity} × {item.name}</strong>
-                        <span>{ITEM_STATUS_LABELS[item.status]}</span>
-                      </div>
-                      {item.modifiers && item.modifiers.length > 0 && (
-                        <p>Modificadores: {item.modifiers.join(', ')}</p>
-                      )}
-                      {item.notes && <p>Nota: {item.notes}</p>}
-                    </>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      {isRejected && rejectionDetailsParsed && (
+        <RejectionBreakdown details={rejectionDetailsParsed} orderItems={order.items} />
+      )}
+
+      <OrderItemsList
+        items={order.items}
+        isEditing={isEditing}
+        draftItems={draftItems}
+        onUpdateDraftItem={updateDraftItem}
+        onRemoveDraftItem={removeDraftItem}
+      />
 
       {confirmMutation.isError && (
         <p className="order-ticket__error" role="alert">
@@ -417,64 +741,33 @@ function OrderTicket({
         </p>
       )}
       {isEditing &&
-        draftItems.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1) && (
+        (draftItems.length === 0 ||
+          draftItems.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1)) && (
           <p className="order-ticket__error" role="alert">
-            La cantidad de cada platillo debe ser un entero mayor que cero.
+            La cantidad de cada platillo debe ser un entero mayor que cero y debe haber al menos un platillo.
           </p>
         )}
 
-      <footer className="order-ticket__actions">
-        {isEditing ? (
-          <>
-            <button
-              type="button"
-              onClick={submitEdits}
-              disabled={isMutating}
-            >
-              {editMutation.isPending ? 'Guardando…' : 'Guardar cambios'}
-            </button>
-            <button
-              type="button"
-              className="order-ticket__button-secondary"
-              disabled={isMutating}
-              onClick={() => setIsEditing(false)}
-            >
-              Descartar
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => runMutation(() => confirmMutation.mutate())}
-              disabled={!canConfirm || isMutating}
-            >
-              {confirmMutation.isPending ? 'Confirmando…' : 'Confirmar'}
-            </button>
-            <button
-              type="button"
-              className="order-ticket__button-secondary"
-              onClick={() => runMutation(() => cancelMutation.mutate())}
-              disabled={!canCancel || isMutating}
-            >
-              {cancelMutation.isPending ? 'Cancelando…' : 'Cancelar'}
-            </button>
-            <button
-              type="button"
-              className="order-ticket__button-secondary"
-              onClick={startEditing}
-              disabled={!canEdit || isMutating}
-            >
-              Modificar
-            </button>
-          </>
-        )}
-      </footer>
+      <OrderTicketActions
+        isEditing={isEditing}
+        isMutating={isMutating}
+        isEditPending={editMutation.isPending}
+        isConfirmPending={confirmMutation.isPending}
+        isCancelPending={cancelMutation.isPending}
+        canConfirm={canConfirm}
+        canCancel={canCancel}
+        canEdit={canEdit}
+        onConfirm={() => runMutation(() => confirmMutation.mutate())}
+        onCancel={() => runMutation(() => cancelMutation.mutate())}
+        onStartEditing={startEditing}
+        onSubmitEdits={submitEdits}
+        onDiscardEdits={() => setIsEditing(false)}
+      />
     </section>
   );
 }
 
-export default function OrderTicketWidget(props: OrderTicketWidgetProps) {
+export default function OrderTicketWidget(props: Readonly<OrderTicketWidgetProps>) {
   return (
     <div className="orders-kds-root">
       <QueryClientProvider client={queryClient}>

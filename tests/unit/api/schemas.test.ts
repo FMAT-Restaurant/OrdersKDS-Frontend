@@ -19,6 +19,17 @@ describe('UT-FE-14: Zod Boundary Schemas', () => {
       }
     });
 
+    it('successfully parses an order item with CANCELLED status', () => {
+      const result = OrderItemSchema.safeParse({
+        ...mockOrderItem1,
+        status: ItemStatus.CANCELLED,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.status).toBe('CANCELLED');
+      }
+    });
+
     it('rejects item with negative or zero quantity', () => {
       const invalidItem = { ...mockOrderItem1, quantity: 0 };
       const result = OrderItemSchema.safeParse(invalidItem);
@@ -46,6 +57,27 @@ describe('UT-FE-14: Zod Boundary Schemas', () => {
         expect(result.data.status).toBe(OrderStatus.IN_PREPARATION);
         expect(result.data.version).toBe(3);
         expect(result.data.items).toHaveLength(2);
+      }
+    });
+
+    it('successfully parses an order in RESERVED status with diningSessionId and rejectionDetails', () => {
+      const reservedOrder = {
+        ...mockOrder1,
+        status: OrderStatus.RESERVED,
+        stockReservedAt: '2026-10-31T12:00:00Z',
+        diningSessionId: '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d',
+        rejectionDetails: {
+          missingIngredients: ['Carne'],
+          rejectedItems: [{ offerId: 'dish-1', requestedQuantity: 2, availableQuantity: 0 }],
+          reservedItems: [{ offerId: 'dish-2', quantity: 1 }],
+        },
+      };
+      const result = OrderSchema.safeParse(reservedOrder);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.status).toBe('RESERVED');
+        expect(result.data.diningSessionId).toBe('9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d');
+        expect(result.data.rejectionDetails).toBeDefined();
       }
     });
 
