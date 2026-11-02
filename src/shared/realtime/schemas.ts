@@ -21,6 +21,7 @@ export const WsOrderStatusChangedSchema = z.object({
   status: OrderStatusSchema,
   version: z.number().int().nonnegative(),
   timestamp: z.string().optional(),
+  rejectionDetails: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export type WsOrderStatusChanged = z.infer<typeof WsOrderStatusChangedSchema>;
