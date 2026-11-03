@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from 'react';
+import { pointerAction } from './pointerAction.ts';
 
 export interface StationSelectorProps {
   readonly stations: readonly string[];
@@ -8,7 +9,7 @@ export interface StationSelectorProps {
 
 /**
  * Segmented station selector for KDS kitchen stations.
- * Supports touch interactions (>= 48px touch targets) and full keyboard focus/navigation.
+ * Supports touch interactions (>= 64px touch targets, 16px separation) and full keyboard focus/navigation.
  */
 export function StationSelector({
   stations,
@@ -26,7 +27,7 @@ export function StationSelector({
     <div
       role="radiogroup"
       aria-label="Station selector"
-      className="flex items-center gap-2 p-1.5 bg-gray-950/90 rounded-lg border border-gray-800"
+      className="flex items-center gap-4 p-1.5 bg-gray-950/90 rounded-lg border border-gray-800"
     >
       {stations.map((station) => {
         const isSelected = selectedStation.toLowerCase() === station.toLowerCase();
@@ -38,15 +39,16 @@ export function StationSelector({
             aria-checked={isSelected}
             tabIndex={0}
             data-testid={`station-tab-${station.toLowerCase()}`}
-            onClick={() => onSelectStation(station)}
+            {...pointerAction(() => onSelectStation(station))}
             onKeyDown={(event) => handleKeyDown(event, station)}
-            className={`min-h-[48px] px-5 py-2.5 rounded-md font-bold text-base capitalize transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+            style={{ minHeight: 64 }}
+            className={`min-h-[64px] min-h-[48px] px-5 py-2.5 rounded-md font-bold text-base capitalize transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] ${
               isSelected
                 ? 'bg-fmat-secondary text-white shadow-md'
                 : 'text-gray-300 hover:text-white hover:bg-gray-800'
             }`}
           >
-            {station}
+            {station === 'general' ? 'Todas' : station}
           </button>
         );
       })}
