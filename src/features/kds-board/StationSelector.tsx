@@ -9,7 +9,7 @@ export interface StationSelectorProps {
 
 /**
  * Segmented station selector for KDS kitchen stations.
- * Supports touch interactions (>= 48px touch targets) and full keyboard focus/navigation.
+ * Supports touch interactions (>= 64px touch targets, 16px separation) and full keyboard focus/navigation.
  */
 export function StationSelector({
   stations,

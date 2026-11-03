@@ -23,6 +23,8 @@ export interface KdsBoardProps {
   readonly initialView?: KdsViewType;
   readonly initialStation?: string;
   readonly onOrderSelect?: (order: Order) => void;
+  readonly onStartPreparation?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order) => void;
 }
 
 function KdsBoardContent({
@@ -32,6 +34,8 @@ function KdsBoardContent({
   initialView = 'active',
   initialStation = 'general',
   onOrderSelect,
+  onStartPreparation,
+  onRejectSupplies,
 }: Readonly<Omit<KdsBoardProps, 'queryClient'>>) {
   const [view, setView] = useState<KdsViewType>(initialView);
   const [selectedStation, setSelectedStation] = useState<string>(initialStation);
@@ -59,9 +63,9 @@ function KdsBoardContent({
       try {
         await actionClient.patch(path);
         await defaultQueryClient.invalidateQueries({ queryKey: ['kds'] });
-      } catch (actionFailure) {
+      } catch (error_) {
         setActionError(
-          actionFailure instanceof Error ? actionFailure.message : 'No se pudo completar la acción.',
+          error_ instanceof Error ? error_.message : 'No se pudo completar la acción.',
         );
       } finally {
         setPendingAction(null);
@@ -247,9 +251,10 @@ function KdsBoardContent({
             key={order.id ?? order.orderId ?? order.publicId}
             order={order}
             onClick={onOrderSelect}
-            onStartPreparation={startPreparation}
-            onItemReady={markItemReady}
+            onStartPreparation={onStartPreparation ?? startPreparation}
+            onRejectSupplies={onRejectSupplies}
             onMarkOrderReady={markOrderReady}
+            onItemReady={markItemReady}
             pendingAction={pendingAction ?? undefined}
           />
         ))}
@@ -265,7 +270,7 @@ function KdsBoardContent({
     >
       {/* Top Header: Tabs and Station Selector */}
       <header className="px-8 py-4 bg-gray-950 border-b border-gray-800 flex items-center justify-between gap-6 flex-wrap">
-        {/* View Tabs (Touch target >= 48px) */}
+        {/* View Tabs (Touch target >= 64px, with min-h-[48px] baseline) */}
         <div
           role="tablist"
           aria-label="KDS Views"

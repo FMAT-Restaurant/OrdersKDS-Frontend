@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ApiClient, ApiError } from '../../../src/shared/api/client.ts';
+import { ApiClient, ApiError, apiClient, createApiClient } from '../../../src/shared/api/client.ts';
 import { ErrorCode } from '../../../src/shared/api/errorCodes.ts';
 import { KdsQueueResponseSchema, OrderSchema } from '../../../src/shared/api/schemas.ts';
 import { OrderStatus } from '../../../src/shared/types/order.ts';
@@ -379,6 +379,15 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
         expect(apiErr.code).toBe(ErrorCode.ORDER_NOT_FOUND);
         return true;
       });
+    });
+
+    it('creates client with createApiClient helper and exposes default singleton apiClient', async () => {
+      expect(apiClient).toBeInstanceOf(ApiClient);
+      const customClient = createApiClient({
+        baseUrl: 'http://example.com',
+        tokenProvider: () => Promise.resolve('test-token'),
+      });
+      expect(customClient).toBeInstanceOf(ApiClient);
     });
   });
 });

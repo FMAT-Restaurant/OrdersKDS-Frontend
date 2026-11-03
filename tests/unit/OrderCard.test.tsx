@@ -628,4 +628,216 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(card).toHaveClass('ring-2 ring-fmat-primary');
     });
   });
+
+  // -------------------------------------------------------------------------
+  // TASK-40a: Touch interactions, action buttons and keyboard parity
+  // -------------------------------------------------------------------------
+  describe('TASK-40a: KDS Touch Actions & Keyboard Parity', () => {
+    const reservedOrder: Order = {
+      id: 'ord-reserved-1',
+      orderId: 'ord-reserved-1',
+      tableNumber: 42,
+      isTakeaway: false,
+      status: OrderStatus.RESERVED,
+      version: 2,
+      items: [
+        {
+          id: 'dish-1',
+          name: 'Hamburguesa Doble',
+          quantity: 2,
+          unitPrice: 180,
+          status: ItemStatus.PENDING,
+          modifiers: ['Sin cebolla', 'Queso extra'],
+          notes: 'Término medio',
+          preparationTimeText: 'Prep: 12m',
+        },
+        {
+          id: 'dish-2',
+          name: 'Papas Trufadas',
+          quantity: 1,
+          unitPrice: 90,
+          status: ItemStatus.READY,
+          preparation_time_text: 'Prep: 5m',
+        },
+      ],
+      stock_reserved_at: new Date(baseTimestamp - 60 * 1000).toISOString(),
+    };
+
+    it('renders "Iniciar preparación" and "Rechazar insumo" buttons for RESERVED orders', () => {
+      const onStart = vi.fn();
+      const onReject = vi.fn();
+      render(
+        <OrderCard
+          order={reservedOrder}
+          onStartPreparation={onStart}
+          onRejectSupplies={onReject}
+        />,
+      );
+
+      const startBtn = screen.getByTestId('order-action-start-ord-reserved-1');
+      const rejectBtn = screen.getByTestId('order-action-reject-ord-reserved-1');
+
+      expect(startBtn).toBeInTheDocument();
+      expect(rejectBtn).toBeInTheDocument();
+
+      fireEvent.click(startBtn);
+      expect(onStart).toHaveBeenCalledWith(reservedOrder);
+
+      fireEvent.click(rejectBtn);
+      expect(onReject).toHaveBeenCalledWith(reservedOrder);
+    });
+
+    it('handles keyboard navigation (Enter, Space) on start and reject buttons', () => {
+      const onStart = vi.fn();
+      const onReject = vi.fn();
+      render(
+        <OrderCard
+          order={reservedOrder}
+          onStartPreparation={onStart}
+          onRejectSupplies={onReject}
+        />,
+      );
+
+      const startBtn = screen.getByTestId('order-action-start-ord-reserved-1');
+      const rejectBtn = screen.getByTestId('order-action-reject-ord-reserved-1');
+
+      fireEvent.keyDown(startBtn, { key: 'Enter' });
+      expect(onStart).toHaveBeenCalledTimes(1);
+      fireEvent.keyDown(startBtn, { key: ' ' });
+      expect(onStart).toHaveBeenCalledTimes(2);
+      fireEvent.keyDown(startBtn, { key: 'Tab' });
+      expect(onStart).toHaveBeenCalledTimes(2);
+
+      fireEvent.keyDown(rejectBtn, { key: 'Enter' });
+      expect(onReject).toHaveBeenCalledTimes(1);
+      fireEvent.keyDown(rejectBtn, { key: ' ' });
+      expect(onReject).toHaveBeenCalledTimes(2);
+      fireEvent.keyDown(rejectBtn, { key: 'Escape' });
+      expect(onReject).toHaveBeenCalledTimes(2);
+    });
+
+    it('disables action buttons according to pendingAction state', () => {
+      const { rerender } = render(
+        <OrderCard order={reservedOrder} pendingAction="start" />,
+      );
+      expect(screen.getByTestId('order-action-start-ord-reserved-1')).toBeDisabled();
+      expect(screen.getByTestId('order-action-reject-ord-reserved-1')).not.toBeDisabled();
+
+      rerender(<OrderCard order={reservedOrder} pendingAction="reject" />);
+      expect(screen.getByTestId('order-action-start-ord-reserved-1')).not.toBeDisabled();
+      expect(screen.getByTestId('order-action-reject-ord-reserved-1')).toBeDisabled();
+    });
+
+    it('handles "Orden lista" button click, keyboard, and disabled states', () => {
+      const onReady = vi.fn();
+      const { rerender } = render(
+        <OrderCard order={reservedOrder} onMarkOrderReady={onReady} />,
+      );
+
+      const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
+      expect(readyBtn).toBeInTheDocument();
+
+      fireEvent.click(readyBtn);
+      expect(onReady).toHaveBeenCalledWith(reservedOrder);
+
+      fireEvent.keyDown(readyBtn, { key: 'Enter' });
+      expect(onReady).toHaveBeenCalledTimes(2);
+      fireEvent.keyDown(readyBtn, { key: ' ' });
+      expect(onReady).toHaveBeenCalledTimes(3);
+      fireEvent.keyDown(readyBtn, { key: 'ArrowRight' });
+      expect(onReady).toHaveBeenCalledTimes(3);
+
+      rerender(<OrderCard order={reservedOrder} pendingAction="order-ready" />);
+      expect(screen.getByTestId('order-action-ready-ord-reserved-1')).toBeDisabled();
+    });
+
+    it('hides "Orden lista" button when order is DELIVERED, PAID, or CANCELLED', () => {
+      const deliveredOrder: Order = { ...reservedOrder, status: OrderStatus.DELIVERED };
+      const paidOrder: Order = { ...reservedOrder, status: OrderStatus.PAID };
+      const cancelledOrder: Order = { ...reservedOrder, status: OrderStatus.CANCELLED };
+
+      const { rerender } = render(<OrderCard order={deliveredOrder} />);
+      expect(screen.queryByTestId('order-action-ready-ord-reserved-1')).not.toBeInTheDocument();
+
+      rerender(<OrderCard order={paidOrder} />);
+      expect(screen.queryByTestId('order-action-ready-ord-reserved-1')).not.toBeInTheDocument();
+
+      rerender(<OrderCard order={cancelledOrder} />);
+      expect(screen.queryByTestId('order-action-ready-ord-reserved-1')).not.toBeInTheDocument();
+    });
+
+    it('handles item ready action on click and keyboard', () => {
+      const onItemReady = vi.fn();
+      render(<OrderCard order={reservedOrder} onItemReady={onItemReady} />);
+
+      // Dish 1 is PENDING
+      const item1Btn = screen.getByTestId('order-item-action-dish-1');
+      fireEvent.click(item1Btn);
+      expect(onItemReady).toHaveBeenCalledTimes(1);
+      expect(onItemReady).toHaveBeenCalledWith(reservedOrder, reservedOrder.items[0]);
+
+      fireEvent.keyDown(item1Btn, { key: 'Enter' });
+      expect(onItemReady).toHaveBeenCalledTimes(2);
+      fireEvent.keyDown(item1Btn, { key: ' ' });
+      expect(onItemReady).toHaveBeenCalledTimes(3);
+      fireEvent.keyDown(item1Btn, { key: 'Tab' });
+      expect(onItemReady).toHaveBeenCalledTimes(3);
+
+      // Dish 2 is READY - should not trigger onItemReady
+      const item2Btn = screen.getByTestId('order-item-action-dish-2');
+      fireEvent.click(item2Btn);
+      fireEvent.keyDown(item2Btn, { key: 'Enter' });
+      fireEvent.keyDown(item2Btn, { key: ' ' });
+      expect(onItemReady).toHaveBeenCalledTimes(3);
+    });
+
+    it('renders item safely when optional fields are omitted or pendingAction matches', () => {
+      const minimalOrder: Order = {
+        ...reservedOrder,
+        id: undefined,
+        orderId: undefined,
+        publicId: undefined,
+        items: [
+          {
+            id: undefined,
+            itemId: undefined,
+            publicId: undefined,
+            name: 'Basic Bread',
+            quantity: 1,
+            unitPrice: 20,
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      render(
+        <OrderCard
+          order={minimalOrder}
+          pendingAction="item:0"
+        />,
+      );
+
+      expect(screen.getByTestId('order-id-unknown')).toBeInTheDocument();
+      expect(screen.getByTestId('order-item-item-0')).toBeInTheDocument();
+    });
+
+    it('does not throw when action callbacks are undefined and buttons are triggered', () => {
+      render(<OrderCard order={reservedOrder} />);
+      const startBtn = screen.getByTestId('order-action-start-ord-reserved-1');
+      const rejectBtn = screen.getByTestId('order-action-reject-ord-reserved-1');
+      const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
+      const itemBtn = screen.getByTestId('order-item-action-dish-1');
+
+      expect(() => {
+        fireEvent.click(startBtn);
+        fireEvent.keyDown(startBtn, { key: 'Enter' });
+        fireEvent.click(rejectBtn);
+        fireEvent.keyDown(rejectBtn, { key: 'Enter' });
+        fireEvent.click(readyBtn);
+        fireEvent.keyDown(readyBtn, { key: 'Enter' });
+        fireEvent.click(itemBtn);
+        fireEvent.keyDown(itemBtn, { key: 'Enter' });
+      }).not.toThrow();
+    });
+  });
 });

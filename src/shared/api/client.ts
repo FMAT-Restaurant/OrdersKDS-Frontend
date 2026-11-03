@@ -225,5 +225,5 @@ const localDevToken = import.meta.env.VITE_API_TOKEN;
 
 export const apiClient = createApiClient({
   baseUrl: localApiBaseUrl,
-  tokenProvider: localDevToken ? async () => localDevToken : undefined,
+  tokenProvider: localDevToken ? () => Promise.resolve(localDevToken) : undefined,
 });

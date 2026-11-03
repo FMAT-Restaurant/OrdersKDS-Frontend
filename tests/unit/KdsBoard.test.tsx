@@ -9,6 +9,7 @@ import { StationSelector } from '../../src/features/kds-board/StationSelector.ts
 import { useKdsQueue } from '../../src/features/kds-board/useKdsQueue.ts';
 import type { Order } from '../../src/shared/api/schemas.ts';
 import { ItemStatus, OrderStatus } from '../../src/shared/types/order.ts';
+import type { ApiClient } from '../../src/shared/api/client.ts';
 import {
   mockDeliveredQueue,
   mockKdsQueue,
@@ -712,6 +713,15 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       rerender(<OrderCardStub order={mockOrder1} isFocused={true} />);
       expect(card).toHaveClass('ring-2 ring-fmat-primary');
     });
+
+    it('does not throw when onClick is omitted on click and enter', () => {
+      render(<OrderCardStub order={mockOrder1} />);
+      const card = screen.getByTestId('order-card-stub-ord-101');
+      expect(() => {
+        fireEvent.click(card);
+        fireEvent.keyDown(card, { key: 'Enter' });
+      }).not.toThrow();
+    });
   });
 
   describe('StationSelector isolated behavior', () => {
@@ -774,6 +784,162 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         { wrapper },
       );
       expect(result.current.isPending).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // TASK-40a: KdsBoard Touch Actions & runAction Execution
+  // -------------------------------------------------------------------------
+  describe('TASK-40a: KdsBoard Touch Actions & runAction Execution', () => {
+    it('executes startPreparation, markOrderReady, and markItemReady through action client', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-101')).toBeInTheDocument();
+      });
+
+      // 1. Mark order ready
+      const readyBtn = screen.getByTestId('order-action-ready-ord-101');
+      fireEvent.click(readyBtn);
+
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/ready');
+      });
+
+      // 2. Mark item ready
+      const item1Btn = screen.getByTestId('order-item-action-item-1');
+      fireEvent.click(item1Btn);
+
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/items/item-1/ready');
+      });
+    });
+
+    it('triggers onStartPreparation and onRejectSupplies props when provided', async () => {
+      const onStart = vi.fn();
+      const onReject = vi.fn();
+      const queryClient = createTestQueryClient();
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([
+          {
+            ...mockOrder1,
+            id: 'ord-reserved',
+            orderId: 'ord-reserved',
+            status: OrderStatus.RESERVED,
+          },
+        ]),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={queryClient}
+          onStartPreparation={onStart}
+          onRejectSupplies={onReject}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-start-ord-reserved')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-start-ord-reserved'));
+      expect(onStart).toHaveBeenCalled();
+
+      fireEvent.click(screen.getByTestId('order-action-reject-ord-reserved'));
+      expect(onReject).toHaveBeenCalled();
+    });
+
+    it('triggers default startPreparation when onStartPreparation prop is not provided', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([
+          {
+            ...mockOrder1,
+            id: 'ord-res-default',
+            orderId: 'ord-res-default',
+            status: OrderStatus.RESERVED,
+          },
+        ]),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-start-ord-res-default')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-start-ord-res-default'));
+
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-default/start-preparation');
+      });
+    });
+
+    it('displays error alert when runAction fails with Error instance', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockRejectedValue(new Error('Network error at kitchen terminal')),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-101'));
+
+      await waitFor(() => {
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent('Network error at kitchen terminal');
+      });
+    });
+
+    it('displays fallback error alert when runAction fails with non-Error', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockRejectedValue('Fatal unknown string failure'),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-101'));
+
+      await waitFor(() => {
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent('No se pudo completar la acción.');
+      });
     });
   });
 });
