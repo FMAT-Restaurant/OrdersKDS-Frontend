@@ -540,6 +540,26 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
 
       client.disconnect();
     });
+
+    it('safely ignores unparseable raw JSON frames', async () => {
+      const client = new KdsWebSocketClient(
+        {
+          role: UserRole.KITCHEN,
+          tokenProvider: mockTokenProvider,
+          baseUrl: 'ws://localhost:8000',
+          WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        tracker,
+      );
+      await client.connect();
+      const ws = MockWebSocket.instances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage('{not-a-valid-json');
+      expect(client.getStatus()).toBe(WebSocketStatus.CONNECTED);
+      client.disconnect();
+      expect(client.getStatus()).toBe(WebSocketStatus.DISCONNECTED);
+    });
   });
 });
 
