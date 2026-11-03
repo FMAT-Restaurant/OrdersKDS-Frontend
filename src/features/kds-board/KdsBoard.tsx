@@ -6,7 +6,7 @@ import type { ApiClient } from '../../shared/api/client.ts';
 import { queryClient as defaultQueryClient } from '../../shared/api/queryClient.ts';
 import type { Order } from '../../shared/api/schemas.ts';
 import type { TokenProvider } from '../../shared/types/auth.ts';
-import { OrderCardStub } from './OrderCardStub.tsx';
+import { OrderCard } from './OrderCard.tsx';
 import { StationSelector } from './StationSelector.tsx';
 import { type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 
@@ -187,7 +187,7 @@ function KdsBoardContent({
         className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 h-full auto-rows-fr content-start"
       >
         {paginatedOrders.map((order) => (
-          <OrderCardStub
+          <OrderCard
             key={order.id ?? order.orderId ?? order.publicId}
             order={order}
             onClick={onOrderSelect}
