@@ -220,4 +220,10 @@ export function createApiClient(config?: ApiClientConfig): ApiClient {
   return new ApiClient(config);
 }
 
-export const apiClient = createApiClient();
+const localApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const localDevToken = import.meta.env.VITE_API_TOKEN;
+
+export const apiClient = createApiClient({
+  baseUrl: localApiBaseUrl,
+  tokenProvider: localDevToken ? async () => localDevToken : undefined,
+});
