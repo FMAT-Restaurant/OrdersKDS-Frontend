@@ -18,6 +18,8 @@ export interface KdsBoardProps {
   readonly initialView?: KdsViewType;
   readonly initialStation?: string;
   readonly onOrderSelect?: (order: Order) => void;
+  readonly onStartPreparation?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order) => void;
 }
 
 function KdsBoardContent({
@@ -27,6 +29,8 @@ function KdsBoardContent({
   initialView = 'active',
   initialStation = 'general',
   onOrderSelect,
+  onStartPreparation,
+  onRejectSupplies,
 }: Readonly<Omit<KdsBoardProps, 'queryClient'>>) {
   const [view, setView] = useState<KdsViewType>(initialView);
   const [selectedStation, setSelectedStation] = useState<string>(initialStation);
@@ -191,6 +195,8 @@ function KdsBoardContent({
             key={order.id ?? order.orderId ?? order.publicId}
             order={order}
             onClick={onOrderSelect}
+            onStartPreparation={onStartPreparation}
+            onRejectSupplies={onRejectSupplies}
           />
         ))}
       </div>
@@ -220,11 +226,10 @@ function KdsBoardContent({
             tabIndex={0}
             data-testid="tab-active-view"
             onClick={() => handleViewChange('active')}
-            className={`min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
-              view === 'active'
-                ? 'bg-fmat-primary text-white shadow-lg'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-            }`}
+            className={`min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${view === 'active'
+              ? 'bg-fmat-primary text-white shadow-lg'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              }`}
           >
             Active View
           </button>
@@ -237,11 +242,10 @@ function KdsBoardContent({
             tabIndex={0}
             data-testid="tab-delivered"
             onClick={() => handleViewChange('delivered')}
-            className={`min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
-              view === 'delivered'
-                ? 'bg-fmat-primary text-white shadow-lg'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-            }`}
+            className={`min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${view === 'delivered'
+              ? 'bg-fmat-primary text-white shadow-lg'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              }`}
           >
             Delivered
           </button>

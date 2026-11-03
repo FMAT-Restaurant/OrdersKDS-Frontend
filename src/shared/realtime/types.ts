@@ -22,6 +22,7 @@ export interface OrderStatusChangedEvent {
   status: OrderStatus;
   version: number;
   timestamp?: string;
+  rejectionDetails?: Record<string, unknown> | null;
 }
 
 export interface ItemStatusChangedEvent {

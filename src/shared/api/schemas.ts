@@ -38,6 +38,7 @@ export const ItemStatusSchema = z.enum([
   ItemStatus.PENDING,
   ItemStatus.READY,
   ItemStatus.DELIVERED,
+  ItemStatus.CANCELLED,
 ]);
 
 /**
@@ -79,10 +80,12 @@ export const OrderSchema = z.object({
   items: z.array(OrderItemSchema),
   confirmedAt: z.string().nullable().optional(),
   confirmedBy: z.string().nullable().optional(),
-  inPreparationAt: z.string().nullable().optional(),
-  in_preparation_at: z.string().nullable().optional(),
   stockReservedAt: z.string().nullable().optional(),
   stock_reserved_at: z.string().nullable().optional(),
+  inPreparationAt: z.string().nullable().optional(),
+  in_preparation_at: z.string().nullable().optional(),
+  rejectionDetails: z.record(z.string(), z.unknown()).nullable().optional(),
+  diningSessionId: z.string().nullable().optional(),
   responsibleWaiterId: z.string().nullable().optional(),
   awaitingStockConfirmation: z.boolean().optional(),
   createdAt: z.string().optional(),

@@ -2,8 +2,8 @@
  * Mirror of shared domain types from the backend.
  * Synchronize with `app/domain/order_status.py` (backend) when evolving.
  *
- * Source of truth: TASK-03 — PostgreSQL modeling and state machine.
- * The 9 order states and 3 item states are those defined
+ * Source of truth: TASK-03 / TASK-C03 — PostgreSQL modeling and state machine.
+ * The 10 order states and 4 item states are those defined
  * in `_ALLOWED_TRANSITIONS` on the backend.
  *
  * Note: the `const + as const + type` pattern is used instead of `enum`
@@ -33,8 +33,8 @@ export const ItemStatus = {
   PENDING:   'PENDING',
   READY:     'READY',
   DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELLED',
 } as const;
 
 /** Union type of all possible item states. */
 export type ItemStatus = typeof ItemStatus[keyof typeof ItemStatus];
-
