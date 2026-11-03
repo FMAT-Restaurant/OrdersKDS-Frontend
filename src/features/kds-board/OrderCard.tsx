@@ -2,12 +2,16 @@ import type { KeyboardEvent } from 'react';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
 import { StatusBadge } from './StatusBadge.tsx';
 import { useElapsedTime } from './useElapsedTime.ts';
+import { pointerAction } from './pointerAction.ts';
 
 export interface OrderCardProps {
   readonly order: Order;
   readonly onClick?: (order: Order) => void;
   readonly onStartPreparation?: (order: Order) => void;
+  readonly onMarkOrderReady?: (order: Order) => void;
+  readonly onItemReady?: (order: Order, item: OrderItem) => void;
   readonly onRejectSupplies?: (order: Order) => void;
+  readonly pendingAction?: string;
   readonly isFocused?: boolean;
 }
 
@@ -15,16 +19,45 @@ export interface OrderCardProps {
  * Renders a single dish item inside an order card.
  * Notes, modifiers and preparationTimeText are safely escaped by React (ST-19 / XSS prevention).
  */
-function OrderCardItem({ item, index }: Readonly<{ item: OrderItem; index: number }>) {
+function OrderCardItem({
+  item,
+  index,
+  onReady,
+  isPending,
+}: Readonly<{
+  item: OrderItem;
+  index: number;
+  onReady?: () => void;
+  isPending: boolean;
+}>) {
   const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
 
   return (
     <li
       data-testid={`order-item-${itemId}`}
-      className="py-2 border-b border-gray-700/50 last:border-b-0 flex flex-col gap-1"
+      style={{ minHeight: 64 }}
+      className="min-h-[64px] border-b border-gray-700/50 last:border-b-0 flex flex-col gap-1"
     >
-      <div className="flex items-baseline justify-between gap-2">
+      <div
+        role="button"
+        tabIndex={item.status === 'READY' ? -1 : 0}
+        aria-disabled={item.status === 'READY' || isPending}
+        aria-label={`Marcar ${item.name} como listo`}
+        onPointerUp={(event) => {
+          if (event.currentTarget.getAttribute('aria-disabled') !== 'true') onReady?.();
+        }}
+        onKeyDown={(event) => {
+          if ((event.key === 'Enter' || event.key === ' ') && item.status !== 'READY') {
+            event.preventDefault();
+            onReady?.();
+          }
+        }}
+        className={`min-h-[64px] py-3 flex flex-col justify-center ${
+          item.status === 'READY' ? 'opacity-60' : 'cursor-pointer active:bg-gray-700'
+        }`}
+      >
+        <div className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2.5">
           <span
             className="text-lg font-black text-amber-400 min-w-[28px]"
@@ -48,9 +81,9 @@ function OrderCardItem({ item, index }: Readonly<{ item: OrderItem; index: numbe
             {prepTime}
           </span>
         )}
-      </div>
+        </div>
 
-      {item.modifiers && item.modifiers.length > 0 && (
+        {item.modifiers && item.modifiers.length > 0 && (
         <div
           className="pl-8 flex flex-wrap gap-1.5 mt-0.5"
           data-testid={`order-item-modifiers-${itemId}`}
@@ -65,9 +98,9 @@ function OrderCardItem({ item, index }: Readonly<{ item: OrderItem; index: numbe
             </span>
           ))}
         </div>
-      )}
+        )}
 
-      {item.notes && (
+        {item.notes && (
         <div
           className="pl-8 text-sm text-yellow-300 italic flex items-start gap-1"
           data-testid={`order-item-notes-${itemId}`}
@@ -75,7 +108,8 @@ function OrderCardItem({ item, index }: Readonly<{ item: OrderItem; index: numbe
           <span className="font-bold not-italic shrink-0">Note:</span>
           <span className="break-words">{item.notes}</span>
         </div>
-      )}
+        )}
+      </div>
     </li>
   );
 }
@@ -89,7 +123,10 @@ export function OrderCard({
   order,
   onClick,
   onStartPreparation,
+  onMarkOrderReady,
+  onItemReady,
   onRejectSupplies,
+  pendingAction,
   isFocused = false,
 }: Readonly<OrderCardProps>) {
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
@@ -104,9 +141,13 @@ export function OrderCard({
   );
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
+    if (event.key === 'Enter' || event.code === 'NumpadEnter' || event.key === ' ') {
       event.preventDefault();
-      onClick?.(order);
+      if (event.key === 'Enter' && order.status === 'RESERVED') {
+        onStartPreparation?.(order);
+      } else {
+        onClick?.(order);
+      }
     }
   };
 
@@ -147,7 +188,7 @@ export function OrderCard({
         type="button"
         data-testid={`order-card-stub-${displayId}`}
         aria-label={`Order ${displayId}`}
-        onClick={() => onClick?.(order)}
+        {...pointerAction(() => onClick?.(order))}
         onKeyDown={handleKeyDown}
         className={`w-full flex-1 p-5 select-none cursor-pointer flex flex-col justify-between min-h-[200px] text-left bg-transparent border-0 focus:outline-none ${
           isFocused ? 'ring-2 ring-fmat-primary' : ''
@@ -220,6 +261,8 @@ export function OrderCard({
               key={item.id ?? item.itemId ?? item.publicId ?? `item-${index}`}
               item={item}
               index={index}
+              onReady={() => onItemReady?.(order, item)}
+              isPending={pendingAction === `item:${item.id ?? item.itemId ?? item.publicId ?? index}`}
             />
           ))}
         </ul>
@@ -227,7 +270,7 @@ export function OrderCard({
         {/* Footer info: Total items count */}
         <div className="pt-2 border-t border-gray-700/60 flex items-center justify-between text-xs text-gray-400 w-full">
           <span>{order.items.length} {order.items.length === 1 ? 'item' : 'items'}</span>
-          <span>Click to select</span>
+          <span>Touch or press Enter to select</span>
         </div>
       </button>
 
@@ -235,14 +278,22 @@ export function OrderCard({
       {order.status === 'RESERVED' && (
         <div
           data-testid={`order-actions-${displayId}`}
-          className="px-5 pb-5 pt-1 flex items-center gap-3 w-full bg-transparent"
+          className="px-5 pb-5 pt-1 flex items-center gap-4 w-full bg-transparent"
         >
           <button
             type="button"
             data-testid={`order-action-start-${displayId}`}
             aria-label={`Iniciar preparación para la orden ${displayId}`}
-            onClick={() => onStartPreparation?.(order)}
-            className="min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none"
+            disabled={pendingAction === 'start'}
+            {...pointerAction(() => onStartPreparation?.(order))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onStartPreparation?.(order);
+              }
+            }}
+            style={{ minHeight: 64 }}
+            className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
           >
             Iniciar preparación
           </button>
@@ -250,12 +301,39 @@ export function OrderCard({
             type="button"
             data-testid={`order-action-reject-${displayId}`}
             aria-label={`Rechazar insumo para la orden ${displayId}`}
-            onClick={() => onRejectSupplies?.(order)}
-            className="min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none"
+            disabled={pendingAction === 'reject'}
+            {...pointerAction(() => onRejectSupplies?.(order))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onRejectSupplies?.(order);
+              }
+            }}
+            style={{ minHeight: 64 }}
+            className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
           >
             Rechazar insumo
           </button>
         </div>
+      )}
+      {order.status !== 'DELIVERED' && order.status !== 'PAID' && order.status !== 'CANCELLED' && (
+        <button
+          type="button"
+          data-testid={`order-action-ready-${displayId}`}
+          aria-label={`Orden lista para la orden ${displayId}`}
+          disabled={pendingAction === 'order-ready'}
+          {...pointerAction(() => onMarkOrderReady?.(order))}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onMarkOrderReady?.(order);
+            }
+          }}
+          style={{ minHeight: 64 }}
+          className="mx-5 mb-5 min-h-[64px] min-h-[48px] rounded-md bg-green-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 active:scale-[.98] disabled:opacity-50"
+        >
+          Orden lista
+        </button>
       )}
     </article>
   );
