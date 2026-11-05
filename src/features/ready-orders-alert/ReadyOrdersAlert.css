@@ -1,0 +1,42 @@
+.ready-orders-alerts {
+  display: grid;
+  gap: 0.75rem;
+  font-family: inherit;
+}
+
+.ready-orders-alert {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 2px solid #c2410c;
+  border-radius: 0.5rem;
+  background: #fff7ed;
+  color: #431407;
+  box-shadow: 0 4px 12px rgb(67 20 7 / 16%);
+}
+
+.ready-orders-alert p {
+  margin: 0;
+  font-weight: 700;
+}
+
+.ready-orders-alert__order {
+  font-size: 0.875rem;
+}
+
+.ready-orders-alert button {
+  justify-self: start;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ready-orders-alert button:focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 2px;
+}

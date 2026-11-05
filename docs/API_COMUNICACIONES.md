@@ -174,6 +174,8 @@ El frontend establece conexión WebSocket persistente para evitar polling repeti
 }
 ```
 
+Para una transición a `DELIVERED` entregada también al canal compartido `floor`, el evento incluye `responsibleWaiterId` con el identificador del mesero asignado. Los consumidores filtran con ese campo para no alertar a otros meseros.
+
 ##### 2. Cambio de Estado de Orden (`order.status_changed`) — Rechazo con Pre-Reserva Parcial (Opción A):
 ```json
 {
@@ -261,4 +263,4 @@ Aunque el frontend no se conecta a RabbitMQ, los desarrolladores de interfaz deb
 8. **OP-09: Metadatos de Menú como Texto de Referencia (ADR-0008)** — **[Cerrado]** `station` y `preparationTime` son strings informativos sanitizados contra inyecciones XSS.
 9. **OP-11: Prioridad de Cola KDS y Estado `RESERVED` (ADR-0009 / ADR-0013)** — **[Cerrado]** Cola activa incluye órdenes en `RESERVED` e `IN_PREPARATION`, ordenadas por `COALESCE(in_preparation_at, stock_reserved_at, created_at) ASC`.
 10. **OP-12: Rehechura de Platillo en Orden `DELIVERED` (Sprint 5 · TASK-32 / TASK-23)** — **[Pendiente de evento final con Inventario]** La orden matriz se mantiene en `DELIVERED` y el ítem regresa a `PENDING` solicitando nota obligatoria en la UI del mesero.
-11. **OP-13: Recepción de Aviso `DELIVERED` para Meseros (Sprint 6 · INT-03)** — **[Pendiente de definir con Sala]** Definir si el aviso de recoger charola se muestra en el mapa de mesas de Sala o mediante el componente flotante `ReadyOrdersAlert` (`TASK-42`).
+11. **OP-13: Recepción de Aviso `DELIVERED` para Meseros (Sprint 6 · INT-03)** — **[Opción B seleccionada; integración por acordar con Sala]** Órdenes expone el componente federado `ReadyOrdersAlert`, que consume `/ws/waiter` y filtra `DELIVERED` por `responsibleWaiterId`.

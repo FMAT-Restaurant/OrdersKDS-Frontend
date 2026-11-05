@@ -21,6 +21,7 @@ export interface OrderStatusChangedEvent {
   orderId: string;
   status: OrderStatus;
   version: number;
+  responsibleWaiterId?: string;
   timestamp?: string;
   rejectionDetails?: Record<string, unknown> | null;
 }
