@@ -487,7 +487,7 @@ La guía §1.2 lista el estado de las decisiones de arquitectura (`OP-01` … `O
 | OP-10 RabbitMQ broker | En curso: sin credenciales en el repositorio; el frontend se conecta vía WebSocket (`VITE_WS_URL`). |
 | OP-11 Prioridad en cola KDS | **Propuesto** (ADR-0009): mayor tiempo en cocina primero (`in_preparation_at`); semáforos de retraso configurables. |
 | OP-12 Rehacer con orden `DELIVERED` | **Propuesto** (ADR-0010): orden conserva `DELIVERED`, solo el ítem pasa a `PENDING` y se resalta en el KDS. |
-| OP-13 Aviso `DELIVERED` al mesero | **Pendiente**: monitor de Sala vs. componente propio en frontend (decidir en INT-03, S6). |
+| OP-13 Aviso `DELIVERED` al mesero | **Opción B seleccionada**: export federado `ReadyOrdersAlert`; integración con Sala en INT-03 (S6). |
 
 Si tu cambio depende de uno de los puntos pendientes o propuestos, escribe el supuesto en la descripción del PR.
 
