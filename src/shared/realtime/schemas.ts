@@ -20,6 +20,7 @@ export const WsOrderStatusChangedSchema = z.object({
   orderId: z.string().min(1),
   status: OrderStatusSchema,
   version: z.number().int().nonnegative(),
+  responsibleWaiterId: z.string().min(1).optional(),
   timestamp: z.string().optional(),
   rejectionDetails: z.record(z.string(), z.unknown()).nullable().optional(),
 });

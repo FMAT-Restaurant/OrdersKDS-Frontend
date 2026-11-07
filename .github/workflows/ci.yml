@@ -242,10 +242,13 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-v2
+
+      - name: Install Playwright OS dependencies
+        run: pnpm exec playwright install-deps chromium webkit
 
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium webkit
+        run: pnpm exec playwright install chromium webkit
 
       - name: Run Playwright E2E tests
         run: pnpm run test:e2e
@@ -347,10 +350,13 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-v2
+
+      - name: Install Playwright OS dependencies
+        run: pnpm exec playwright install-deps chromium webkit
 
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium webkit
+        run: pnpm exec playwright install chromium webkit
 
       - name: Run Accessibility Tests
         run: pnpm run test:a11y

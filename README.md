@@ -12,7 +12,7 @@
 
 ---
 
-**Orders & KDS** is the *Orders and Kitchen* microservice (Microservice 4) of a distributed restaurant management system. This repository contains its **frontend**, built as a **remote micro frontend** (Module Federation) so that this team keeps full control over the deployment of what it owns: the kitchen screen, the chef screen and the order ticket widget. It does **not** build the waiter's full screens — those belong to the Sala and Menú micro frontends, which reuse the pieces exposed here. It talks to the backend (`ordenes-kds-backend`) through REST and a WebSocket channel, always behind the API Gateway (`:8080`), which routes to the backend container (`:3003`).
+**Orders & KDS** is the *Orders and Kitchen* microservice (Microservice 4) of a distributed restaurant management system. This repository contains its **frontend**, built as a **remote micro frontend** (Module Federation) so that this team keeps full control over the deployment of what it owns: the kitchen screen, the chef screen, the order ticket widget and the ready-orders alert. It does **not** build the waiter's full screens — those belong to the Sala and Menú micro frontends, which reuse the pieces exposed here. It talks to the backend (`ordenes-kds-backend`) through REST and a WebSocket channel, always behind the API Gateway (`:8080`), which routes to the backend container (`:3003`).
 
 The exposed modules serve two very different physical devices, and the UI is designed around them:
 
@@ -23,13 +23,14 @@ The exposed modules serve two very different physical devices, and the UI is des
 
 ### Views / Exposed Modules
 
-Under the Module Federation model this repository **does not build the complete waiter screen**. Instead, it exposes three modules through Vite Federation:
+Under the Module Federation model this repository **does not build the complete waiter screen**. Instead, it exposes four modules through Vite Federation:
 
 | # | Exposed module | Kind | Loaded by | Users | Purpose |
 |---|---|---|---|---|---|
 | 1 | **KDS App** | Full view (landscape) | **Auth Shell** — when a user with the kitchen (cook) role clicks "Órdenes y Cocina" in the side menu | Kitchen | Kanban board sorted by priority, per-station filter, live timers, Bump Bar control |
 | 2 | **Intermediate Dishes App** *(optional)* | Full view | **Auth Shell** (chef role) | Chef | Register batches of pre-prepared dishes outside any customer order |
 | 3 | **Order Ticket Widget** | Isolated React component — *not* a view | **Menu micro frontend**, embedded next to its dish catalog | Waiter (and admin for late voids) | Order ticket with its **Confirm**, **Cancel** and **Modify** buttons |
+| 4 | **Ready Orders Alert** | Isolated React component — *not* a view | **Waiter micro frontend** | Waiter | Announces kitchen-delivered orders assigned to the authenticated waiter |
 
 Screens of the original four-view scope that this repository **does not** build:
 
@@ -146,11 +147,12 @@ flowchart TB
 
 **Micro Frontend Integration (Module Federation):** This repository acts as a **remote module** and uses `@originjs/vite-plugin-federation` to integrate with the Auth Shell. It exposes entire views to the Shell (e.g., the KDS Board) and isolated React components (e.g., the Order Ticket Widget) to be consumed by the Menu micro frontend. Visual consistency is guaranteed by strictly following the `FMAT-RESTAURANT Guía visual de componentes` (primary color `#C2410C`, specific border radii and spacing) **without implementing global styles** that could clash with the Shell.
 
-| Exposed module | Federation key *(proposed — to be agreed with the Shell and Menu teams)* | Consumer |
+| Exposed module | Federation key *(to be agreed with the Shell, Menu and Sala teams)* | Consumer |
 |---|---|---|
 | KDS App | `./KdsApp` | Auth Shell |
 | Intermediate Dishes App *(optional)* | `./IntermediateDishesApp` | Auth Shell |
 | Order Ticket Widget | `./OrderTicketWidget` | Menu micro frontend |
+| Ready Orders Alert | `./ReadyOrdersAlert` | Waiter micro frontend (Sala) |
 
 Every HTTP request — including the ones fired by the Confirm / Cancel / Modify buttons while the Ticket widget lives inside the Menu micro frontend — goes through the API Gateway (`:8080`) to this microservice's backend container (`:3003`). The backend contract (`POST /orders`, `PATCH /orders/{orderId}/items`, …) is exactly the same no matter which repository renders the button.
 
@@ -288,6 +290,7 @@ ordenes-kds-frontend/
 │       └── ci.yml                     # Lint + types + tests + E2E + Sonar
 │
 ├── src/
+│   ├── ReadyOrdersAlert.tsx           # Federation export: accessible DELIVERED alerts for waiters
 │   ├── app/                           # Stand-alone dev harness: mounts each export locally (not shipped to the Shell)
 │   ├── exposes/                       # Federation entry points (what the Shell / Menu import)
 │   │   ├── KdsApp.tsx                 # Export 1: full KDS view
@@ -411,13 +414,14 @@ Los módulos expuestos atienden dos dispositivos físicos muy distintos, y la in
 
 ### Vistas / Módulos Expuestos
 
-Bajo el modelo de Module Federation este repositorio **no construye la pantalla completa del mesero**. En su lugar, expone tres módulos a través de Vite Federation:
+Bajo el modelo de Module Federation este repositorio **no construye la pantalla completa del mesero**. En su lugar, expone cuatro módulos a través de Vite Federation:
 
 | # | Módulo expuesto | Tipo | Cargado por | Usuarios | Propósito |
 |---|---|---|---|---|---|
 | 1 | **App KDS** | Vista completa (horizontal) | **Shell de Auth** — cuando un usuario con rol de cocina (cocinero) hace clic en "Órdenes y Cocina" en el menú lateral | Cocina | Tablero Kanban ordenado por prioridad, filtro por estación, cronómetros en vivo, control por Bump Bar |
 | 2 | **App de Platillos Intermedios** *(opcional)* | Vista completa | **Shell de Auth** (rol chef) | Chef | Registrar lotes de platillos pre-elaborados fuera de cualquier comanda de cliente |
 | 3 | **Widget de Ticket/Comanda** | Componente React aislado — *no* es una vista | **Micro frontend de Menú**, incrustado junto a su catálogo de platillos | Mesero (y admin para anulaciones tardías) | Ticket de la comanda con sus botones de **Confirmar**, **Cancelar** y **Modificar** |
+| 4 | **Alerta de Órdenes Listas** | Componente React aislado — *no* es una vista | **Micro frontend de Sala** | Mesero | Anuncia las órdenes entregadas por cocina que pertenecen al mesero autenticado |
 
 Pantallas del alcance original de cuatro vistas que este repositorio **no** construye:
 
@@ -533,11 +537,12 @@ flowchart TB
 
 **Integración de Micro Frontends (Module Federation):** Este repositorio actúa como un **módulo remoto** y usa `@originjs/vite-plugin-federation` para integrarse al Shell de Auth. Expone vistas completas al Shell (p. ej., el Tablero KDS) y componentes React aislados (p. ej., el Widget de Ticket de Comanda) para que los consuma el micro frontend de Menú. La consistencia visual se garantiza siguiendo estrictamente la `FMAT-RESTAURANT Guía visual de componentes` (color primario `#C2410C`, radios de borde y espaciado específicos) **sin implementar estilos globales** que puedan chocar con el Shell.
 
-| Módulo expuesto | Clave de federation *(propuesta — por acordar con los equipos del Shell y de Menú)* | Consumidor |
+| Módulo expuesto | Clave de federation *(por acordar con los equipos del Shell, Menú y Sala)* | Consumidor |
 |---|---|---|
 | App KDS | `./KdsApp` | Shell de Auth |
 | App de Platillos Intermedios *(opcional)* | `./IntermediateDishesApp` | Shell de Auth |
 | Widget de Ticket/Comanda | `./OrderTicketWidget` | Micro frontend de Menú |
+| Alerta de Órdenes Listas | `./ReadyOrdersAlert` | Micro frontend de Sala |
 
 Toda petición HTTP —incluidas las que disparan los botones Confirmar / Cancelar / Modificar mientras el widget de Ticket vive dentro del micro frontend de Menú— pasa por el API Gateway (`:8080`) hasta el contenedor backend de este microservicio (`:3003`). El contrato del backend (`POST /orders`, `PATCH /orders/{orderId}/items`, …) es exactamente el mismo sin importar qué repositorio dibuje el botón.
 
@@ -602,11 +607,12 @@ ordenes-kds-frontend/
 │       └── ci.yml                     # Lint + tipos + tests + E2E + Sonar
 │
 ├── src/
+│   ├── ReadyOrdersAlert.tsx           # Exportación federation: avisos accesibles de órdenes DELIVERED
 │   ├── app/                           # Arnés de desarrollo independiente: monta cada export en local (no se envía al Shell)
 │   ├── exposes/                       # Puntos de entrada de federation (lo que importan el Shell / Menú)
 │   │   ├── KdsApp.tsx                 # Exportación 1: vista KDS completa
 │   │   ├── IntermediateDishesApp.tsx  # Exportación 2 (opcional): vista completa del chef
-│   │   └── OrderTicketWidget.tsx      # Exportación 3: componente de ticket para el micro frontend de Menú
+│   │   ├── OrderTicketWidget.tsx      # Exportación 3: componente de ticket para el micro frontend de Menú
 │   ├── features/
 │   │   ├── kds-board/                 # Tablero Kanban, filtro por estación, Bump Bar
 │   │   ├── intermediate-dishes/       # (opcional) registro de lotes del chef

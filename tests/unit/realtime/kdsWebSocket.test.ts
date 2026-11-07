@@ -303,6 +303,7 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
         orderId: 'order-1',
         status: OrderStatus.DELIVERED,
         version: 3,
+        responsibleWaiterId: 'waiter-1',
       });
       expect(orderListener).toHaveBeenCalledTimes(1);
       expect(orderListener).toHaveBeenCalledWith(
@@ -310,6 +311,7 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
           orderId: 'order-1',
           status: OrderStatus.DELIVERED,
           version: 3,
+          responsibleWaiterId: 'waiter-1',
         }),
       );
 
@@ -562,4 +564,3 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
     });
   });
 });
-

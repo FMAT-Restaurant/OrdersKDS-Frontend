@@ -1,0 +1,101 @@
+import { useMemo, useState } from 'react';
+import './features/ready-orders-alert/ReadyOrdersAlert.css';
+import { playReadyAlertChime } from './features/ready-orders-alert/chime.ts';
+import { useOrderEvents } from './shared/realtime/useOrderEvents.ts';
+import type { OrderStatusChangedEvent } from './shared/realtime/types.ts';
+import type { TokenProvider } from './shared/types/auth.ts';
+import { OrderStatus } from './shared/types/order.ts';
+
+export interface ReadyOrdersAlertProps {
+  readonly userId: string;
+  readonly tokenProvider: TokenProvider;
+  readonly webSocketBaseUrl?: string;
+  readonly enableSound?: boolean;
+}
+
+export function ReadyOrdersAlert({
+  userId,
+  tokenProvider,
+  webSocketBaseUrl,
+  enableSound = true,
+}: ReadyOrdersAlertProps) {
+  const [alerts, setAlerts] = useState<OrderStatusChangedEvent[]>([]);
+  const channels = useMemo(() => ['floor', `user:${userId}`], [userId]);
+
+  const handleOrderStatusChanged = (event: OrderStatusChangedEvent) => {
+    // Ignore events that explicitly belong to another waiter
+    if (event.responsibleWaiterId && event.responsibleWaiterId !== userId) {
+      return;
+    }
+
+    // If an order that was DELIVERED transitions away (e.g. PAID, VOIDED), auto-dismiss it
+    if (event.status !== OrderStatus.DELIVERED) {
+      setAlerts((currentAlerts) =>
+        currentAlerts.filter((alert) => alert.orderId !== event.orderId),
+      );
+      return;
+    }
+
+    if (event.responsibleWaiterId !== userId) {
+      return;
+    }
+
+    let isNewOrUpdated = false;
+    setAlerts((currentAlerts) => {
+      const currentAlert = currentAlerts.find((alert) => alert.orderId === event.orderId);
+      if (currentAlert && currentAlert.version >= event.version) {
+        return currentAlerts;
+      }
+
+      isNewOrUpdated = true;
+      return [
+        ...currentAlerts.filter((alert) => alert.orderId !== event.orderId),
+        event,
+      ];
+    });
+
+    if (isNewOrUpdated && enableSound) {
+      playReadyAlertChime();
+    }
+  };
+
+  useOrderEvents({
+    role: 'waiter',
+    tokenProvider,
+    channels,
+    baseUrl: webSocketBaseUrl,
+    onOrderStatusChanged: handleOrderStatusChanged,
+  });
+
+  if (alerts.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="ready-orders-alerts" aria-label="Órdenes listas para recoger">
+      {alerts.map((alert) => (
+        <div
+          className="ready-orders-alert"
+          key={alert.orderId}
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <p>Entregada por cocina — recoger</p>
+          <p className="ready-orders-alert__order">Orden {alert.orderId}</p>
+          <button
+            type="button"
+            aria-label={`Descartar aviso de orden ${alert.orderId}`}
+            onClick={() => {
+              setAlerts((currentAlerts) =>
+                currentAlerts.filter((currentAlert) => currentAlert.orderId !== alert.orderId),
+              );
+            }}
+          >
+            Descartar
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}

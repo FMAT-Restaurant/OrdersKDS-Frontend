@@ -19,6 +19,7 @@ export default defineConfig({
         './KdsApp': './src/KdsApp.tsx',
         './IntermediateDishesApp': './src/IntermediateDishesApp.tsx',
         './OrderTicketWidget': './src/OrderTicketWidget.tsx',
+        './ReadyOrdersAlert': './src/ReadyOrdersAlert.tsx',
       },
       shared: ['react', 'react-dom'],
     }),
