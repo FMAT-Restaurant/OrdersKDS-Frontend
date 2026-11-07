@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import './features/ready-orders-alert/ReadyOrdersAlert.css';
+import { playReadyAlertChime } from './features/ready-orders-alert/chime.ts';
 import { useOrderEvents } from './shared/realtime/useOrderEvents.ts';
 import type { OrderStatusChangedEvent } from './shared/realtime/types.ts';
 import type { TokenProvider } from './shared/types/auth.ts';
@@ -9,35 +10,53 @@ export interface ReadyOrdersAlertProps {
   readonly userId: string;
   readonly tokenProvider: TokenProvider;
   readonly webSocketBaseUrl?: string;
+  readonly enableSound?: boolean;
 }
 
 export function ReadyOrdersAlert({
   userId,
   tokenProvider,
   webSocketBaseUrl,
+  enableSound = true,
 }: ReadyOrdersAlertProps) {
   const [alerts, setAlerts] = useState<OrderStatusChangedEvent[]>([]);
   const channels = useMemo(() => ['floor', `user:${userId}`], [userId]);
 
   const handleOrderStatusChanged = (event: OrderStatusChangedEvent) => {
-    if (
-      event.status !== OrderStatus.DELIVERED ||
-      event.responsibleWaiterId !== userId
-    ) {
+    // Ignore events that explicitly belong to another waiter
+    if (event.responsibleWaiterId && event.responsibleWaiterId !== userId) {
       return;
     }
 
+    // If an order that was DELIVERED transitions away (e.g. PAID, VOIDED), auto-dismiss it
+    if (event.status !== OrderStatus.DELIVERED) {
+      setAlerts((currentAlerts) =>
+        currentAlerts.filter((alert) => alert.orderId !== event.orderId),
+      );
+      return;
+    }
+
+    if (event.responsibleWaiterId !== userId) {
+      return;
+    }
+
+    let isNewOrUpdated = false;
     setAlerts((currentAlerts) => {
       const currentAlert = currentAlerts.find((alert) => alert.orderId === event.orderId);
       if (currentAlert && currentAlert.version >= event.version) {
         return currentAlerts;
       }
 
+      isNewOrUpdated = true;
       return [
         ...currentAlerts.filter((alert) => alert.orderId !== event.orderId),
         event,
       ];
     });
+
+    if (isNewOrUpdated && enableSound) {
+      playReadyAlertChime();
+    }
   };
 
   useOrderEvents({
