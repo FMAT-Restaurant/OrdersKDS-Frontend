@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
 import {
   ApiClient,
@@ -42,6 +42,7 @@ function KdsBoardContent({
   const [page, setPage] = useState<number>(1);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Consume GET /kds/queue?view=active | delivered
   const { data, isLoading, isError, error } = useKdsQueue({
@@ -62,7 +63,7 @@ function KdsBoardContent({
       setActionError(null);
       try {
         await actionClient.patch(path);
-        await defaultQueryClient.invalidateQueries({ queryKey: ['kds'] });
+        await queryClient.invalidateQueries({ queryKey: ['kds'] });
       } catch (error_) {
         setActionError(
           error_ instanceof Error ? error_.message : 'No se pudo completar la acción.',
@@ -71,7 +72,7 @@ function KdsBoardContent({
         setPendingAction(null);
       }
     },
-    [actionClient, pendingAction],
+    [actionClient, pendingAction, queryClient],
   );
 
   const startPreparation = useCallback(

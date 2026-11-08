@@ -471,6 +471,57 @@ describe('OrderTicketWidget', () => {
     expect(screen.queryByRole('button', { name: 'Crear una nueva comanda' })).not.toBeInTheDocument();
   });
 
+  it('requires a nonblank reason and submits delivered-item redo without changing order status', async () => {
+    const deliveredOrder = {
+      ...order,
+      status: OrderStatus.DELIVERED,
+      items: order.items.map((item) => ({ ...item, status: 'DELIVERED' as const })),
+    };
+    const redoneOrder = {
+      ...deliveredOrder,
+      items: deliveredOrder.items.map((item) => ({ ...item, status: 'PENDING' as const })),
+    };
+    let submittedBody: unknown;
+
+    server.use(
+      http.get('*/orders/:orderId', () => HttpResponse.json(deliveredOrder)),
+      http.patch('*/orders/:orderId/items/:itemId/redo', async ({ request, params }) => {
+        expect(params.orderId).toBe('ord-102');
+        expect(params.itemId).toBe('item-3');
+        submittedBody = await request.json();
+        return HttpResponse.json(redoneOrder);
+      }),
+    );
+    queryClient.setQueryData(['kds', 'queue', 'delivered'], [deliveredOrder]);
+    renderTicket();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Rehacer Ensalada César' }));
+    expect(screen.getByRole('dialog', { name: 'Rehacer platillo' })).toBeInTheDocument();
+
+    const noteInput = screen.getByRole('textbox', { name: /Motivo/ });
+    const submitButton = screen.getByRole('button', { name: 'Rehacer' });
+    expect(submitButton).toBeDisabled();
+    fireEvent.change(noteInput, { target: { value: '   ' } });
+    expect(submitButton).toBeDisabled();
+
+    fireEvent.change(noteInput, { target: { value: 'Llegó frío' } });
+    expect(submitButton).toBeEnabled();
+    fireEvent.click(submitButton);
+
+    await waitFor(() => expect(submittedBody).toEqual({ note: 'Llegó frío' }));
+    expect(await screen.findByText('Pendiente')).toBeInTheDocument();
+    expect(screen.getByText('Entregada por cocina')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    const cachedDeliveredOrder = queryClient.getQueryData<Array<typeof deliveredOrder>>([
+      'kds',
+      'queue',
+      'delivered',
+    ])?.[0];
+    expect(cachedDeliveredOrder?.status).toBe(OrderStatus.DELIVERED);
+    expect(cachedDeliveredOrder?.items[0].status).toBe('PENDING');
+  });
+
   it('applies a newer waiter status event to the displayed order', async () => {
     renderTicket();
 

@@ -11,6 +11,7 @@ import type { Order } from '../../src/shared/api/schemas.ts';
 import { ItemStatus, OrderStatus } from '../../src/shared/types/order.ts';
 import type { ApiClient } from '../../src/shared/api/client.ts';
 import {
+  mockDeliveredOrder,
   mockDeliveredQueue,
   mockKdsQueue,
   mockOrder1,
@@ -822,6 +823,37 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       await waitFor(() => {
         expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/items/item-1/ready');
       });
+    });
+
+    it('highlights a pending redo item while keeping its order in the delivered view', async () => {
+      const redoneDeliveredOrder: Order = {
+        ...mockDeliveredOrder,
+        items: mockDeliveredOrder.items.map((item) => ({
+          ...item,
+          status: ItemStatus.PENDING,
+        })),
+      };
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([redoneDeliveredOrder]),
+        post: vi.fn(),
+        patch: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={createTestQueryClient()}
+          initialView="delivered"
+        />,
+      );
+
+      expect(await screen.findByTestId('redo-pending-item-4')).toBeInTheDocument();
+      expect(screen.getByTestId('order-card-ord-103')).toBeInTheDocument();
+      expect(screen.getByTestId('order-status-ord-103')).toHaveTextContent('DELIVERED');
+      expect(screen.getByTestId('order-item-item-4')).toHaveAttribute('data-redo-pending', 'true');
+      expect(screen.queryByTestId('order-action-ready-ord-103')).not.toBeInTheDocument();
     });
 
     it('triggers onStartPreparation and onRejectSupplies props when provided', async () => {

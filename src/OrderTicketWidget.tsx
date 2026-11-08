@@ -12,6 +12,7 @@ import {
   getErrorMessage,
   getRealtimeStatusMessage,
 } from './shared/i18n/translate.ts';
+import { RedoItemDialog } from './features/order-ticket/RedoItemDialog.tsx';
 import { useOrderEvents } from './shared/realtime/useOrderEvents.ts';
 import {
   type OrderStatusChangedEvent,
@@ -289,17 +290,23 @@ function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdown
 interface OrderItemsListProps {
   readonly items: readonly OrderItem[];
   readonly isEditing: boolean;
+  readonly isMutating: boolean;
+  readonly canRedo: boolean;
   readonly draftItems: readonly EditableOrderItem[];
   readonly onUpdateDraftItem: (index: number, update: Partial<EditableOrderItem>) => void;
   readonly onRemoveDraftItem: (index: number) => void;
+  readonly onRedoItem: (item: OrderItem) => void;
 }
 
 function OrderItemsList({
   items,
   isEditing,
+  isMutating,
+  canRedo,
   draftItems,
   onUpdateDraftItem,
   onRemoveDraftItem,
+  onRedoItem,
 }: Readonly<OrderItemsListProps>) {
   if (items.length === 0) {
     return (
@@ -385,6 +392,17 @@ function OrderItemsList({
                 <p>Modificadores: {item.modifiers.join(', ')}</p>
               )}
               {item.notes && <p>Nota: {item.notes}</p>}
+              {canRedo && item.status === ItemStatus.DELIVERED && (
+                <button
+                  type="button"
+                  className="order-ticket__button-secondary"
+                  aria-label={`Rehacer ${item.name}`}
+                  disabled={isMutating}
+                  onClick={() => onRedoItem(item)}
+                >
+                  Rehacer
+                </button>
+              )}
             </li>
           );
         })}
@@ -485,6 +503,7 @@ function OrderTicket({
   const channels = useMemo(() => ['floor', `user:${userId}`], [userId]);
   const [isEditing, setIsEditing] = useState(false);
   const [draftItems, setDraftItems] = useState<EditableOrderItem[]>([]);
+  const [selectedRedoItem, setSelectedRedoItem] = useState<OrderItem | null>(null);
   const actionLock = useRef(false);
 
   const orderQuery = useQuery({
@@ -522,6 +541,48 @@ function OrderTicket({
         OrderSchema,
       ),
     onSuccess: (order) => client.setQueryData(queryKey, order),
+    onSettled: () => {
+      actionLock.current = false;
+    },
+  });
+
+  const redoMutation = useMutation({
+    mutationFn: ({ itemId, note }: { itemId: string; note: string }) =>
+      api.patch<Order>(
+        `/orders/${encodeURIComponent(orderId)}/items/${encodeURIComponent(itemId)}/redo`,
+        { note },
+        OrderSchema,
+      ),
+    onSuccess: (updatedOrder, { itemId }) => {
+      client.setQueryData<Order>(queryKey, updatedOrder);
+      const updatedOrderId =
+        updatedOrder.id ?? updatedOrder.orderId ?? updatedOrder.publicId ?? orderId;
+      client.setQueriesData<Order[]>(
+        { queryKey: ['kds', 'queue'] },
+        (cachedOrders) =>
+          cachedOrders?.map((cachedOrder) => {
+            const cachedOrderId =
+              cachedOrder.id ?? cachedOrder.orderId ?? cachedOrder.publicId;
+            if (cachedOrderId !== updatedOrderId) return cachedOrder;
+
+            return {
+              ...cachedOrder,
+              status: updatedOrder.status,
+              items: cachedOrder.items.map((cachedItem) => {
+                const cachedItemId =
+                  cachedItem.id ?? cachedItem.itemId ?? cachedItem.publicId;
+                if (cachedItemId !== itemId) return cachedItem;
+
+                const updatedItem = updatedOrder.items.find(
+                  (item) => (item.id ?? item.itemId ?? item.publicId) === itemId,
+                );
+                return updatedItem ?? cachedItem;
+              }),
+            };
+          }),
+      );
+      setSelectedRedoItem(null);
+    },
     onSettled: () => {
       actionLock.current = false;
     },
@@ -588,7 +649,10 @@ function OrderTicket({
   });
 
   const isMutating =
-    confirmMutation.isPending || cancelMutation.isPending || editMutation.isPending;
+    confirmMutation.isPending ||
+    cancelMutation.isPending ||
+    editMutation.isPending ||
+    redoMutation.isPending;
   const runMutation = (action: () => void) => {
     if (actionLock.current || isMutating) {
       return;
@@ -671,6 +735,18 @@ function OrderTicket({
     runMutation(() => editMutation.mutate());
   };
 
+  const submitRedo = async (item: OrderItem, note: string) => {
+    const itemId = item.id ?? item.itemId ?? item.publicId;
+    if (!itemId) {
+      throw new Error('No se pudo identificar el platillo que se va a rehacer.');
+    }
+    if (actionLock.current || isMutating) {
+      throw new Error('Espera a que termine la acción actual antes de rehacer otro platillo.');
+    }
+    actionLock.current = true;
+    await redoMutation.mutateAsync({ itemId, note });
+  };
+
   return (
     <section className="order-ticket" aria-labelledby="order-ticket-title">
       <header className="order-ticket__header">
@@ -720,9 +796,12 @@ function OrderTicket({
       <OrderItemsList
         items={order.items}
         isEditing={isEditing}
+        isMutating={isMutating}
+        canRedo={order.status === OrderStatus.DELIVERED}
         draftItems={draftItems}
         onUpdateDraftItem={updateDraftItem}
         onRemoveDraftItem={removeDraftItem}
+        onRedoItem={setSelectedRedoItem}
       />
 
       {confirmMutation.isError && (
@@ -763,6 +842,16 @@ function OrderTicket({
         onSubmitEdits={submitEdits}
         onDiscardEdits={() => setIsEditing(false)}
       />
+      {selectedRedoItem && (
+        <RedoItemDialog
+          itemName={selectedRedoItem.name}
+          isPending={redoMutation.isPending}
+          onClose={() => {
+            if (!redoMutation.isPending) setSelectedRedoItem(null);
+          }}
+          onSubmit={(note) => submitRedo(selectedRedoItem, note)}
+        />
+      )}
     </section>
   );
 }
