@@ -222,7 +222,7 @@ export function OrderCard({
             data-delay-status={delayStatus}
             className="inline-flex items-center gap-2 px-3 py-1 rounded-md font-mono text-sm font-bold text-white shadow-sm"
             style={{ backgroundColor: delayColorToken }}
-            aria-label={`Elapsed time: ${formattedTime}, status: ${delayLabel}`}
+            aria-label={`Tiempo transcurrido: ${formattedTime}, estado: ${delayLabel}`}
           >
             <svg
               className="w-4 h-4 shrink-0"
@@ -253,7 +253,7 @@ export function OrderCard({
       <ul
         data-testid={`order-items-list-${displayId}`}
         className="flex-1 px-5 my-2 overflow-y-auto divide-y divide-gray-700/50 pr-1 max-h-[300px]"
-        aria-label={`Items for order ${displayId}`}
+        aria-label={`Platillos para la orden ${displayId}`}
       >
         {order.items.map((item, index) => (
           <OrderCardItem
@@ -268,8 +268,8 @@ export function OrderCard({
 
       {/* Footer info: Total items count */}
       <div className="px-5 py-2 border-t border-gray-700/60 flex items-center justify-between text-xs text-gray-400 w-full">
-        <span>{order.items.length} {order.items.length === 1 ? 'item' : 'items'}</span>
-        <span>Touch or press Enter to select</span>
+        <span>{order.items.length} {order.items.length === 1 ? 'platillo' : 'platillos'}</span>
+        <span>Toca o presiona Enter para seleccionar</span>
       </div>
 
       {/* Action Buttons for RESERVED status (ADR-0012) */}

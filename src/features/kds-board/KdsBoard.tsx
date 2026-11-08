@@ -218,7 +218,7 @@ function KdsBoardContent({
         aria-live="polite"
         className="flex items-center justify-center h-full text-2xl font-semibold text-gray-400"
       >
-        Loading queue...
+        Cargando comanda...
       </output>
     );
   } else if (isError) {
@@ -228,7 +228,7 @@ function KdsBoardContent({
         role="alert"
         className="flex items-center justify-center h-full text-xl font-semibold text-error"
       >
-        Failed to load queue: {error?.message ?? 'Unknown error'}
+        Error al cargar la comanda: {error?.message ?? 'Error inesperado'}
       </div>
     );
   } else if (paginatedOrders.length === 0) {
@@ -237,7 +237,7 @@ function KdsBoardContent({
         data-testid="kds-empty"
         className="flex items-center justify-center h-full text-2xl font-semibold text-gray-500"
       >
-        No orders in this view
+        No hay órdenes en esta vista
       </div>
     );
   } else {
@@ -273,7 +273,7 @@ function KdsBoardContent({
         {/* View Tabs (Touch target >= 64px, with min-h-[48px] baseline) */}
         <div
           role="tablist"
-          aria-label="KDS Views"
+          aria-label="Vistas KDS"
           className="flex items-center gap-3 bg-gray-950/90 p-1.5 rounded-lg border border-gray-800"
         >
           <button
@@ -292,7 +292,7 @@ function KdsBoardContent({
                 : 'text-gray-400 hover:text-white hover:bg-gray-800'
             }`}
           >
-            Active View
+            Vista activa
           </button>
           <button
             type="button"
@@ -310,7 +310,7 @@ function KdsBoardContent({
                 : 'text-gray-400 hover:text-white hover:bg-gray-800'
             }`}
           >
-            Delivered
+            Entregadas
           </button>
         </div>
 
@@ -325,7 +325,7 @@ function KdsBoardContent({
       {/* Main Order Grid (Semantic section, no scroll permitted) */}
       <section
         id="panel-kds-grid"
-        aria-label="KDS Order Cards Grid"
+        aria-label="Cuadrícula de comandas KDS"
         className="flex-1 p-6 overflow-hidden flex flex-col justify-center"
       >
         {actionError && (
@@ -339,30 +339,30 @@ function KdsBoardContent({
       {/* Touch Pagination Footer */}
       <footer className="h-20 px-8 py-3 bg-gray-950 border-t border-gray-800 flex items-center justify-between">
         <div data-testid="kds-page-info" className="text-xl font-bold font-mono text-gray-200">
-          Page {currentPage} of {totalPages}
+          Página {currentPage} de {totalPages}
         </div>
         <div className="flex items-center gap-4">
           <button
             type="button"
             data-testid="pagination-prev"
-            aria-label="Previous page"
+            aria-label="Página anterior"
             disabled={currentPage <= 1}
             {...pointerAction(() => handlePageChange(currentPage - 1))}
             style={{ minHeight: 64 }}
             className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-gray-800 text-white border border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150"
           >
-            Previous
+            Anterior
           </button>
           <button
             type="button"
             data-testid="pagination-next"
-            aria-label="Next page"
+            aria-label="Página siguiente"
             disabled={currentPage >= totalPages}
             {...pointerAction(() => handlePageChange(currentPage + 1))}
             style={{ minHeight: 64 }}
             className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-gray-800 text-white border border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150"
           >
-            Next
+            Siguiente
           </button>
         </div>
       </footer>

@@ -26,7 +26,7 @@ export function StationSelector({
   return (
     <div
       role="radiogroup"
-      aria-label="Station selector"
+      aria-label="Selector de estaciones"
       className="flex items-center gap-4 p-1.5 bg-gray-950/90 rounded-lg border border-gray-800"
     >
       {stations.map((station) => {
