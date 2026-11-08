@@ -211,6 +211,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      - name: Build backend integration container
+        run: docker build --tag orders-kds-backend:ci https://github.com/FMAT-Restaurant/OrdersKDS-Backend.git#develop
+
+      - name: Start backend integration container
+        run: |
+          docker run --detach \
+            --name orders-kds-backend \
+            --publish 8000:8000 \
+            orders-kds-backend:ci
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs orders-kds-backend
+          exit 1
+
       - name: Setup pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
@@ -252,6 +270,10 @@ jobs:
 
       - name: Run Playwright E2E tests
         run: pnpm run test:e2e
+
+      - name: Stop backend integration container
+        if: always()
+        run: docker rm --force orders-kds-backend || true
 
       - name: Upload E2E artifacts
         if: always()
