@@ -220,24 +220,24 @@ export function createApiClient(config?: ApiClientConfig): ApiClient {
   return new ApiClient(config);
 }
 
-function generateLocalDevToken(role = 'kitchen'): string {
+function toBase64Url(obj: unknown): string {
   if (typeof btoa !== 'function') return '';
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-    .replace(/=+$/, '')
-    .replaceAll('+', '-')
-    .replaceAll('/', '_');
+  let unpadded = btoa(JSON.stringify(obj));
+  while (unpadded.endsWith('=')) {
+    unpadded = unpadded.slice(0, -1);
+  }
+  return unpadded.replaceAll('+', '-').replaceAll('/', '_');
+}
+
+function generateLocalDevToken(role = 'kitchen'): string {
+  const header = toBase64Url({ alg: 'HS256', typ: 'JWT' });
   const exp = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
-  const claims = btoa(
-    JSON.stringify({
-      sub: '00000000-0000-0000-0000-000000000001',
-      user_id: '00000000-0000-0000-0000-000000000001',
-      role,
-      exp,
-    }),
-  )
-    .replace(/=+$/, '')
-    .replaceAll('+', '-')
-    .replaceAll('/', '_');
+  const claims = toBase64Url({
+    sub: '00000000-0000-0000-0000-000000000001',
+    user_id: '00000000-0000-0000-0000-000000000001',
+    role,
+    exp,
+  });
   return `${header}.${claims}.devsignature`;
 }
 
