@@ -50,7 +50,7 @@ jobs:
             exit 0
           fi
           if [[ ! "$BRANCH_NAME" =~ ^[a-z0-9]+-[a-z]+$ ]]; then
-            echo "Error: Branch name '$BRANCH_NAME' does not match pattern ^[a-z0-9]+-[a-z]+$"
+            echo "Error: Branch name '$BRANCH_NAME' does not match pattern ^[a-z0-9]+-[a-z]+$" >&2
             exit 1
           fi
       - name: Validate PR title (Conventional Commits)
