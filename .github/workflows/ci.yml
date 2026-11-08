@@ -212,7 +212,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build backend integration container
-        run: docker build --tag orders-kds-backend:ci https://github.com/FMAT-Restaurant/OrdersKDS-Backend.git#94a1183
+        run: docker build --tag orders-kds-backend:ci https://github.com/FMAT-Restaurant/OrdersKDS-Backend.git#631b96c
 
       - name: Start backend integration container
         run: |
