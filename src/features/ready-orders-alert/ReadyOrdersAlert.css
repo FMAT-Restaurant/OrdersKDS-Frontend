@@ -37,6 +37,6 @@
 }
 
 .ready-orders-alert button:focus-visible {
-  outline: 3px solid #1d4ed8;
+  outline: 3px solid #c2410c;
   outline-offset: 2px;
 }

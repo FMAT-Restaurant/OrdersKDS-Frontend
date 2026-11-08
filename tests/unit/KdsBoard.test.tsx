@@ -92,7 +92,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       expect(container).toHaveClass('max-h-[1080px]');
 
       // Grid area does not allow scroll
-      const mainGrid = screen.getByRole('region', { name: /KDS Order Cards Grid/i });
+      const mainGrid = screen.getByRole('region', { name: /Cuadrícula de comandas KDS|KDS Order Cards Grid/i });
       expect(mainGrid).toHaveClass('overflow-hidden');
 
       // Confirms cards render inside without triggering page scroll
@@ -202,18 +202,18 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 1 of 3');
+        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 3');
       });
 
       // Navigate to page 2
       fireEvent.click(screen.getByTestId('pagination-next'));
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 2 of 3');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 2 de 3');
 
       // Switch tab to Delivered
       fireEvent.click(screen.getByTestId('tab-delivered'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 1 of 1');
+        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 1');
       });
     });
   });
@@ -238,7 +238,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 1 of 3');
+        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 3');
       });
 
       const prevBtn = screen.getByTestId('pagination-prev');
@@ -259,7 +259,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
 
       // Tap Next -> page 2
       fireEvent.click(nextBtn);
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 2 of 3');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 2 de 3');
       expect(prevBtn).toBeEnabled();
       expect(nextBtn).toBeEnabled();
 
@@ -270,7 +270,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
 
       // Tap Next -> page 3 (last page)
       fireEvent.click(nextBtn);
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 3 of 3');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 3 de 3');
       expect(prevBtn).toBeEnabled();
       expect(nextBtn).toBeDisabled();
 
@@ -280,7 +280,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
 
       // Tap Previous -> back to page 2
       fireEvent.click(prevBtn);
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 2 of 3');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 2 de 3');
       expect(screen.getByTestId('order-card-stub-ord-204')).toBeInTheDocument();
     });
   });
@@ -314,7 +314,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       render(<KdsBoard tokenProvider={validTokenProvider} queryClient={queryClient} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('kds-empty')).toHaveTextContent('No orders in this view');
+        expect(screen.getByTestId('kds-empty')).toHaveTextContent('No hay órdenes en esta vista');
       });
 
       expect(screen.getByTestId('station-tab-general')).toBeInTheDocument();
@@ -443,19 +443,19 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 1 of 3');
+        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 3');
       });
 
       // ArrowRight maps to FOCUS_NEXT_ORDER in BUMP_BAR_KEY_MAP
       fireEvent.keyDown(window, { code: 'ArrowRight' });
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 2 of 3');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 2 de 3');
 
       fireEvent.keyDown(window, { code: 'ArrowRight' });
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 3 of 3');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 3 de 3');
 
       // ArrowLeft maps to FOCUS_PREVIOUS_ORDER in BUMP_BAR_KEY_MAP
       fireEvent.keyDown(window, { code: 'ArrowLeft' });
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 2 of 3');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 2 de 3');
     });
 
     it('ST-05: station selector operable via bump bar PageDown and PageUp keys', async () => {
@@ -518,7 +518,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         expect(screen.getByTestId('kds-error')).toBeInTheDocument();
       });
 
-      expect(screen.getByTestId('kds-error')).toHaveTextContent('Failed to load queue:');
+      expect(screen.getByTestId('kds-error')).toHaveTextContent('Error al cargar la comanda:');
     });
 
     it('handles bump bar boundary conditions without exceeding bounds', async () => {
@@ -551,25 +551,25 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       expect(screen.getByTestId('station-tab-plancha')).toHaveAttribute('aria-checked', 'true');
 
       // At page 1 with ArrowLeft, must remain at page 1
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 1 of 1');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 1');
       fireEvent.keyDown(window, { code: 'ArrowLeft' });
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 1 of 1');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 1');
 
       // Switch back to general (2 orders, pageSize 1 -> 2 pages)
       fireEvent.click(screen.getByTestId('station-tab-general'));
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 1 of 2');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 2');
 
       // Advance to page 2 (last page)
       fireEvent.keyDown(window, { code: 'ArrowRight' });
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 2 of 2');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 2 de 2');
 
       // At last page, ArrowRight must remain at page 2
       fireEvent.keyDown(window, { code: 'ArrowRight' });
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 2 of 2');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 2 de 2');
 
       // Unrecognized action hits default branch safely
       fireEvent.keyDown(window, { code: 'Backspace' });
-      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Page 2 of 2');
+      expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 2 de 2');
     });
 
     it('falls back to "general" station if initialStation does not exist in queue', async () => {

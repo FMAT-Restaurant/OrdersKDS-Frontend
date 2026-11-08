@@ -1,16 +1,14 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * TASK-08 — Tailwind CSS scoping for Module Federation
+ * TASK-08 — Tailwind CSS scoping for Module Federation & FMAT Design Guide v2.0
  *
  * Isolation rules:
  *  - `preflight: false`   → does not overwrite host's body/html/h1/button
  *  - `important: '.orders-kds-root'` → generates rules with higher specificity
  *    without using `!important` (e.g. `.orders-kds-root .text-red-500 { ... }`)
- *  - NO `important: true` → that would add !important to all utilities
- *
- * Semantic tokens for Success/Warning/Error/Info are pending OP-03
- * (to be agreed upon with other teams). Placeholders are left with comments.
+ *  - Semantic tokens and brand palette match FMAT_RESTAURANT_Guia_Visual_Componentes.md:
+ *    Primary: #C2410C, Hover: #9A3412, Accent: #F97316, Soft: #FFF7ED
  */
 const config: Config = {
   // Isolates all Tailwind styles under the .orders-kds-root class
@@ -30,17 +28,37 @@ const config: Config = {
     extend: {
       colors: {
         fmat: {
-          // Base tokens for FMAT design
-          primary: '#1E40AF',
-          secondary: '#DB2777',
+          primary: '#C2410C',
+          'primary-hover': '#9A3412',
+          accent: '#F97316',
+          soft: '#FFF7ED',
+          secondary: '#C2410C',
+        },
+        primary: {
+          DEFAULT: '#C2410C',
+          hover: '#9A3412',
+          accent: '#F97316',
+          soft: '#FFF7ED',
         },
         success: 'var(--color-success)',
         warning: 'var(--color-warning)',
         error: 'var(--color-error)',
         info: 'var(--color-info)',
+        ink: '#111827',
+        body: '#374151',
+        muted: '#6B7280',
+        border: '#E5E7EB',
+        canvas: '#F8FAFC',
+        surface: '#FFFFFF',
       },
       borderRadius: {
+        sm: '4px',
+        control: '8px',
+        card: '12px',
         fmat: '8px',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'Segoe UI', 'Roboto', 'Arial', 'sans-serif'],
       },
     },
   },

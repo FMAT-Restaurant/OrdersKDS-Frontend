@@ -220,10 +220,31 @@ export function createApiClient(config?: ApiClientConfig): ApiClient {
   return new ApiClient(config);
 }
 
+function toBase64Url(obj: unknown): string {
+  if (typeof btoa !== 'function') return '';
+  let unpadded = btoa(JSON.stringify(obj));
+  while (unpadded.endsWith('=')) {
+    unpadded = unpadded.slice(0, -1);
+  }
+  return unpadded.replaceAll('+', '-').replaceAll('/', '_');
+}
+
+function generateLocalDevToken(role = 'kitchen'): string {
+  const header = toBase64Url({ alg: 'HS256', typ: 'JWT' });
+  const exp = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
+  const claims = toBase64Url({
+    sub: '00000000-0000-0000-0000-000000000001',
+    user_id: '00000000-0000-0000-0000-000000000001',
+    role,
+    exp,
+  });
+  return `${header}.${claims}.devsignature`;
+}
+
 const localApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
-const localDevToken = import.meta.env.VITE_API_TOKEN;
+const localDevToken = import.meta.env.VITE_API_TOKEN || generateLocalDevToken('kitchen');
 
 export const apiClient = createApiClient({
   baseUrl: localApiBaseUrl,
-  tokenProvider: localDevToken ? () => Promise.resolve(localDevToken) : undefined,
+  tokenProvider: () => Promise.resolve(localDevToken),
 });
