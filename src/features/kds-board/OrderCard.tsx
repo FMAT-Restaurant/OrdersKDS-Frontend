@@ -291,7 +291,7 @@ export function OrderCard({
               }
             }}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
           >
             Iniciar preparación
           </button>

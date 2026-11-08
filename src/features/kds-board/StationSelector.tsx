@@ -44,7 +44,7 @@ export function StationSelector({
             style={{ minHeight: 64 }}
             className={`min-h-[64px] min-h-[48px] px-5 py-2.5 rounded-md font-bold text-base capitalize transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] ${
               isSelected
-                ? 'bg-fmat-secondary text-white shadow-md'
+                ? 'bg-fmat-primary text-white shadow-md'
                 : 'text-gray-300 hover:text-white hover:bg-gray-800'
             }`}
           >

@@ -2,8 +2,22 @@
 @tailwind utilities;
 
 .orders-kds-root {
-  --color-success: #15803D;
-  --color-warning: #B45309;
+  --color-primary: #C2410C;
+  --color-primary-hover: #9A3412;
+  --color-primary-accent: #F97316;
+  --color-primary-soft: #FFF7ED;
+  --color-text: #111827;
+  --color-body: #374151;
+  --color-muted: #6B7280;
+  --color-border: #E5E7EB;
+  --color-canvas: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-success: #16A34A;
+  --color-warning: #D97706;
   --color-error: #DC2626;
   --color-info: #2563EB;
+  --radius-sm: 4px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --space-unit: 4px;
 }
