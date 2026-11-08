@@ -16,6 +16,7 @@ export function RedoItemDialog({
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const noteInput = useRef<HTMLTextAreaElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -24,6 +25,10 @@ export function RedoItemDialog({
     noteInput.current?.focus();
     return () => previouslyFocused.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (isPending) dialog.current?.focus();
+  }, [isPending]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -55,7 +60,11 @@ export function RedoItemDialog({
     );
     const firstElement = focusableElements.item(0);
     const lastElement = focusableElements.item(focusableElements.length - 1);
-    if (!firstElement || !lastElement) return;
+    if (!firstElement || !lastElement) {
+      event.preventDefault();
+      event.currentTarget.focus();
+      return;
+    }
 
     if (event.shiftKey && document.activeElement === firstElement) {
       event.preventDefault();
@@ -75,6 +84,7 @@ export function RedoItemDialog({
       }}
     >
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-labelledby="redo-item-title"
