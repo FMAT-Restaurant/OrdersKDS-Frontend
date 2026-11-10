@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from 'react';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
+import type { UserRole } from '../../shared/types/auth.ts';
 import { StatusBadge } from './StatusBadge.tsx';
 import { useElapsedTime } from './useElapsedTime.ts';
 import { pointerAction } from './pointerAction.ts';
@@ -11,6 +12,9 @@ export interface OrderCardProps {
   readonly onMarkOrderReady?: (order: Order) => void;
   readonly onItemReady?: (order: Order, item: OrderItem) => void;
   readonly onRejectSupplies?: (order: Order) => void;
+  readonly onAdminVoid?: (order: Order) => void;
+  readonly onChefVoid?: (order: Order) => void;
+  readonly userRole?: UserRole;
   readonly pendingAction?: string;
   readonly isFocused?: boolean;
 }
@@ -126,6 +130,9 @@ export function OrderCard({
   onMarkOrderReady,
   onItemReady,
   onRejectSupplies,
+  onAdminVoid,
+  onChefVoid,
+  userRole,
   pendingAction,
   isFocused = false,
 }: Readonly<OrderCardProps>) {
@@ -312,6 +319,53 @@ export function OrderCard({
           >
             Rechazar insumo
           </button>
+        </div>
+      )}
+
+      {/* Void Actions for IN_PREPARATION status (TASK-36, RF-26..29, ADR-0012) */}
+      {order.status === 'IN_PREPARATION' && (onAdminVoid || onChefVoid) && (
+        <div
+          data-testid={`order-void-actions-${displayId}`}
+          className="px-5 pb-3 flex items-center gap-3 w-full bg-transparent"
+        >
+          {onAdminVoid && (!userRole || userRole === 'admin') && (
+            <button
+              type="button"
+              data-testid={`order-action-admin-void-${displayId}`}
+              aria-label={`Anulación administrativa para la orden ${displayId}`}
+              disabled={pendingAction === 'void-admin'}
+              {...pointerAction(() => onAdminVoid?.(order))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onAdminVoid?.(order);
+                }
+              }}
+              style={{ minHeight: 64 }}
+              className="min-h-[64px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-amber-700 hover:bg-amber-600 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            >
+              Anular (Admin)
+            </button>
+          )}
+          {onChefVoid && (!userRole || userRole === 'chef' || userRole === 'admin') && (
+            <button
+              type="button"
+              data-testid={`order-action-chef-void-${displayId}`}
+              aria-label={`Anulación por error de cocina para la orden ${displayId}`}
+              disabled={pendingAction === 'void-kitchen'}
+              {...pointerAction(() => onChefVoid?.(order))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onChefVoid?.(order);
+                }
+              }}
+              style={{ minHeight: 64 }}
+              className="min-h-[64px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-red-700 hover:bg-red-600 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            >
+              Anular (Cocina)
+            </button>
+          )}
         </div>
       )}
       {order.status !== 'DELIVERED' && order.status !== 'PAID' && order.status !== 'CANCELLED' && (

@@ -4,7 +4,9 @@ import '@testing-library/jest-dom/vitest';
 import { AdminVoidDialog } from '../../src/features/kds-board/dialogs/AdminVoidDialog.tsx';
 import { ChefVoidDialog } from '../../src/features/kds-board/dialogs/ChefVoidDialog.tsx';
 import { VirtualKeyboard } from '../../src/features/kds-board/dialogs/VirtualKeyboard.tsx';
+import { OrderCard } from '../../src/features/kds-board/OrderCard.tsx';
 import type { Order } from '../../src/shared/api/schemas.ts';
+import { UserRole } from '../../src/shared/types/auth.ts';
 import { ItemStatus, OrderStatus } from '../../src/shared/types/order.ts';
 
 describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
@@ -149,12 +151,106 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       fireEvent.click(screen.getByTestId('chef-void-cancel'));
       expect(onCancel).toHaveBeenCalledTimes(1);
     });
+
+    it('is visible when userRole is CHEF or ADMIN, and strictly hidden when userRole is WAITER or KITCHEN', () => {
+      // Visible for CHEF
+      const { container: chefContainer } = render(
+        <ChefVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.CHEF}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(chefContainer).not.toBeEmptyDOMElement();
+      expect(screen.getByTestId('chef-void-dialog')).toBeInTheDocument();
+
+      // Visible for ADMIN
+      const { container: adminContainer } = render(
+        <ChefVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.ADMIN}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(adminContainer).not.toBeEmptyDOMElement();
+
+      // Hidden for WAITER
+      const { container: waiterContainer } = render(
+        <ChefVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.WAITER}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(waiterContainer).toBeEmptyDOMElement();
+
+      // Hidden for KITCHEN
+      const { container: kitchenContainer } = render(
+        <ChefVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.KITCHEN}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(kitchenContainer).toBeEmptyDOMElement();
+    });
   });
 
   // -------------------------------------------------------------------------
-  // UT-FE-23: Blocking rendering or action when order is not IN_PREPARATION
+  // UT-FE-23: Administrative Void Role Visibility & Status Blocking (RF-26)
   // -------------------------------------------------------------------------
-  describe('UT-FE-23: Blocks operation when order is not in IN_PREPARATION status', () => {
+  describe('UT-FE-23: Administrative void role visibility & status blocking', () => {
+    it('is visible strictly for ADMIN role and hidden for non-admin roles (WAITER, KITCHEN, CHEF)', () => {
+      // Visible for ADMIN
+      const { container: adminContainer } = render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.ADMIN}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(adminContainer).not.toBeEmptyDOMElement();
+      expect(screen.getByTestId('admin-void-dialog')).toBeInTheDocument();
+
+      // Hidden for WAITER
+      const { container: waiterContainer } = render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.WAITER}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(waiterContainer).toBeEmptyDOMElement();
+
+      // Hidden for KITCHEN
+      const { container: kitchenContainer } = render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.KITCHEN}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(kitchenContainer).toBeEmptyDOMElement();
+
+      // Hidden for CHEF
+      const { container: chefContainer } = render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.CHEF}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(chefContainer).toBeEmptyDOMElement();
+    });
+
     it('blocks AdminVoidDialog confirmation and displays an error alert when order is in RESERVED status', () => {
       const onConfirm = vi.fn();
       const onCancel = vi.fn();
@@ -312,6 +408,116 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       expect(confirmBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
       expect(cancelBtn).toHaveClass('min-h-[64px]', 'min-w-[64px]');
       expect(cancelBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
+    });
+
+    it('executes ST-11 in green with admin and chef roles verifying warnings and confirmation', () => {
+      const onAdminConfirm = vi.fn();
+      const onChefConfirm = vi.fn();
+
+      // Admin executes administrative void
+      const { unmount: unmountAdmin } = render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.ADMIN}
+          onConfirm={onAdminConfirm}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(screen.getByTestId('admin-void-warning')).toHaveTextContent(
+        'Se cobrará la comanda mermada',
+      );
+      fireEvent.click(screen.getByTestId('admin-void-confirm'));
+      expect(onAdminConfirm).toHaveBeenCalledWith(inPreparationOrder);
+      unmountAdmin();
+
+      // Chef executes kitchen-error void
+      render(
+        <ChefVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.CHEF}
+          onConfirm={onChefConfirm}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(screen.getByTestId('chef-void-warning')).toHaveTextContent(
+        'No se cobrará por error de cocina',
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Quemado' }));
+      fireEvent.click(screen.getByTestId('chef-void-confirm'));
+      expect(onChefConfirm).toHaveBeenCalledWith(inPreparationOrder, 'Quemado');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // OrderCard Integration (TASK-36, RF-26..29): Void Triggers on IN_PREPARATION
+  // -------------------------------------------------------------------------
+  describe('OrderCard Void Triggers on IN_PREPARATION orders', () => {
+    it('renders Admin and Chef void trigger buttons with >= 64px height and invokes callbacks', () => {
+      const onAdminVoid = vi.fn();
+      const onChefVoid = vi.fn();
+
+      render(
+        <OrderCard
+          order={inPreparationOrder}
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+
+      const adminBtn = screen.getByTestId('order-action-admin-void-ord-void-101');
+      const chefBtn = screen.getByTestId('order-action-chef-void-ord-void-101');
+
+      expect(adminBtn).toHaveClass('min-h-[64px]');
+      expect(adminBtn).toHaveStyle({ minHeight: '64px' });
+      expect(chefBtn).toHaveClass('min-h-[64px]');
+      expect(chefBtn).toHaveStyle({ minHeight: '64px' });
+
+      fireEvent.click(adminBtn);
+      expect(onAdminVoid).toHaveBeenCalledWith(inPreparationOrder);
+
+      fireEvent.click(chefBtn);
+      expect(onChefVoid).toHaveBeenCalledWith(inPreparationOrder);
+    });
+
+    it('filters trigger buttons according to userRole on OrderCard', () => {
+      const onAdminVoid = vi.fn();
+      const onChefVoid = vi.fn();
+
+      // CHEF sees only kitchen void button
+      const { rerender } = render(
+        <OrderCard
+          order={inPreparationOrder}
+          userRole={UserRole.CHEF}
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+      expect(screen.queryByTestId('order-action-admin-void-ord-void-101')).not.toBeInTheDocument();
+      expect(screen.getByTestId('order-action-chef-void-ord-void-101')).toBeInTheDocument();
+
+      // WAITER sees neither button
+      rerender(
+        <OrderCard
+          order={inPreparationOrder}
+          userRole={UserRole.WAITER}
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+      expect(screen.queryByTestId('order-action-admin-void-ord-void-101')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('order-action-chef-void-ord-void-101')).not.toBeInTheDocument();
+
+      // Does not show void triggers on RESERVED orders even if handlers are provided
+      rerender(
+        <OrderCard
+          order={reservedOrder}
+          userRole={UserRole.ADMIN}
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+      expect(screen.queryByTestId('order-action-admin-void-ord-void-reserved')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('order-action-chef-void-ord-void-reserved')).not.toBeInTheDocument();
     });
   });
 });

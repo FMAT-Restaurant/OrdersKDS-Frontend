@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { z } from 'zod';
 import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
+import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
 import { pointerAction } from '../pointerAction.ts';
 import { VirtualKeyboard } from './VirtualKeyboard.tsx';
@@ -29,6 +30,7 @@ const QUICK_REASONS: readonly string[] = [
 export interface ChefVoidDialogProps {
   readonly order: Order;
   readonly isOpen?: boolean;
+  readonly userRole?: UserRole;
   readonly isSubmitting?: boolean;
   readonly onConfirm: (order: Order, note: string) => void;
   readonly onCancel: () => void;
@@ -37,10 +39,12 @@ export interface ChefVoidDialogProps {
 /**
  * Kitchen-error void dialog for Chef / Admin on orders in IN_PREPARATION (TASK-36, RF-28..RF-31, ADR-0012).
  * Warns that the customer will not be charged and enforces mandatory justification (RF-29).
+ * Hidden for non-chef/non-admin roles according to RF-28, RF-29 and UT-FE-22.
  */
 export function ChefVoidDialog({
   order,
   isOpen = true,
+  userRole,
   isSubmitting = false,
   onConfirm,
   onCancel,
@@ -49,6 +53,11 @@ export function ChefVoidDialog({
   const [customNote, setCustomNote] = useState<string>('');
 
   if (!isOpen) {
+    return null;
+  }
+
+  // UT-FE-22, RF-28, RF-29: Kitchen-error void is visible only to chef and admin roles
+  if (userRole && userRole !== UserRole.CHEF && userRole !== UserRole.ADMIN) {
     return null;
   }
 
@@ -80,12 +89,12 @@ export function ChefVoidDialog({
   };
 
   return (
-    <div
-      role="dialog"
+    <dialog
+      open
       aria-modal="true"
       aria-labelledby="chef-void-dialog-title"
       data-testid="chef-void-dialog"
-      className="orders-kds-root fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6 select-none"
+      className="orders-kds-root fixed inset-0 z-50 m-0 p-6 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/75 border-none select-none"
     >
       <div className="w-full max-w-2xl rounded-fmat bg-gray-900 border border-gray-700 p-6 text-white shadow-2xl flex flex-col gap-5">
         <header className="flex items-center justify-between border-b border-gray-800 pb-3">
@@ -192,7 +201,7 @@ export function ChefVoidDialog({
           </button>
         </footer>
       </div>
-    </div>
+    </dialog>
   );
 }
 

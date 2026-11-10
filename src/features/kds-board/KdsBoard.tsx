@@ -9,15 +9,18 @@ import {
 } from '../../shared/api/client.ts';
 import { queryClient as defaultQueryClient } from '../../shared/api/queryClient.ts';
 import type { Order } from '../../shared/api/schemas.ts';
-import type { TokenProvider } from '../../shared/types/auth.ts';
+import type { TokenProvider, UserRole } from '../../shared/types/auth.ts';
 import { OrderCard } from './OrderCard.tsx';
 import { StationSelector } from './StationSelector.tsx';
 import { type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 import { pointerAction } from './pointerAction.ts';
+import { AdminVoidDialog } from './dialogs/AdminVoidDialog.tsx';
+import { ChefVoidDialog } from './dialogs/ChefVoidDialog.tsx';
 
 export interface KdsBoardProps {
   readonly client?: ApiClientType;
   readonly tokenProvider?: TokenProvider;
+  readonly userRole?: UserRole;
   readonly queryClient?: QueryClient;
   readonly pageSize?: number;
   readonly initialView?: KdsViewType;
@@ -25,17 +28,22 @@ export interface KdsBoardProps {
   readonly onOrderSelect?: (order: Order) => void;
   readonly onStartPreparation?: (order: Order) => void;
   readonly onRejectSupplies?: (order: Order) => void;
+  readonly onAdminVoid?: (order: Order) => void;
+  readonly onChefVoid?: (order: Order, note: string) => void;
 }
 
 function KdsBoardContent({
   client,
   tokenProvider,
+  userRole,
   pageSize = 8,
   initialView = 'active',
   initialStation = 'general',
   onOrderSelect,
   onStartPreparation,
   onRejectSupplies,
+  onAdminVoid,
+  onChefVoid,
 }: Readonly<Omit<KdsBoardProps, 'queryClient'>>) {
   const [view, setView] = useState<KdsViewType>(initialView);
   const [selectedStation, setSelectedStation] = useState<string>(initialStation);
@@ -50,18 +58,25 @@ function KdsBoardContent({
     tokenProvider,
   });
 
+  const [voidDialogOrder, setVoidDialogOrder] = useState<Order | null>(null);
+  const [voidDialogType, setVoidDialogType] = useState<'admin' | 'chef' | null>(null);
+
   const actionClient = useMemo(() => {
     if (client) return client;
     return tokenProvider ? new ApiClient({ tokenProvider }) : defaultApiClient;
   }, [client, tokenProvider]);
 
   const runAction = useCallback(
-    async (key: string, path: string) => {
+    async (key: string, path: string, body?: unknown) => {
       if (!actionClient || pendingAction) return;
       setPendingAction(key);
       setActionError(null);
       try {
-        await actionClient.patch(path);
+        if (body !== undefined) {
+          await actionClient.patch(path, body);
+        } else {
+          await actionClient.patch(path);
+        }
         await defaultQueryClient.invalidateQueries({ queryKey: ['kds'] });
       } catch (error_) {
         setActionError(
@@ -72,6 +87,48 @@ function KdsBoardContent({
       }
     },
     [actionClient, pendingAction],
+  );
+
+  const handleOpenAdminVoid = useCallback((order: Order) => {
+    setVoidDialogOrder(order);
+    setVoidDialogType('admin');
+  }, []);
+
+  const handleOpenChefVoid = useCallback((order: Order) => {
+    setVoidDialogOrder(order);
+    setVoidDialogType('chef');
+  }, []);
+
+  const handleAdminVoidConfirm = useCallback(
+    async (order: Order) => {
+      const orderId = order.id ?? order.orderId ?? order.publicId;
+      if (orderId) {
+        if (onAdminVoid) {
+          onAdminVoid(order);
+        } else {
+          await runAction('void-admin', `/orders/${orderId}/void`);
+        }
+        setVoidDialogOrder(null);
+        setVoidDialogType(null);
+      }
+    },
+    [onAdminVoid, runAction],
+  );
+
+  const handleChefVoidConfirm = useCallback(
+    async (order: Order, note: string) => {
+      const orderId = order.id ?? order.orderId ?? order.publicId;
+      if (orderId) {
+        if (onChefVoid) {
+          onChefVoid(order, note);
+        } else {
+          await runAction('void-kitchen', `/orders/${orderId}/void-kitchen-error`, { note });
+        }
+        setVoidDialogOrder(null);
+        setVoidDialogType(null);
+      }
+    },
+    [onChefVoid, runAction],
   );
 
   const startPreparation = useCallback(
@@ -255,6 +312,9 @@ function KdsBoardContent({
             onRejectSupplies={onRejectSupplies}
             onMarkOrderReady={markOrderReady}
             onItemReady={markItemReady}
+            onAdminVoid={handleOpenAdminVoid}
+            onChefVoid={handleOpenChefVoid}
+            userRole={userRole}
             pendingAction={pendingAction ?? undefined}
           />
         ))}
@@ -366,6 +426,34 @@ function KdsBoardContent({
           </button>
         </div>
       </footer>
+
+      {voidDialogType === 'admin' && voidDialogOrder && (
+        <AdminVoidDialog
+          order={voidDialogOrder}
+          isOpen={true}
+          userRole={userRole}
+          isSubmitting={pendingAction === 'void-admin'}
+          onConfirm={handleAdminVoidConfirm}
+          onCancel={() => {
+            setVoidDialogOrder(null);
+            setVoidDialogType(null);
+          }}
+        />
+      )}
+
+      {voidDialogType === 'chef' && voidDialogOrder && (
+        <ChefVoidDialog
+          order={voidDialogOrder}
+          isOpen={true}
+          userRole={userRole}
+          isSubmitting={pendingAction === 'void-kitchen'}
+          onConfirm={handleChefVoidConfirm}
+          onCancel={() => {
+            setVoidDialogOrder(null);
+            setVoidDialogType(null);
+          }}
+        />
+      )}
     </div>
   );
 }

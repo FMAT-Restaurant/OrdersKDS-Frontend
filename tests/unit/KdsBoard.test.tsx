@@ -941,5 +941,112 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         expect(alert).toHaveTextContent('No se pudo completar la acción.');
       });
     });
+
+    it('opens and confirms AdminVoidDialog from KdsBoard and dispatches void request', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-admin-void-ord-101')).toBeInTheDocument();
+      });
+
+      // Open Admin void dialog
+      fireEvent.click(screen.getByTestId('order-action-admin-void-ord-101'));
+      expect(screen.getByTestId('admin-void-dialog')).toBeInTheDocument();
+
+      // Confirm void
+      fireEvent.click(screen.getByTestId('admin-void-confirm'));
+
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/void');
+      });
+      expect(screen.queryByTestId('admin-void-dialog')).not.toBeInTheDocument();
+    });
+
+    it('opens and confirms ChefVoidDialog from KdsBoard and dispatches kitchen void request with note', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-chef-void-ord-101')).toBeInTheDocument();
+      });
+
+      // Open Chef void dialog
+      fireEvent.click(screen.getByTestId('order-action-chef-void-ord-101'));
+      expect(screen.getByTestId('chef-void-dialog')).toBeInTheDocument();
+
+      // Cancel dismisses the dialog
+      fireEvent.click(screen.getByTestId('chef-void-cancel'));
+      expect(screen.queryByTestId('chef-void-dialog')).not.toBeInTheDocument();
+
+      // Re-open and confirm with note
+      fireEvent.click(screen.getByTestId('order-action-chef-void-ord-101'));
+      fireEvent.click(screen.getByRole('button', { name: 'Quemado' }));
+      fireEvent.click(screen.getByTestId('chef-void-confirm'));
+
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/void-kitchen-error', {
+          note: 'Quemado',
+        });
+      });
+      expect(screen.queryByTestId('chef-void-dialog')).not.toBeInTheDocument();
+    });
+
+    it('delegates to custom onAdminVoid and onChefVoid props when provided on KdsBoard', async () => {
+      const onAdminVoid = vi.fn();
+      const onChefVoid = vi.fn();
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={queryClient}
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-admin-void-ord-101')).toBeInTheDocument();
+      });
+
+      // Test custom onAdminVoid delegation
+      fireEvent.click(screen.getByTestId('order-action-admin-void-ord-101'));
+      fireEvent.click(screen.getByTestId('admin-void-confirm'));
+      expect(onAdminVoid).toHaveBeenCalledWith(expect.objectContaining({ id: 'ord-101' }));
+
+      // Test custom onChefVoid delegation
+      fireEvent.click(screen.getByTestId('order-action-chef-void-ord-101'));
+      fireEvent.click(screen.getByRole('button', { name: 'Quemado' }));
+      fireEvent.click(screen.getByTestId('chef-void-confirm'));
+      expect(onChefVoid).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'ord-101' }),
+        'Quemado',
+      );
+    });
   });
 });
