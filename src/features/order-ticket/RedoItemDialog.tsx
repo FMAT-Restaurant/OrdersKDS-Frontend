@@ -16,7 +16,7 @@ export function RedoItemDialog({
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const noteInput = useRef<HTMLTextAreaElement>(null);
-  const dialog = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function RedoItemDialog({
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
     if (event.key === 'Escape' && !isPending) {
       event.preventDefault();
       onClose();
@@ -76,23 +76,21 @@ export function RedoItemDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+    <dialog
+      open
+      ref={dialog}
+      aria-modal="true"
+      aria-labelledby="redo-item-title"
+      aria-describedby="redo-item-description"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
       data-testid="redo-item-dialog-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isPending) onClose();
       }}
+      className="fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/70 border-none backdrop:bg-transparent"
     >
-      <div
-        ref={dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="redo-item-title"
-        aria-describedby="redo-item-description"
-        tabIndex={-1}
-        onKeyDown={handleKeyDown}
-        className="w-full max-w-lg rounded-lg border border-gray-700 bg-gray-900 p-6 text-white shadow-2xl"
-      >
+      <div className="w-full max-w-lg rounded-lg border border-gray-700 bg-gray-900 p-6 text-white shadow-2xl">
         <h2 id="redo-item-title" className="text-xl font-bold">
           Rehacer platillo
         </h2>
@@ -140,6 +138,6 @@ export function RedoItemDialog({
           </div>
         </form>
       </div>
-    </div>
+    </dialog>
   );
 }

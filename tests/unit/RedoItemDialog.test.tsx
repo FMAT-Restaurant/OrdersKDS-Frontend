@@ -3,7 +3,39 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RedoItemDialog } from '../../src/features/order-ticket/RedoItemDialog.tsx';
 
-describe('RedoItemDialog', () => {
+describe('RedoItemDialog (TASK-23, UT-FE-21)', () => {
+  // -------------------------------------------------------------------------
+  // UT-FE-21: Diálogo de rehechura (Redo Dialog) - Validación de nota obligatoria
+  // -------------------------------------------------------------------------
+  it('disables confirm button initially and with whitespace, enables when text is provided', () => {
+    render(
+      <RedoItemDialog
+        itemName="Corte Ribeye"
+        isPending={false}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const submitButton = screen.getByRole('button', { name: 'Rehacer' });
+    const noteInput = screen.getByRole('textbox', { name: /Motivo/ });
+
+    // Initially disabled (DoD: confirmar bloqueado sin texto)
+    expect(submitButton).toBeDisabled();
+
+    // Disabled with only whitespace
+    fireEvent.change(noteInput, { target: { value: '   \n  ' } });
+    expect(submitButton).toBeDisabled();
+
+    // Enabled with at least 1 non-whitespace character
+    fireEvent.change(noteInput, { target: { value: 'Término incorrecto' } });
+    expect(submitButton).toBeEnabled();
+
+    // Disabled again if cleared
+    fireEvent.change(noteInput, { target: { value: '' } });
+    expect(submitButton).toBeDisabled();
+  });
+
   it('submits a trimmed note and displays a rejected request error', async () => {
     const onSubmit = vi.fn().mockRejectedValue(new Error('Servicio no disponible.'));
     render(
