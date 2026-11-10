@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -95,19 +96,15 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
     });
 
     it('reads thresholds from environment variables when present', () => {
-      const origWarning = import.meta.env.VITE_KDS_WARNING_AFTER_SECONDS;
-      const origLate = import.meta.env.VITE_KDS_LATE_AFTER_SECONDS;
+      vi.stubEnv('VITE_KDS_WARNING_AFTER_SECONDS', '400');
+      vi.stubEnv('VITE_KDS_LATE_AFTER_SECONDS', '800');
 
       try {
-        import.meta.env.VITE_KDS_WARNING_AFTER_SECONDS = '400';
-        import.meta.env.VITE_KDS_LATE_AFTER_SECONDS = '800';
-
         const envThresholds = getDelayThresholds();
         expect(envThresholds.warningSeconds).toBe(400);
         expect(envThresholds.lateSeconds).toBe(800);
       } finally {
-        import.meta.env.VITE_KDS_WARNING_AFTER_SECONDS = origWarning;
-        import.meta.env.VITE_KDS_LATE_AFTER_SECONDS = origLate;
+        vi.unstubAllEnvs();
       }
     });
 
@@ -764,6 +761,48 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
 
       rerender(<OrderCard order={cancelledOrder} />);
       expect(screen.queryByTestId('order-action-ready-ord-reserved-1')).not.toBeInTheDocument();
+    });
+
+    it('highlights redone item with amber alert and enables item action when order is DELIVERED (TASK-23, OP-12)', () => {
+      const onItemReady = vi.fn();
+      const deliveredRedoOrder: Order = {
+        ...reservedOrder,
+        status: OrderStatus.DELIVERED,
+        items: [
+          {
+            id: 'dish-redo-1',
+            name: 'Corte Asado',
+            quantity: 1,
+            unitPrice: 250,
+            status: ItemStatus.PENDING,
+          },
+          {
+            id: 'dish-delivered-2',
+            name: 'Vino Tinto',
+            quantity: 1,
+            unitPrice: 120,
+            status: ItemStatus.DELIVERED,
+          },
+        ],
+      };
+
+      render(<OrderCard order={deliveredRedoOrder} onItemReady={onItemReady} />);
+
+      // Redone item is highlighted with alert badge and container styling
+      const redoItem = screen.getByTestId('order-item-dish-redo-1');
+      expect(redoItem).toHaveAttribute('data-redo-pending', 'true');
+      expect(redoItem).toHaveClass('border-amber-400/70');
+      expect(screen.getByTestId('redo-pending-dish-redo-1')).toHaveTextContent('Rehacer pendiente');
+
+      // The redone PENDING item action is clickable to mark ready
+      const redoBtn = screen.getByTestId('order-item-action-dish-redo-1');
+      expect(redoBtn).toBeEnabled();
+      fireEvent.click(redoBtn);
+      expect(onItemReady).toHaveBeenCalledWith(deliveredRedoOrder, deliveredRedoOrder.items[0]);
+
+      // The DELIVERED item action is disabled
+      const deliveredBtn = screen.getByTestId('order-item-action-dish-delivered-2');
+      expect(deliveredBtn).toBeDisabled();
     });
 
     it('handles item ready action on click and keyboard', () => {

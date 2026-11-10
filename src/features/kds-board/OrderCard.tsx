@@ -28,11 +28,13 @@ function OrderCardItem({
   index,
   onReady,
   isPending,
+  isRedoPending,
 }: Readonly<{
   item: OrderItem;
   index: number;
   onReady?: () => void;
   isPending: boolean;
+  isRedoPending: boolean;
 }>) {
   const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
@@ -41,24 +43,37 @@ function OrderCardItem({
     <li
       data-testid={`order-item-${itemId}`}
       style={{ minHeight: 64 }}
-      className="min-h-[64px] border-b border-gray-700/50 last:border-b-0 flex flex-col gap-1"
+      data-redo-pending={isRedoPending ? 'true' : undefined}
+      className={`min-h-[64px] border-b border-gray-700/50 last:border-b-0 flex flex-col gap-1 ${
+        isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-950/40 px-2' : ''
+      }`}
     >
       <button
         type="button"
         data-testid={`order-item-action-${itemId}`}
-        disabled={item.status === 'READY' || isPending}
+        disabled={
+          item.status === 'READY' ||
+          item.status === 'DELIVERED' ||
+          isPending
+        }
         aria-label={`Marcar ${item.name} como listo`}
         {...pointerAction(() => {
-          if (item.status !== 'READY') onReady?.();
+          if (item.status !== 'READY' && item.status !== 'DELIVERED') onReady?.();
         })}
         onKeyDown={(event) => {
-          if ((event.key === 'Enter' || event.key === ' ') && item.status !== 'READY') {
+          if (
+            (event.key === 'Enter' || event.key === ' ') &&
+            item.status !== 'READY' &&
+            item.status !== 'DELIVERED'
+          ) {
             event.preventDefault();
             onReady?.();
           }
         }}
         className={`w-full text-left min-h-[64px] py-3 flex flex-col justify-center bg-transparent border-0 ${
-          item.status === 'READY' ? 'opacity-60 cursor-default' : 'cursor-pointer active:bg-gray-700'
+          item.status === 'READY' || item.status === 'DELIVERED'
+            ? 'opacity-60 cursor-default'
+            : 'cursor-pointer active:bg-gray-700'
         } focus:outline-none`}
       >
         <div className="flex items-baseline justify-between gap-2">
@@ -112,6 +127,14 @@ function OrderCardItem({
             <span className="font-bold not-italic shrink-0">Note:</span>
             <span className="break-words">{item.notes}</span>
           </div>
+        )}
+        {isRedoPending && (
+          <output
+            data-testid={`redo-pending-${itemId}`}
+            className="pl-8 text-xs font-black uppercase tracking-wide text-amber-300 block"
+          >
+            Rehacer pendiente
+          </output>
         )}
       </button>
     </li>
@@ -262,15 +285,22 @@ export function OrderCard({
         className="flex-1 px-5 my-2 overflow-y-auto divide-y divide-gray-700/50 pr-1 max-h-[300px]"
         aria-label={`Platillos para la orden ${displayId}`}
       >
-        {order.items.map((item, index) => (
-          <OrderCardItem
-            key={item.id ?? item.itemId ?? item.publicId ?? `item-${index}`}
-            item={item}
-            index={index}
-            onReady={() => onItemReady?.(order, item)}
-            isPending={pendingAction === `item:${item.id ?? item.itemId ?? item.publicId ?? index}`}
-          />
-        ))}
+        {order.items.map((item, index) => {
+          const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
+          const isRedoPending = order.status === 'DELIVERED' && item.status === 'PENDING';
+          return (
+            <OrderCardItem
+              key={itemId}
+              item={item}
+              index={index}
+              onReady={() => onItemReady?.(order, item)}
+              isPending={
+                pendingAction === `item:${item.id ?? item.itemId ?? item.publicId ?? index}`
+              }
+              isRedoPending={isRedoPending}
+            />
+          );
+        })}
       </ul>
 
       {/* Footer info: Total items count */}

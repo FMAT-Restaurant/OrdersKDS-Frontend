@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
 import {
   ApiClient,
@@ -50,6 +50,7 @@ function KdsBoardContent({
   const [page, setPage] = useState<number>(1);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Consume GET /kds/queue?view=active | delivered
   const { data, isLoading, isError, error } = useKdsQueue({
@@ -77,7 +78,7 @@ function KdsBoardContent({
         } else {
           await actionClient.patch(path);
         }
-        await defaultQueryClient.invalidateQueries({ queryKey: ['kds'] });
+        await queryClient.invalidateQueries({ queryKey: ['kds'] });
       } catch (error_) {
         setActionError(
           error_ instanceof Error ? error_.message : 'No se pudo completar la acción.',
@@ -86,7 +87,7 @@ function KdsBoardContent({
         setPendingAction(null);
       }
     },
-    [actionClient, pendingAction],
+    [actionClient, pendingAction, queryClient],
   );
 
   const handleOpenAdminVoid = useCallback((order: Order) => {
@@ -346,11 +347,10 @@ function KdsBoardContent({
             data-testid="tab-active-view"
             {...pointerAction(() => handleViewChange('active'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
-              view === 'active'
+            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${view === 'active'
                 ? 'bg-fmat-primary text-white shadow-lg'
                 : 'text-gray-400 hover:text-white hover:bg-gray-800'
-            }`}
+              }`}
           >
             Vista activa
           </button>
@@ -364,11 +364,10 @@ function KdsBoardContent({
             data-testid="tab-delivered"
             {...pointerAction(() => handleViewChange('delivered'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
-              view === 'delivered'
+            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${view === 'delivered'
                 ? 'bg-fmat-primary text-white shadow-lg'
                 : 'text-gray-400 hover:text-white hover:bg-gray-800'
-            }`}
+              }`}
           >
             Entregadas
           </button>

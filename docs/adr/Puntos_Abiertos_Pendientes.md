@@ -23,7 +23,7 @@
 
 ### 2.1 OP-12: Diálogo y Acción para Rehacer Platillo (`redo`) en `OrderTicketWidget`
 
-- **Estado:** Diseño técnico listo para implementar en Sprint 5 (`TASK-23`).
+- **Estado:** Diálogo y acción implementados en frontend (`TASK-23`); integración con backend pendiente de validar (`TASK-32`).
 - **Dueño:** Frontend Orders & KDS (`TASK-23`) + Backend (`TASK-32`).
 - **Hito de resolución:** Sprint 5.
 - **Contexto y Comportamiento en la Interfaz:**
@@ -31,9 +31,10 @@
   2. En el frontend se acordó que **la orden completa no retrocede** a preparación; únicamente el renglón afectado pasa de `ItemStatus.DELIVERED` a `ItemStatus.PENDING`.
   3. `TASK-23` implementará el diálogo modal accesible donde el mesero selecciona el platillo devuelto e ingresa obligatoriamente la nota con el motivo de la queja (`{ "note": string }`).
   4. Al presionar "Rehacer", invoca `PATCH /orders/{orderId}/items/{itemId}/redo`.
-  5. En la pantalla KDS de cocina, la tarjeta de la orden reaparece en la cola activa con un indicador destacado de que ese platillo específico debe volverse a cocinar.
+  5. En el KDS, el ítem rehecho aparece resaltado como pendiente dentro de la orden `DELIVERED`, sin cambiar la columna ni el estado de la orden.
 - **Acción pendiente:**
-  - [ ] Implementar el diálogo modal accesible en el frontend en el Sprint 5 (`TASK-23`) una vez que el backend habilite el endpoint con la opción acordada con Inventario.
+  - [x] Implementar el diálogo modal accesible en `OrderTicketWidget`, la nota obligatoria y la llamada a `PATCH /orders/{id}/items/{itemId}/redo`.
+  - [ ] Validar el flujo integrado con el backend y confirmar el evento para actualizar el KDS en tiempo real.
 
 ---
 
