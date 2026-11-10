@@ -302,7 +302,7 @@ function KdsBoardContent({
     gridContent = (
       <div
         data-testid="kds-grid"
-        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 h-full auto-rows-fr content-start"
+        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 h-full min-h-0 auto-rows-fr content-start"
       >
         {paginatedOrders.map((order) => (
           <OrderCard
@@ -385,7 +385,7 @@ function KdsBoardContent({
       <section
         id="panel-kds-grid"
         aria-label="Cuadrícula de comandas KDS"
-        className="flex-1 p-6 overflow-hidden flex flex-col justify-center"
+        className="flex-1 min-h-0 p-6 overflow-hidden flex flex-col justify-center"
       >
         {actionError && (
           <div role="alert" className="mb-3 rounded-md bg-red-950 px-4 py-3 text-red-200">

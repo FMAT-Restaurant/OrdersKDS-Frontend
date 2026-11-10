@@ -1,6 +1,13 @@
 @tailwind components;
 @tailwind utilities;
 
+.orders-kds-root,
+.orders-kds-root *,
+.orders-kds-root *::before,
+.orders-kds-root *::after {
+  box-sizing: border-box;
+}
+
 .orders-kds-root {
   --color-primary: #C2410C;
   --color-primary-hover: #9A3412;

@@ -70,7 +70,7 @@ function OrderCardItem({
             onReady?.();
           }
         }}
-        className={`w-full text-left min-h-[64px] py-3 flex flex-col justify-center bg-transparent border-0 ${
+        className={`w-full text-left min-h-[64px] py-2 flex flex-col justify-center bg-transparent border-0 ${
           item.status === 'READY' || item.status === 'DELIVERED'
             ? 'opacity-60 cursor-default'
             : 'cursor-pointer active:bg-gray-700'
@@ -208,7 +208,7 @@ export function OrderCard({
     <article
       data-testid={`order-card-${displayId}`}
       aria-label={`Order ${displayId}`}
-      className={`h-full flex flex-col rounded-fmat border transition-all duration-150 select-none overflow-hidden ${
+      className={`h-full min-h-0 flex flex-col rounded-fmat border transition-all duration-150 select-none overflow-hidden ${
         isFocused
           ? 'bg-gray-800 border-fmat-primary ring-2 ring-fmat-primary shadow-xl'
           : 'bg-gray-800/95 border-gray-700 hover:border-gray-500 shadow-md'
@@ -221,16 +221,17 @@ export function OrderCard({
         aria-label={`Order ${displayId}`}
         {...pointerAction(() => onClick?.(order))}
         onKeyDown={handleKeyDown}
-        className={`w-full p-5 pb-3 select-none cursor-pointer flex flex-col justify-between text-left bg-transparent border-0 border-b border-gray-700/80 focus:outline-none ${
+        className={`w-full shrink-0 p-4 pb-2.5 select-none cursor-pointer flex flex-col justify-between text-left bg-transparent border-0 border-b border-gray-700/80 focus:outline-none ${
           isFocused ? 'ring-2 ring-fmat-primary' : ''
         }`}
       >
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2 w-full min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {tableHeaderContent}
             <span
-              className="text-lg font-bold font-mono tracking-wider text-gray-300"
+              className="text-sm font-bold font-mono tracking-wider text-gray-300 truncate max-w-[120px]"
               data-testid={`order-id-${displayId}`}
+              title={`#${displayId}`}
             >
               #{displayId}
             </span>
@@ -238,7 +239,7 @@ export function OrderCard({
 
           <div
             data-testid={`order-status-${displayId}`}
-            className="flex items-center gap-1.5"
+            className="flex items-center gap-1.5 shrink-0"
           >
             <StatusBadge status={order.status} />
             <span className="sr-only">{order.status}</span>
@@ -282,7 +283,7 @@ export function OrderCard({
       {/* Dish Items List */}
       <ul
         data-testid={`order-items-list-${displayId}`}
-        className="flex-1 px-5 my-2 overflow-y-auto divide-y divide-gray-700/50 pr-1 max-h-[300px]"
+        className="flex-1 min-h-0 list-none m-0 px-4 my-1 overflow-y-auto divide-y divide-gray-700/50"
         aria-label={`Platillos para la orden ${displayId}`}
       >
         {order.items.map((item, index) => {
@@ -304,7 +305,7 @@ export function OrderCard({
       </ul>
 
       {/* Footer info: Total items count */}
-      <div className="px-5 py-2 border-t border-gray-700/60 flex items-center justify-between text-xs text-gray-400 w-full">
+      <div className="shrink-0 px-4 py-1.5 border-t border-gray-700/60 flex items-center justify-between text-xs text-gray-400 w-full">
         <span>{order.items.length} {order.items.length === 1 ? 'platillo' : 'platillos'}</span>
         <span>Toca o presiona Enter para seleccionar</span>
       </div>
@@ -313,7 +314,7 @@ export function OrderCard({
       {order.status === 'RESERVED' && (
         <div
           data-testid={`order-actions-${displayId}`}
-          className="px-5 pb-5 pt-1 flex items-center gap-4 w-full bg-transparent"
+          className="shrink-0 px-4 pb-2 pt-1.5 flex items-center gap-3 w-full bg-transparent"
         >
           <button
             type="button"
@@ -328,7 +329,7 @@ export function OrderCard({
               }
             }}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            className="min-h-[64px] min-h-[48px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
           >
             Iniciar preparación
           </button>
@@ -345,7 +346,7 @@ export function OrderCard({
               }
             }}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            className="min-h-[64px] min-h-[48px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
           >
             Rechazar insumo
           </button>
@@ -356,7 +357,7 @@ export function OrderCard({
       {order.status === 'IN_PREPARATION' && (onAdminVoid || onChefVoid) && (
         <div
           data-testid={`order-void-actions-${displayId}`}
-          className="px-5 pb-3 flex items-center gap-3 w-full bg-transparent"
+          className="shrink-0 px-4 pb-2 pt-1.5 flex items-center gap-3 w-full bg-transparent"
         >
           {onAdminVoid && (!userRole || userRole === 'admin') && (
             <button
@@ -372,7 +373,7 @@ export function OrderCard({
                 }
               }}
               style={{ minHeight: 64 }}
-              className="min-h-[64px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-amber-700 hover:bg-amber-600 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+              className="min-h-[64px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-amber-700 hover:bg-amber-600 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
             >
               Anular (Admin)
             </button>
@@ -391,7 +392,7 @@ export function OrderCard({
                 }
               }}
               style={{ minHeight: 64 }}
-              className="min-h-[64px] flex-1 px-4 py-2.5 rounded-md font-bold text-sm bg-red-700 hover:bg-red-600 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+              className="min-h-[64px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-red-700 hover:bg-red-600 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
             >
               Anular (Cocina)
             </button>
@@ -412,7 +413,7 @@ export function OrderCard({
             }
           }}
           style={{ minHeight: 64 }}
-          className="mx-5 mb-5 min-h-[64px] min-h-[48px] rounded-md bg-green-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 active:scale-[.98] disabled:opacity-50"
+          className="shrink-0 mx-4 mb-3 min-h-[64px] min-h-[48px] rounded-md bg-green-700 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 active:scale-[.98] disabled:opacity-50"
         >
           Orden lista
         </button>

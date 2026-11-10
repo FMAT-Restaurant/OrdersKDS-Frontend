@@ -48,12 +48,20 @@ export const OrderItemSchema = z.object({
   id: z.string().optional(),
   publicId: z.string().optional(),
   itemId: z.string().optional(),
-  dishId: z.string().optional(),
+  dishId: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((val) => val ?? undefined),
   name: z.string().min(1),
   quantity: z.number().int().positive(),
   unitPrice: z.union([z.number(), z.string()]),
   status: ItemStatusSchema,
-  station: z.string().optional(),
+  station: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((val) => val ?? undefined),
   notes: z.string().nullable().optional(),
   modifiers: z.array(z.string()).optional(),
   preparationTimeText: z.string().nullable().optional(),
