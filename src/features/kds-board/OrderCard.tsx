@@ -129,13 +129,12 @@ function OrderCardItem({
           </div>
         )}
         {isRedoPending && (
-          <span
+          <output
             data-testid={`redo-pending-${itemId}`}
-            role="status"
-            className="pl-8 text-xs font-black uppercase tracking-wide text-amber-300"
+            className="pl-8 text-xs font-black uppercase tracking-wide text-amber-300 block"
           >
             Rehacer pendiente
-          </span>
+          </output>
         )}
       </button>
     </li>

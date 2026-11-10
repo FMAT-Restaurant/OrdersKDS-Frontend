@@ -228,6 +228,35 @@ function getTableOrTakeawayLabel(order: Order): string {
   return 'Mesa sin asignar';
 }
 
+function updateKdsQueueWithRedoItem(
+  cachedOrders: Order[] | undefined,
+  updatedOrder: Order,
+  targetItemId: string,
+  fallbackOrderId: string,
+): Order[] | undefined {
+  if (!cachedOrders) return cachedOrders;
+  const updatedOrderId =
+    updatedOrder.id ?? updatedOrder.orderId ?? updatedOrder.publicId ?? fallbackOrderId;
+
+  return cachedOrders.map((cachedOrder) => {
+    const cachedOrderId = cachedOrder.id ?? cachedOrder.orderId ?? cachedOrder.publicId;
+    if (cachedOrderId !== updatedOrderId) return cachedOrder;
+
+    const updatedItem = updatedOrder.items.find(
+      (item) => (item.id ?? item.itemId ?? item.publicId) === targetItemId,
+    );
+
+    return {
+      ...cachedOrder,
+      status: updatedOrder.status,
+      items: cachedOrder.items.map((cachedItem) => {
+        const cachedItemId = cachedItem.id ?? cachedItem.itemId ?? cachedItem.publicId;
+        return cachedItemId === targetItemId ? (updatedItem ?? cachedItem) : cachedItem;
+      }),
+    };
+  });
+}
+
 interface RejectionBreakdownProps {
   readonly details: ParsedRejectionDetails;
   readonly orderItems: readonly OrderItem[];
@@ -555,31 +584,10 @@ function OrderTicket({
       ),
     onSuccess: (updatedOrder, { itemId }) => {
       client.setQueryData<Order>(queryKey, updatedOrder);
-      const updatedOrderId =
-        updatedOrder.id ?? updatedOrder.orderId ?? updatedOrder.publicId ?? orderId;
       client.setQueriesData<Order[]>(
         { queryKey: ['kds', 'queue'] },
         (cachedOrders) =>
-          cachedOrders?.map((cachedOrder) => {
-            const cachedOrderId =
-              cachedOrder.id ?? cachedOrder.orderId ?? cachedOrder.publicId;
-            if (cachedOrderId !== updatedOrderId) return cachedOrder;
-
-            return {
-              ...cachedOrder,
-              status: updatedOrder.status,
-              items: cachedOrder.items.map((cachedItem) => {
-                const cachedItemId =
-                  cachedItem.id ?? cachedItem.itemId ?? cachedItem.publicId;
-                if (cachedItemId !== itemId) return cachedItem;
-
-                const updatedItem = updatedOrder.items.find(
-                  (item) => (item.id ?? item.itemId ?? item.publicId) === itemId,
-                );
-                return updatedItem ?? cachedItem;
-              }),
-            };
-          }),
+          updateKdsQueueWithRedoItem(cachedOrders, updatedOrder, itemId, orderId),
       );
       setSelectedRedoItem(null);
     },
