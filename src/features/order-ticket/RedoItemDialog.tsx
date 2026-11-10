@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 
 export interface RedoItemDialogProps {
   readonly itemName: string;
@@ -30,7 +30,54 @@ export function RedoItemDialog({
     if (isPending) dialog.current?.focus();
   }, [isPending]);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    const dialogElement = dialog.current;
+    if (!dialogElement) return;
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape' && !isPending) {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const focusableElements = dialogElement.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), textarea:not(:disabled)',
+      );
+      const firstElement = focusableElements.item(0);
+      const lastElement = focusableElements.item(focusableElements.length - 1);
+      if (!firstElement || !lastElement) {
+        event.preventDefault();
+        dialogElement.focus();
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.target === dialogElement && !isPending) {
+        onClose();
+      }
+    };
+
+    dialogElement.addEventListener('keydown', handleKeyDown);
+    dialogElement.addEventListener('mousedown', handleMouseDown);
+
+    return () => {
+      dialogElement.removeEventListener('keydown', handleKeyDown);
+      dialogElement.removeEventListener('mousedown', handleMouseDown);
+    };
+  }, [isPending, onClose]);
+
+  const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedNote = note.trim();
     if (!trimmedNote || isPending) return;
@@ -47,34 +94,6 @@ export function RedoItemDialog({
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
-    if (event.key === 'Escape' && !isPending) {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-
-    if (event.key !== 'Tab') return;
-    const focusableElements = event.currentTarget.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), textarea:not(:disabled)',
-    );
-    const firstElement = focusableElements.item(0);
-    const lastElement = focusableElements.item(focusableElements.length - 1);
-    if (!firstElement || !lastElement) {
-      event.preventDefault();
-      event.currentTarget.focus();
-      return;
-    }
-
-    if (event.shiftKey && document.activeElement === firstElement) {
-      event.preventDefault();
-      lastElement.focus();
-    } else if (!event.shiftKey && document.activeElement === lastElement) {
-      event.preventDefault();
-      firstElement.focus();
-    }
-  };
-
   return (
     <dialog
       open
@@ -83,11 +102,7 @@ export function RedoItemDialog({
       aria-labelledby="redo-item-title"
       aria-describedby="redo-item-description"
       tabIndex={-1}
-      onKeyDown={handleKeyDown}
       data-testid="redo-item-dialog-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !isPending) onClose();
-      }}
       className="fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/70 border-none backdrop:bg-transparent"
     >
       <div className="w-full max-w-lg rounded-lg border border-gray-700 bg-gray-900 p-6 text-white shadow-2xl">

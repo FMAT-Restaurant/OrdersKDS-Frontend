@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -95,19 +96,15 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
     });
 
     it('reads thresholds from environment variables when present', () => {
-      const origWarning = import.meta.env.VITE_KDS_WARNING_AFTER_SECONDS;
-      const origLate = import.meta.env.VITE_KDS_LATE_AFTER_SECONDS;
+      vi.stubEnv('VITE_KDS_WARNING_AFTER_SECONDS', '400');
+      vi.stubEnv('VITE_KDS_LATE_AFTER_SECONDS', '800');
 
       try {
-        import.meta.env.VITE_KDS_WARNING_AFTER_SECONDS = '400';
-        import.meta.env.VITE_KDS_LATE_AFTER_SECONDS = '800';
-
         const envThresholds = getDelayThresholds();
         expect(envThresholds.warningSeconds).toBe(400);
         expect(envThresholds.lateSeconds).toBe(800);
       } finally {
-        import.meta.env.VITE_KDS_WARNING_AFTER_SECONDS = origWarning;
-        import.meta.env.VITE_KDS_LATE_AFTER_SECONDS = origLate;
+        vi.unstubAllEnvs();
       }
     });
 
