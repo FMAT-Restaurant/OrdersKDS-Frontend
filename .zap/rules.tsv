@@ -3,3 +3,4 @@
 10109	IGNORE	(Ignorar aviso de Modern Web Application)
 90004	IGNORE	(Ignorar CORP en archivos estaticos)
 10098	IGNORE	(Ignorar Cross-Domain Misconfiguration para Module Federation)
+90003	IGNORE	(Ignorar SRI en hojas de estilo externas dinamicas como Google Fonts)

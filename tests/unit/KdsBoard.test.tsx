@@ -976,6 +976,10 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         const alert = screen.getByRole('alert');
         expect(alert).toHaveTextContent('No se pudo completar la acción.');
       });
+
+      const dismissErrBtn = screen.getByRole('button', { name: 'Cerrar mensaje de error' });
+      fireEvent.click(dismissErrBtn);
+      expect(screen.queryByTestId('kds-action-error')).not.toBeInTheDocument();
     });
 
     it('displays action feedback toast on success and supports manual dismissal (User Requirement 5)', async () => {
@@ -1340,6 +1344,42 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       expect(await screen.findByTestId('kds-action-feedback')).toHaveTextContent(
         'Comanda #42 se mantiene en preparación',
       );
+    });
+
+    it('auto-dismisses action feedback after 5 seconds and action error after 15 seconds', async () => {
+      vi.useFakeTimers();
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockRejectedValue(new Error('Fallo temporal')),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      // Wait for items to render
+      await vi.waitFor(() => {
+        expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
+      });
+
+      // Trigger error
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-101'));
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId('kds-action-error')).toBeInTheDocument();
+      });
+
+      // Advance 15 seconds -> error auto-dismisses
+      vi.advanceTimersByTime(15000);
+
+      await vi.waitFor(() => {
+        expect(screen.queryByTestId('kds-action-error')).not.toBeInTheDocument();
+      });
+
+      vi.useRealTimers();
     });
   });
 });

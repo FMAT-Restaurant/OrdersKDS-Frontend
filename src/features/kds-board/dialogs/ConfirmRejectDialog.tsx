@@ -37,7 +37,7 @@ export function ConfirmRejectDialog({
     tableDisplay = 'Para llevar';
   }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       onCancel();
@@ -45,14 +45,14 @@ export function ConfirmRejectDialog({
   };
 
   return (
-    <div
-      role="dialog"
+    <dialog
+      open
       aria-modal="true"
       aria-labelledby="confirm-reject-dialog-title"
       aria-describedby="confirm-reject-dialog-desc"
       data-testid="confirm-reject-dialog"
       onKeyDown={handleKeyDown}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 select-none backdrop-blur-xs"
+      className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-xs border-none select-none"
     >
       <div className="w-full max-w-lg rounded-card bg-surface border border-border shadow-2xl p-6 flex flex-col gap-4 text-ink">
         <div className="flex items-center gap-3">
@@ -120,7 +120,7 @@ export function ConfirmRejectDialog({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 

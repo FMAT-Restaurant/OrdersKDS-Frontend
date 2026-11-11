@@ -105,5 +105,33 @@ describe('ConfirmRejectDialog', () => {
     expect(submitBtn).toBeDisabled();
     expect(screen.getByTestId('confirm-reject-cancel-btn')).toBeDisabled();
   });
+
+  it('ignores non-Escape keydown events and handles orders without table or takeaway', () => {
+    const onCancel = vi.fn();
+    const generalOrder: Order = {
+      ...mockOrder,
+      id: undefined,
+      publicId: 'pub-8888',
+      tableNumber: null,
+      isTakeaway: false,
+      orderNumber: 60,
+    };
+
+    render(
+      <ConfirmRejectDialog
+        order={generalOrder}
+        isOpen={true}
+        onConfirm={vi.fn()}
+        onCancel={onCancel}
+      />,
+    );
+
+    // Header displays Comanda #60 without table prefix
+    expect(screen.getByText('Comanda #60')).toBeInTheDocument();
+
+    // Non-Escape key does not trigger onCancel
+    fireEvent.keyDown(screen.getByTestId('confirm-reject-dialog'), { key: 'Enter' });
+    expect(onCancel).not.toHaveBeenCalled();
+  });
 });
 

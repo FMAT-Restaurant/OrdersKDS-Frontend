@@ -111,4 +111,33 @@ describe('ConfirmReadyDialog (User Requirement 3)', () => {
     expect(submitBtn).toBeDisabled();
     expect(screen.getByTestId('confirm-ready-keep-prep-btn')).toBeDisabled();
   });
+
+  it('ignores non-Escape keydown events and handles orders without table or takeaway', () => {
+    const onKeepInPrep = vi.fn();
+    const generalOrder: Order = {
+      ...mockOrder,
+      id: undefined,
+      publicId: 'pub-9999',
+      tableNumber: null,
+      isTakeaway: false,
+      orderNumber: 50,
+    };
+
+    render(
+      <ConfirmReadyDialog
+        order={generalOrder}
+        item={mockItem}
+        isOpen={true}
+        onConfirm={vi.fn()}
+        onKeepInPrep={onKeepInPrep}
+      />,
+    );
+
+    // Header displays Comanda #50 without table prefix
+    expect(screen.getByText('Comanda #50')).toBeInTheDocument();
+
+    // Non-Escape key does not trigger onKeepInPrep
+    fireEvent.keyDown(screen.getByTestId('confirm-ready-dialog'), { key: 'Enter' });
+    expect(onKeepInPrep).not.toHaveBeenCalled();
+  });
 });

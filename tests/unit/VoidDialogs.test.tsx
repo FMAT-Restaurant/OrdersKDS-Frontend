@@ -520,5 +520,85 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       expect(screen.queryByTestId('order-action-chef-void-ord-void-reserved')).not.toBeInTheDocument();
     });
   });
+
+  describe('AdminVoidDialog & ChefVoidDialog edge cases & header formatting', () => {
+    it('handles takeaway, general delivery, isSubmitting and onCancel in AdminVoidDialog', () => {
+      const onConfirm = vi.fn();
+      const onCancel = vi.fn();
+
+      const takeawayOrder: Order = {
+        ...inPreparationOrder,
+        id: 'ord-takeaway-admin',
+        tableNumber: null,
+        isTakeaway: true,
+        orderNumber: 77,
+      };
+
+      const { rerender } = render(
+        <AdminVoidDialog
+          order={takeawayOrder}
+          userRole={UserRole.ADMIN}
+          isSubmitting={true}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />,
+      );
+
+      expect(screen.getByText(/Anulación Administrativa · Para llevar · #77/)).toBeInTheDocument();
+      expect(screen.getByTestId('admin-void-cancel')).toBeDisabled();
+      expect(screen.getByTestId('admin-void-confirm')).toBeDisabled();
+
+      // Rerender not submitting and trigger cancel
+      rerender(
+        <AdminVoidDialog
+          order={{ ...takeawayOrder, isTakeaway: false }}
+          userRole={UserRole.ADMIN}
+          isSubmitting={false}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />,
+      );
+
+      expect(screen.getByText(/Anulación Administrativa · #77/)).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('admin-void-cancel'));
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles takeaway and general delivery in ChefVoidDialog', () => {
+      const onConfirm = vi.fn();
+      const onCancel = vi.fn();
+
+      const takeawayOrder: Order = {
+        ...inPreparationOrder,
+        id: 'ord-takeaway-chef',
+        tableNumber: null,
+        isTakeaway: true,
+        orderNumber: 88,
+      };
+
+      const { rerender } = render(
+        <ChefVoidDialog
+          order={takeawayOrder}
+          userRole={UserRole.CHEF}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />,
+      );
+
+      expect(screen.getByText(/Anulación por Error de Cocina · Para llevar · #88/)).toBeInTheDocument();
+
+      // Order with neither tableNumber nor isTakeaway
+      rerender(
+        <ChefVoidDialog
+          order={{ ...takeawayOrder, isTakeaway: false }}
+          userRole={UserRole.CHEF}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />,
+      );
+
+      expect(screen.getByText(/Anulación por Error de Cocina · #88/)).toBeInTheDocument();
+    });
+  });
 });
 

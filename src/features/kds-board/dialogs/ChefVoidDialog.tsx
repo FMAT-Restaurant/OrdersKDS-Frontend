@@ -73,8 +73,12 @@ export function ChefVoidDialog({
 
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
-  const tableDisplay =
-    order.tableNumber != null ? `Mesa ${order.tableNumber}` : order.isTakeaway ? 'Para llevar' : null;
+  let tableDisplay: string | null = null;
+  if (order.tableNumber != null) {
+    tableDisplay = `Mesa ${order.tableNumber}`;
+  } else if (order.isTakeaway) {
+    tableDisplay = 'Para llevar';
+  }
 
   const toggleReason = (reason: string) => {
     setSelectedReasons((prev) =>
@@ -113,7 +117,7 @@ export function ChefVoidDialog({
           data-testid="chef-void-warning"
           className="rounded-control bg-blue-50 border border-blue-200 px-4 py-3 text-blue-900 font-bold text-center text-base"
         >
-          No se cobrará al cliente por la anulación realizada por un error en cocina
+          No se cobrará al cliente por la anulación realizada por un error en cocina{' '}
           <span className="sr-only">No se cobrará por error de cocina</span>
         </div>
 

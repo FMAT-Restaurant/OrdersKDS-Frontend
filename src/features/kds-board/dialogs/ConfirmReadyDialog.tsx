@@ -31,14 +31,14 @@ export function ConfirmReadyDialog({
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
   const orderNumberDisplay =
     order.orderNumber != null ? String(order.orderNumber) : displayId.slice(-4).toUpperCase();
-  const tableDisplay =
-    order.tableNumber !== null && order.tableNumber !== undefined
-      ? `Mesa ${order.tableNumber}`
-      : order.isTakeaway
-      ? 'Para llevar'
-      : '';
+  let tableDisplay = '';
+  if (order.tableNumber !== null && order.tableNumber !== undefined) {
+    tableDisplay = `Mesa ${order.tableNumber}`;
+  } else if (order.isTakeaway) {
+    tableDisplay = 'Para llevar';
+  }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       onKeepInPrep();
@@ -46,14 +46,14 @@ export function ConfirmReadyDialog({
   };
 
   return (
-    <div
-      role="dialog"
+    <dialog
+      open
       aria-modal="true"
       aria-labelledby="confirm-ready-dialog-title"
       aria-describedby="confirm-ready-dialog-desc"
       data-testid="confirm-ready-dialog"
       onKeyDown={handleKeyDown}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 select-none backdrop-blur-xs"
+      className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-xs border-none select-none"
     >
       <div className="w-full max-w-lg rounded-card bg-surface border border-border shadow-2xl p-6 flex flex-col gap-4 text-ink">
         <div className="flex items-center gap-3">
@@ -80,7 +80,7 @@ export function ConfirmReadyDialog({
 
         <div id="confirm-ready-dialog-desc" className="text-body text-sm space-y-2.5">
           <p>
-            Has completado el último platillo (
+            Has completado el último platillo ({' '}
             <span className="font-bold text-ink">{item.name}</span>).
           </p>
           <div className="p-3 bg-amber-50 rounded-control border border-amber-200 text-amber-900 text-xs sm:text-sm">
@@ -116,7 +116,7 @@ export function ConfirmReadyDialog({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
