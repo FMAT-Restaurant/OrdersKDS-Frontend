@@ -25,6 +25,9 @@ export function StatusBadge({ status, className = '' }: Readonly<StatusBadgeProp
       className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm select-none ${config.className} ${className}`.trim()}
     >
       {config.label}
+      {config.englishLabel && (
+        <span className="sr-only"> {config.englishLabel}</span>
+      )}
     </span>
   );
 }

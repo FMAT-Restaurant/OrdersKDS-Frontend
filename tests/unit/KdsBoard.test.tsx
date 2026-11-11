@@ -1080,5 +1080,119 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         'Quemado',
       );
     });
+
+    it('auto-starts preparation when marking order or item ready on a RESERVED order', async () => {
+      const reservedOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-res-1',
+        orderId: 'ord-res-1',
+        status: OrderStatus.RESERVED,
+        items: [
+          {
+            ...mockOrder1.items[0],
+            id: 'item-res-1',
+            itemId: 'item-res-1',
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([reservedOrder]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-ready-ord-res-1')).toBeInTheDocument();
+      });
+
+      // Mark order ready: auto patches start-preparation then ready
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-res-1'));
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-1/start-preparation');
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-1/ready');
+      });
+
+      // Mark item ready: auto patches start-preparation then item ready
+      fireEvent.click(screen.getByTestId('order-item-action-item-res-1'));
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-1/items/item-res-1/ready');
+      });
+    });
+
+    it('dispatches kitchen-reject when onRejectSupplies prop is omitted on RESERVED order', async () => {
+      const reservedOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-res-reject',
+        orderId: 'ord-res-reject',
+        status: OrderStatus.RESERVED,
+        items: [
+          {
+            ...mockOrder1.items[0],
+            id: 'item-res-reject',
+            itemId: 'item-res-reject',
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([reservedOrder]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-reject-ord-res-reject')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-reject-ord-res-reject'));
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith(
+          '/orders/ord-res-reject/items/item-res-reject/kitchen-reject',
+          { reason: 'Insumo físico insuficiente en cocina' },
+        );
+      });
+    });
+
+    it('cancels AdminVoidDialog and ChefVoidDialog without submitting', async () => {
+      const inPrepOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-dialog-cancel',
+        orderId: 'ord-dialog-cancel',
+        status: OrderStatus.IN_PREPARATION,
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([inPrepOrder]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} userRole="admin" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-admin-void-ord-dialog-cancel')).toBeInTheDocument();
+      });
+
+      // Open AdminVoidDialog and cancel
+      fireEvent.click(screen.getByTestId('order-action-admin-void-ord-dialog-cancel'));
+      expect(screen.getByTestId('admin-void-dialog')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('admin-void-cancel'));
+      expect(screen.queryByTestId('admin-void-dialog')).not.toBeInTheDocument();
+
+      // Open ChefVoidDialog and cancel
+      fireEvent.click(screen.getByTestId('order-action-chef-void-ord-dialog-cancel'));
+      expect(screen.getByTestId('chef-void-dialog')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('chef-void-cancel'));
+      expect(screen.queryByTestId('chef-void-dialog')).not.toBeInTheDocument();
+
+      expect(mockClient.patch).not.toHaveBeenCalled();
+    });
   });
 });

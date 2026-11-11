@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
 import type { UserRole } from '../../shared/types/auth.ts';
 import { StatusBadge } from './StatusBadge.tsx';
@@ -29,12 +29,14 @@ function OrderCardItem({
   onReady,
   isPending,
   isRedoPending,
+  isCompact = false,
 }: Readonly<{
   item: OrderItem;
   index: number;
   onReady?: () => void;
   isPending: boolean;
   isRedoPending: boolean;
+  isCompact?: boolean;
 }>) {
   const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
@@ -42,9 +44,11 @@ function OrderCardItem({
   return (
     <li
       data-testid={`order-item-${itemId}`}
-      style={{ minHeight: 64 }}
+      style={{ minHeight: isCompact ? 44 : 64 }}
       data-redo-pending={isRedoPending ? 'true' : undefined}
-      className={`min-h-[64px] border-b border-gray-700/50 last:border-b-0 flex flex-col gap-1 ${
+      className={`border-b border-gray-700/50 last:border-b-0 flex flex-col gap-1 ${
+        isCompact ? 'min-h-[44px]' : 'min-h-[64px]'
+      } ${
         isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-950/40 px-2' : ''
       }`}
     >
@@ -70,7 +74,9 @@ function OrderCardItem({
             onReady?.();
           }
         }}
-        className={`w-full text-left min-h-[64px] py-2 flex flex-col justify-center bg-transparent border-0 ${
+        className={`w-full text-left flex flex-col justify-center bg-transparent border-0 ${
+          isCompact ? 'min-h-[44px] py-1' : 'min-h-[64px] py-2'
+        } ${
           item.status === 'READY' || item.status === 'DELIVERED'
             ? 'opacity-60 cursor-default'
             : 'cursor-pointer active:bg-gray-700'
@@ -110,7 +116,9 @@ function OrderCardItem({
             {item.modifiers.map((modifier, modIdx) => (
               <span
                 key={`${itemId}-mod-${modIdx}`}
-                className="inline-block px-2 py-0.5 text-xs font-medium rounded bg-gray-700/80 text-amber-200 border border-amber-400/30"
+                className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-700/80 text-amber-200 border border-amber-400/30 ${
+                  isCompact ? 'text-[11px]' : 'text-xs'
+                }`}
                 data-testid={`order-item-modifier-${itemId}-${modIdx}`}
               >
                 + {modifier}
@@ -124,7 +132,8 @@ function OrderCardItem({
             className="pl-8 text-sm text-yellow-300 italic flex items-start gap-1"
             data-testid={`order-item-notes-${itemId}`}
           >
-            <span className="font-bold not-italic shrink-0">Note:</span>
+            <span className="font-bold not-italic shrink-0">Nota:</span>
+            <span className="sr-only">Note:</span>
             <span className="break-words">{item.notes}</span>
           </div>
         )}
@@ -139,6 +148,184 @@ function OrderCardItem({
       </button>
     </li>
   );
+}
+
+interface OrderCardActionsProps {
+  readonly order: Order;
+  readonly displayId: string;
+  readonly pendingAction?: string;
+  readonly userRole?: UserRole;
+  readonly onStartPreparation?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order) => void;
+  readonly onAdminVoid?: (order: Order) => void;
+  readonly onChefVoid?: (order: Order) => void;
+  readonly onMarkOrderReady?: (order: Order) => void;
+}
+
+function handleButtonKey(
+  event: KeyboardEvent<HTMLButtonElement>,
+  action?: () => void,
+) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    action?.();
+  }
+}
+
+function TableHeader({
+  tableNumber,
+  isTakeaway,
+  displayId,
+}: Readonly<{
+  tableNumber?: number | null;
+  isTakeaway?: boolean;
+  displayId: string;
+}>) {
+  if (tableNumber !== null && tableNumber !== undefined) {
+    return (
+      <span
+        className="text-2xl font-black text-white tracking-wide"
+        data-testid={`order-table-${displayId}`}
+      >
+        Mesa {tableNumber}
+        <span className="sr-only"> Table {tableNumber}</span>
+      </span>
+    );
+  }
+  if (isTakeaway) {
+    return (
+      <span
+        className="text-xl font-black text-amber-300 uppercase tracking-wider"
+        data-testid={`order-takeaway-${displayId}`}
+      >
+        Para llevar
+        <span className="sr-only"> Takeaway</span>
+      </span>
+    );
+  }
+  return null;
+}
+
+function OrderCardActions({
+  order,
+  displayId,
+  pendingAction,
+  userRole,
+  onStartPreparation,
+  onRejectSupplies,
+  onAdminVoid,
+  onChefVoid,
+  onMarkOrderReady,
+}: Readonly<OrderCardActionsProps>) {
+  const isReserved = order.status === 'RESERVED';
+  const isInPrep = order.status === 'IN_PREPARATION';
+  const canShowAdminVoid =
+    Boolean(onAdminVoid) && (!userRole || userRole === 'admin');
+  const canShowChefVoid =
+    Boolean(onChefVoid) &&
+    (!userRole || userRole === 'chef' || userRole === 'admin');
+  const canShowReady =
+    order.status !== 'DELIVERED' &&
+    order.status !== 'PAID' &&
+    order.status !== 'CANCELLED';
+
+  return (
+    <>
+      {isReserved && (
+        <div
+          data-testid={`order-actions-${displayId}`}
+          className="shrink-0 px-4 pb-2 pt-1.5 flex items-center gap-3 w-full bg-transparent"
+        >
+          <button
+            type="button"
+            data-testid={`order-action-start-${displayId}`}
+            aria-label={`Iniciar preparación para la orden ${displayId}`}
+            disabled={pendingAction === 'start'}
+            {...pointerAction(() => onStartPreparation?.(order))}
+            onKeyDown={(e) => handleButtonKey(e, () => onStartPreparation?.(order))}
+            style={{ minHeight: 64 }}
+            className="min-h-[64px] min-h-[48px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+          >
+            Iniciar preparación
+          </button>
+          <button
+            type="button"
+            data-testid={`order-action-reject-${displayId}`}
+            aria-label={`Rechazar insumo para la orden ${displayId}`}
+            disabled={pendingAction === 'reject'}
+            {...pointerAction(() => onRejectSupplies?.(order))}
+            onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
+            style={{ minHeight: 64 }}
+            className="min-h-[64px] min-h-[48px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+          >
+            Rechazar insumo
+          </button>
+        </div>
+      )}
+
+      {isInPrep && (canShowAdminVoid || canShowChefVoid) && (
+        <div
+          data-testid={`order-void-actions-${displayId}`}
+          className="shrink-0 px-4 pb-2 pt-1.5 flex items-center gap-3 w-full bg-transparent"
+        >
+          {canShowAdminVoid && (
+            <button
+              type="button"
+              data-testid={`order-action-admin-void-${displayId}`}
+              aria-label={`Anulación administrativa para la orden ${displayId}`}
+              disabled={pendingAction === 'void-admin'}
+              {...pointerAction(() => onAdminVoid?.(order))}
+              onKeyDown={(e) => handleButtonKey(e, () => onAdminVoid?.(order))}
+              style={{ minHeight: 64 }}
+              className="min-h-[64px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-amber-700 hover:bg-amber-600 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            >
+              Anular (Admin)
+            </button>
+          )}
+          {canShowChefVoid && (
+            <button
+              type="button"
+              data-testid={`order-action-chef-void-${displayId}`}
+              aria-label={`Anulación por error de cocina para la orden ${displayId}`}
+              disabled={pendingAction === 'void-kitchen'}
+              {...pointerAction(() => onChefVoid?.(order))}
+              onKeyDown={(e) => handleButtonKey(e, () => onChefVoid?.(order))}
+              style={{ minHeight: 64 }}
+              className="min-h-[64px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-red-700 hover:bg-red-600 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            >
+              Anular (Cocina)
+            </button>
+          )}
+        </div>
+      )}
+
+      {canShowReady && (
+        <button
+          type="button"
+          data-testid={`order-action-ready-${displayId}`}
+          aria-label={`Orden lista para la orden ${displayId}`}
+          disabled={pendingAction === 'order-ready'}
+          {...pointerAction(() => onMarkOrderReady?.(order))}
+          onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
+          style={{ minHeight: 64 }}
+          className="shrink-0 mx-4 mb-3 min-h-[64px] min-h-[48px] rounded-md bg-green-700 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 active:scale-[.98] disabled:opacity-50"
+        >
+          Orden lista
+        </button>
+      )}
+    </>
+  );
+}
+
+function getStopwatchState(order: Order) {
+  const inPrepAt = order.in_preparation_at ?? order.inPreparationAt ?? null;
+  const stockReservedAt = order.stock_reserved_at ?? order.stockReservedAt ?? null;
+  const isDelivered = order.status === 'DELIVERED';
+  const hasRedoPending =
+    isDelivered && order.items.some((item) => item.status === 'PENDING');
+  const isFinished = isDelivered && !hasRedoPending;
+
+  return { inPrepAt, stockReservedAt, isFinished };
 }
 
 /**
@@ -160,14 +347,9 @@ export function OrderCard({
   isFocused = false,
 }: Readonly<OrderCardProps>) {
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const [isCompact, setIsCompact] = useState(order.items.length >= 5);
 
-  // OP-11 & ADR-0012: Live stopwatch starts strictly from `in_preparation_at` or `inPreparationAt`.
-  // If absent, falls back to `stock_reserved_at` or `stockReservedAt`. NEVER from `createdAt`.
-  const inPrepAt = order.in_preparation_at ?? order.inPreparationAt ?? null;
-  const stockReservedAt = order.stock_reserved_at ?? order.stockReservedAt ?? null;
-  const isDelivered = order.status === 'DELIVERED';
-  const hasRedoPending = isDelivered && order.items.some((item) => item.status === 'PENDING');
-  const isFinished = isDelivered && !hasRedoPending;
+  const { inPrepAt, stockReservedAt, isFinished } = getStopwatchState(order);
 
   const rawElapsedTime = useElapsedTime(
     inPrepAt,
@@ -195,30 +377,6 @@ export function OrderCard({
     }
   };
 
-  const hasTable = order.tableNumber !== null && order.tableNumber !== undefined;
-
-  let tableHeaderContent = null;
-  if (hasTable) {
-    tableHeaderContent = (
-      <span
-        className="text-2xl font-black text-white tracking-wide"
-        data-testid={`order-table-${displayId}`}
-      >
-        Mesa {order.tableNumber}
-        <span className="sr-only"> Table {order.tableNumber}</span>
-      </span>
-    );
-  } else if (order.isTakeaway) {
-    tableHeaderContent = (
-      <span
-        className="text-xl font-black text-amber-300 uppercase tracking-wider"
-        data-testid={`order-takeaway-${displayId}`}
-      >
-        Takeaway
-      </span>
-    );
-  }
-
   return (
     <article
       data-testid={`order-card-${displayId}`}
@@ -242,7 +400,11 @@ export function OrderCard({
       >
         <div className="flex items-center justify-between gap-2 w-full min-w-0">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {tableHeaderContent}
+            <TableHeader
+              tableNumber={order.tableNumber}
+              isTakeaway={order.isTakeaway}
+              displayId={displayId}
+            />
             <span
               className="text-sm font-bold font-mono tracking-wider text-gray-300 truncate max-w-[120px]"
               data-testid={`order-id-${displayId}`}
@@ -295,10 +457,29 @@ export function OrderCard({
         </div>
       </button>
 
+      {order.items.length >= 5 && (
+        <div className="shrink-0 px-4 py-1 flex items-center justify-between bg-gray-900/60 border-b border-gray-700/40 text-xs">
+          <span className="text-gray-300 font-medium">
+            {order.items.length} platillos en comanda
+          </span>
+          <button
+            type="button"
+            data-testid={`order-compact-toggle-${displayId}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCompact((prev) => !prev);
+            }}
+            className="text-fmat-primary hover:text-fmat-primary-hover font-semibold px-2 py-0.5 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-fmat-primary cursor-pointer"
+          >
+            {isCompact ? 'Expandir detalles' : 'Vista compacta'}
+          </button>
+        </div>
+      )}
+
       {/* Dish Items List */}
       <ul
         data-testid={`order-items-list-${displayId}`}
-        className="flex-1 min-h-0 list-none m-0 px-4 my-1 overflow-y-auto divide-y divide-gray-700/50"
+        className="flex-1 min-h-0 list-none m-0 px-4 my-1 overflow-y-auto divide-y divide-gray-700/50 scrollbar-thin scrollbar-thumb-gray-600"
         aria-label={`Platillos para la orden ${displayId}`}
       >
         {order.items.map((item, index) => {
@@ -314,6 +495,7 @@ export function OrderCard({
                 pendingAction === `item:${item.id ?? item.itemId ?? item.publicId ?? index}`
               }
               isRedoPending={isRedoPending}
+              isCompact={isCompact}
             />
           );
         })}
@@ -325,114 +507,17 @@ export function OrderCard({
         <span>Toca o presiona Enter para seleccionar</span>
       </div>
 
-      {/* Action Buttons for RESERVED status (ADR-0012) */}
-      {order.status === 'RESERVED' && (
-        <div
-          data-testid={`order-actions-${displayId}`}
-          className="shrink-0 px-4 pb-2 pt-1.5 flex items-center gap-3 w-full bg-transparent"
-        >
-          <button
-            type="button"
-            data-testid={`order-action-start-${displayId}`}
-            aria-label={`Iniciar preparación para la orden ${displayId}`}
-            disabled={pendingAction === 'start'}
-            {...pointerAction(() => onStartPreparation?.(order))}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                onStartPreparation?.(order);
-              }
-            }}
-            style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
-          >
-            Iniciar preparación
-          </button>
-          <button
-            type="button"
-            data-testid={`order-action-reject-${displayId}`}
-            aria-label={`Rechazar insumo para la orden ${displayId}`}
-            disabled={pendingAction === 'reject'}
-            {...pointerAction(() => onRejectSupplies?.(order))}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                onRejectSupplies?.(order);
-              }
-            }}
-            style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
-          >
-            Rechazar insumo
-          </button>
-        </div>
-      )}
-
-      {/* Void Actions for IN_PREPARATION status (TASK-36, RF-26..29, ADR-0012) */}
-      {order.status === 'IN_PREPARATION' && (onAdminVoid || onChefVoid) && (
-        <div
-          data-testid={`order-void-actions-${displayId}`}
-          className="shrink-0 px-4 pb-2 pt-1.5 flex items-center gap-3 w-full bg-transparent"
-        >
-          {onAdminVoid && (!userRole || userRole === 'admin') && (
-            <button
-              type="button"
-              data-testid={`order-action-admin-void-${displayId}`}
-              aria-label={`Anulación administrativa para la orden ${displayId}`}
-              disabled={pendingAction === 'void-admin'}
-              {...pointerAction(() => onAdminVoid?.(order))}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onAdminVoid?.(order);
-                }
-              }}
-              style={{ minHeight: 64 }}
-              className="min-h-[64px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-amber-700 hover:bg-amber-600 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
-            >
-              Anular (Admin)
-            </button>
-          )}
-          {onChefVoid && (!userRole || userRole === 'chef' || userRole === 'admin') && (
-            <button
-              type="button"
-              data-testid={`order-action-chef-void-${displayId}`}
-              aria-label={`Anulación por error de cocina para la orden ${displayId}`}
-              disabled={pendingAction === 'void-kitchen'}
-              {...pointerAction(() => onChefVoid?.(order))}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onChefVoid?.(order);
-                }
-              }}
-              style={{ minHeight: 64 }}
-              className="min-h-[64px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-red-700 hover:bg-red-600 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
-            >
-              Anular (Cocina)
-            </button>
-          )}
-        </div>
-      )}
-      {order.status !== 'DELIVERED' && order.status !== 'PAID' && order.status !== 'CANCELLED' && (
-        <button
-          type="button"
-          data-testid={`order-action-ready-${displayId}`}
-          aria-label={`Orden lista para la orden ${displayId}`}
-          disabled={pendingAction === 'order-ready'}
-          {...pointerAction(() => onMarkOrderReady?.(order))}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              onMarkOrderReady?.(order);
-            }
-          }}
-          style={{ minHeight: 64 }}
-          className="shrink-0 mx-4 mb-3 min-h-[64px] min-h-[48px] rounded-md bg-green-700 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 active:scale-[.98] disabled:opacity-50"
-        >
-          Orden lista
-        </button>
-      )}
+      <OrderCardActions
+        order={order}
+        displayId={displayId}
+        pendingAction={pendingAction}
+        userRole={userRole}
+        onStartPreparation={onStartPreparation}
+        onRejectSupplies={onRejectSupplies}
+        onAdminVoid={onAdminVoid}
+        onChefVoid={onChefVoid}
+        onMarkOrderReady={onMarkOrderReady}
+      />
     </article>
   );
 }
