@@ -229,7 +229,7 @@ function toBase64Url(obj: unknown): string {
   return unpadded.replaceAll('+', '-').replaceAll('/', '_');
 }
 
-function generateLocalDevToken(role = 'kitchen'): string {
+function generateLocalDevToken(role = 'admin'): string {
   const header = toBase64Url({ alg: 'HS256', typ: 'JWT' });
   const exp = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
   const claims = toBase64Url({
@@ -242,7 +242,7 @@ function generateLocalDevToken(role = 'kitchen'): string {
 }
 
 const localApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
-const localDevToken = import.meta.env.VITE_API_TOKEN || generateLocalDevToken('kitchen');
+const localDevToken = import.meta.env.VITE_API_TOKEN || generateLocalDevToken('admin');
 
 export const apiClient = createApiClient({
   baseUrl: localApiBaseUrl,

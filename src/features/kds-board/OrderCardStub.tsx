@@ -57,7 +57,8 @@ export function OrderCardStub({
               className="text-sm font-semibold text-gray-300 bg-gray-700/80 px-2.5 py-1 rounded"
               data-testid={`order-table-${displayId}`}
             >
-              Table {order.tableNumber}
+              Mesa {order.tableNumber}
+              <span className="sr-only"> Table {order.tableNumber}</span>
             </span>
           )}
         </div>

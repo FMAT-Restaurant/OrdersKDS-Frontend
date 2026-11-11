@@ -105,5 +105,20 @@ export type Order = z.infer<typeof OrderSchema>;
 /**
  * Zod schema for KDS queue response.
  */
-export const KdsQueueResponseSchema = z.array(OrderSchema);
+export const KdsQueueResponseSchema = z.array(OrderSchema).transform((orders) =>
+  orders.map((order) => ({
+    ...order,
+    id:
+      order.id && /^\d+$/.test(order.id) && (order.orderId ?? order.publicId)
+        ? (order.orderId ?? order.publicId)
+        : order.id,
+    items: order.items.map((item) => ({
+      ...item,
+      id:
+        item.id && /^\d+$/.test(item.id) && (item.itemId ?? item.publicId)
+          ? (item.itemId ?? item.publicId)
+          : item.id,
+    })),
+  })),
+);
 export type KdsQueueResponse = z.infer<typeof KdsQueueResponseSchema>;

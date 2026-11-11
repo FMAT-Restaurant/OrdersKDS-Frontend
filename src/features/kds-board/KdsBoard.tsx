@@ -102,7 +102,7 @@ function KdsBoardContent({
 
   const handleAdminVoidConfirm = useCallback(
     async (order: Order) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
+      const orderId = order.orderId ?? order.publicId ?? order.id;
       if (orderId) {
         if (onAdminVoid) {
           onAdminVoid(order);
@@ -118,7 +118,7 @@ function KdsBoardContent({
 
   const handleChefVoidConfirm = useCallback(
     async (order: Order, note: string) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
+      const orderId = order.orderId ?? order.publicId ?? order.id;
       if (orderId) {
         if (onChefVoid) {
           onChefVoid(order, note);
@@ -134,27 +134,49 @@ function KdsBoardContent({
 
   const startPreparation = useCallback(
     (order: Order) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
+      const orderId = order.orderId ?? order.publicId ?? order.id;
       if (orderId) void runAction('start', `/orders/${orderId}/start-preparation`);
     },
     [runAction],
   );
 
-  const markItemReady = useCallback(
-    (order: Order, item: Order['items'][number]) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
-      const itemId = item.id ?? item.itemId ?? item.publicId;
-      if (orderId && itemId) void runAction(`item:${itemId}`, `/orders/${orderId}/items/${itemId}/ready`);
+  const rejectSupplies = useCallback(
+    (order: Order) => {
+      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const firstItem = order.items[0];
+      const itemId = firstItem?.itemId ?? firstItem?.publicId ?? firstItem?.id;
+      if (orderId && itemId) {
+        void runAction('reject', `/orders/${orderId}/items/${itemId}/kitchen-reject`, {
+          reason: 'Insumo físico insuficiente en cocina',
+        });
+      }
     },
     [runAction],
   );
 
-  const markOrderReady = useCallback(
-    (order: Order) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
-      if (orderId) void runAction('order-ready', `/orders/${orderId}/ready`);
+  const markItemReady = useCallback(
+    async (order: Order, item: Order['items'][number]) => {
+      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const itemId = item.itemId ?? item.publicId ?? item.id;
+      if (!orderId || !itemId) return;
+      if (order.status === 'RESERVED' && actionClient) {
+        await actionClient.patch(`/orders/${orderId}/start-preparation`);
+      }
+      await runAction(`item:${itemId}`, `/orders/${orderId}/items/${itemId}/ready`);
     },
-    [runAction],
+    [actionClient, runAction],
+  );
+
+  const markOrderReady = useCallback(
+    async (order: Order) => {
+      const orderId = order.orderId ?? order.publicId ?? order.id;
+      if (!orderId) return;
+      if (order.status === 'RESERVED' && actionClient) {
+        await actionClient.patch(`/orders/${orderId}/start-preparation`);
+      }
+      await runAction('order-ready', `/orders/${orderId}/ready`);
+    },
+    [actionClient, runAction],
   );
 
   // Dynamically derive available stations from current queue items, always including static "general"
@@ -310,7 +332,7 @@ function KdsBoardContent({
             order={order}
             onClick={onOrderSelect}
             onStartPreparation={onStartPreparation ?? startPreparation}
-            onRejectSupplies={onRejectSupplies}
+            onRejectSupplies={onRejectSupplies ?? rejectSupplies}
             onMarkOrderReady={markOrderReady}
             onItemReady={markItemReady}
             onAdminVoid={handleOpenAdminVoid}

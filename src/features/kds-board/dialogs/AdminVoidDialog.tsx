@@ -53,9 +53,9 @@ export function AdminVoidDialog({
       aria-modal="true"
       aria-labelledby="admin-void-dialog-title"
       data-testid="admin-void-dialog"
-      className="orders-kds-root fixed inset-0 z-50 m-0 p-6 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/75 border-none select-none"
+      className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/75 border-none select-none overflow-y-auto"
     >
-      <div className="w-full max-w-lg rounded-fmat bg-gray-900 border border-gray-700 p-6 text-white shadow-2xl flex flex-col gap-5">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-fmat bg-gray-900 border border-gray-700 p-5 text-white shadow-2xl flex flex-col gap-4">
         <header className="flex items-center justify-between border-b border-gray-800 pb-3">
           <h2 id="admin-void-dialog-title" className="text-2xl font-black text-white">
             Anulación Administrativa #{displayId}
@@ -80,7 +80,7 @@ export function AdminVoidDialog({
           </div>
         )}
 
-        <footer className="flex items-center justify-end gap-4 pt-2 border-t border-gray-800">
+        <footer className="sticky -bottom-5 bg-gray-900 flex items-center justify-end gap-4 pt-3 pb-1 border-t border-gray-800 shrink-0 -mx-5 px-5">
           <button
             type="button"
             data-testid="admin-void-cancel"

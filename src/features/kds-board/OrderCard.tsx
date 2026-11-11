@@ -165,10 +165,24 @@ export function OrderCard({
   // If absent, falls back to `stock_reserved_at` or `stockReservedAt`. NEVER from `createdAt`.
   const inPrepAt = order.in_preparation_at ?? order.inPreparationAt ?? null;
   const stockReservedAt = order.stock_reserved_at ?? order.stockReservedAt ?? null;
-  const { formattedTime, delayStatus, delayLabel, delayColorToken } = useElapsedTime(
+  const isDelivered = order.status === 'DELIVERED';
+  const hasRedoPending = isDelivered && order.items.some((item) => item.status === 'PENDING');
+  const isFinished = isDelivered && !hasRedoPending;
+
+  const rawElapsedTime = useElapsedTime(
     inPrepAt,
     stockReservedAt,
+    isFinished && order.updatedAt ? { endTime: order.updatedAt } : undefined,
   );
+
+  const { formattedTime, delayStatus, delayLabel, delayColorToken } = isFinished
+    ? {
+        ...rawElapsedTime,
+        delayStatus: 'on_time' as const,
+        delayLabel: 'Entregada' as const,
+        delayColorToken: 'var(--color-success)' as const,
+      }
+    : rawElapsedTime;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.code === 'NumpadEnter' || event.key === ' ') {
@@ -190,7 +204,8 @@ export function OrderCard({
         className="text-2xl font-black text-white tracking-wide"
         data-testid={`order-table-${displayId}`}
       >
-        Table {order.tableNumber}
+        Mesa {order.tableNumber}
+        <span className="sr-only"> Table {order.tableNumber}</span>
       </span>
     );
   } else if (order.isTakeaway) {
