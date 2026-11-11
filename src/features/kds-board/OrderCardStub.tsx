@@ -19,6 +19,14 @@ export function OrderCardStub({
   isFocused = false,
 }: Readonly<OrderCardStubProps>) {
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(displayId);
+  const orderNumberDisplay =
+    order.orderNumber != null
+      ? String(order.orderNumber)
+      : isUuid
+      ? displayId.slice(-4).toUpperCase()
+      : displayId.replace(/^ord-/, '');
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -50,11 +58,12 @@ export function OrderCardStub({
             className="text-2xl font-bold font-mono tracking-wider text-ink"
             data-testid={`order-id-${displayId}`}
           >
-            #{displayId}
+            #{orderNumberDisplay}
+            <span className="sr-only">#{displayId}</span>
           </span>
           {order.tableNumber !== null && order.tableNumber !== undefined && (
             <span
-              className="text-sm font-semibold text-body bg-gray-100 px-2.5 py-1 rounded border border-border"
+              className="text-sm font-semibold text-body bg-gray-100 px-2.5 py-1 rounded border border-border whitespace-nowrap"
               data-testid={`order-table-${displayId}`}
             >
               Mesa {order.tableNumber}

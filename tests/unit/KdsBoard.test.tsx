@@ -976,6 +976,33 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       });
     });
 
+    it('displays action feedback toast on success and supports manual dismissal (User Requirement 5)', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-101'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('kds-action-feedback')).toBeInTheDocument();
+      });
+
+      const dismissBtn = screen.getByRole('button', { name: 'Cerrar notificación' });
+      fireEvent.click(dismissBtn);
+      expect(screen.queryByTestId('kds-action-feedback')).not.toBeInTheDocument();
+    });
+
     it('opens and confirms AdminVoidDialog from KdsBoard and dispatches void request', async () => {
       const mockClient = {
         get: vi.fn().mockResolvedValue(mockKdsQueue),

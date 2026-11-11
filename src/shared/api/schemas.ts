@@ -80,6 +80,7 @@ export const OrderSchema = z.object({
   id: z.string().optional(),
   publicId: z.string().optional(),
   orderId: z.string().optional(),
+  orderNumber: z.number().int().positive().nullable().optional(),
   tableNumber: z.number().int().positive().nullable().optional(),
   isTakeaway: z.boolean().optional(),
   status: OrderStatusSchema,

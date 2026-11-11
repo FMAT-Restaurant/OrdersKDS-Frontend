@@ -20,11 +20,11 @@ const ChefVoidJustificationSchema = z
     { message: 'At least one quick reason or non-empty text note is required (RF-29).' },
   );
 
-const QUICK_REASONS: readonly string[] = [
-  'Quemado',
-  'Caído',
-  'Contaminación cruzada',
-  'Falla de equipo',
+const QUICK_REASONS: readonly { readonly label: string; readonly description: string }[] = [
+  { label: 'Quemado', description: 'Platillo sobrecocinado o carbonizado' },
+  { label: 'Caído', description: 'Derrame o caída accidental en cocina' },
+  { label: 'Contaminación cruzada', description: 'Contacto indebido con alérgenos o insumos' },
+  { label: 'Falla de equipo', description: 'Avería en horno, plancha u otro equipo' },
 ];
 
 export interface ChefVoidDialogProps {
@@ -96,7 +96,7 @@ export function ChefVoidDialog({
       data-testid="chef-void-dialog"
       className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto"
     >
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
         <header className="flex items-center justify-between border-b border-border pb-3">
           <h2 id="chef-void-dialog-title" className="text-2xl font-black text-ink">
             Anulación por Error de Cocina #{displayId}
@@ -129,24 +129,34 @@ export function ChefVoidDialog({
             data-testid="chef-quick-reasons-grid"
             className="grid grid-cols-2 gap-3"
           >
-            {QUICK_REASONS.map((reason, idx) => {
-              const isSelected = selectedReasons.includes(reason);
+            {QUICK_REASONS.map((item, idx) => {
+              const isSelected = selectedReasons.includes(item.label);
               return (
                 <button
-                  key={reason}
+                  key={item.label}
                   type="button"
                   disabled={!isOperable || isSubmitting}
                   aria-pressed={isSelected}
+                  aria-label={item.label}
                   data-testid={`chef-reason-${idx}`}
-                  {...pointerAction(() => toggleReason(reason))}
+                  {...pointerAction(() => toggleReason(item.label))}
                   style={{ minHeight: 64, minWidth: 64 }}
-                  className={`min-h-[64px] min-w-[64px] px-4 py-3 rounded-md font-bold text-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed ${
+                  className={`min-h-[64px] min-w-[64px] px-4 py-2.5 rounded-control font-bold text-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed text-left ${
                     isSelected
                       ? 'bg-fmat-primary text-white border-fmat-primary shadow-sm'
                       : 'bg-surface text-ink border border-border hover:bg-fmat-soft hover:border-fmat-primary'
                   }`}
                 >
-                  {reason}
+                  <div className="flex flex-col items-start">
+                    <span className="font-bold text-base sm:text-lg leading-tight">{item.label}</span>
+                    <span
+                      className={`text-xs font-normal mt-0.5 leading-snug ${
+                        isSelected ? 'text-white/90' : 'text-muted'
+                      }`}
+                    >
+                      {item.description}
+                    </span>
+                  </div>
                 </button>
               );
             })}

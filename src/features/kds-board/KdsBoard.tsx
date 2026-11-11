@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
@@ -50,7 +50,29 @@ function KdsBoardContent({
   const [page, setPage] = useState<number>(1);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<{
+    text: string;
+    type: 'success' | 'info';
+  } | null>(null);
   const queryClient = useQueryClient();
+
+  // Auto-dismiss action error after 15 seconds (User Requirement 3)
+  useEffect(() => {
+    if (!actionError) return;
+    const timer = setTimeout(() => {
+      setActionError(null);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [actionError]);
+
+  // Auto-dismiss action feedback after 5 seconds (User Requirement 5)
+  useEffect(() => {
+    if (!feedbackMessage) return;
+    const timer = setTimeout(() => {
+      setFeedbackMessage(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [feedbackMessage]);
 
   // Consume GET /kds/queue?view=active | delivered
   const { data, isLoading, isError, error } = useKdsQueue({
@@ -68,7 +90,12 @@ function KdsBoardContent({
   }, [client, tokenProvider]);
 
   const runAction = useCallback(
-    async (key: string, path: string, body?: unknown) => {
+    async (
+      key: string,
+      path: string,
+      body?: unknown,
+      successMsg?: { text: string; type: 'success' | 'info' },
+    ) => {
       if (!actionClient || pendingAction) return;
       setPendingAction(key);
       setActionError(null);
@@ -79,6 +106,9 @@ function KdsBoardContent({
           await actionClient.patch(path);
         }
         await queryClient.invalidateQueries({ queryKey: ['kds'] });
+        if (successMsg) {
+          setFeedbackMessage(successMsg);
+        }
       } catch (error_) {
         setActionError(
           error_ instanceof Error ? error_.message : 'No se pudo completar la acción.',
@@ -107,7 +137,10 @@ function KdsBoardContent({
         if (onAdminVoid) {
           onAdminVoid(order);
         } else {
-          await runAction('void-admin', `/orders/${orderId}/void`);
+          await runAction('void-admin', `/orders/${orderId}/void`, undefined, {
+            text: `Comanda #${order.orderNumber ?? orderId} anulada por administración.`,
+            type: 'info',
+          });
         }
         setVoidDialogOrder(null);
         setVoidDialogType(null);
@@ -123,7 +156,15 @@ function KdsBoardContent({
         if (onChefVoid) {
           onChefVoid(order, note);
         } else {
-          await runAction('void-kitchen', `/orders/${orderId}/void-kitchen-error`, { note });
+          await runAction(
+            'void-kitchen',
+            `/orders/${orderId}/void-kitchen-error`,
+            { note },
+            {
+              text: `Comanda #${order.orderNumber ?? orderId} anulada por error de cocina.`,
+              type: 'info',
+            },
+          );
         }
         setVoidDialogOrder(null);
         setVoidDialogType(null);
@@ -135,7 +176,12 @@ function KdsBoardContent({
   const startPreparation = useCallback(
     (order: Order) => {
       const orderId = order.orderId ?? order.publicId ?? order.id;
-      if (orderId) void runAction('start', `/orders/${orderId}/start-preparation`);
+      if (orderId) {
+        void runAction('start', `/orders/${orderId}/start-preparation`, undefined, {
+          text: `Comanda #${order.orderNumber ?? orderId} en preparación.`,
+          type: 'info',
+        });
+      }
     },
     [runAction],
   );
@@ -146,9 +192,17 @@ function KdsBoardContent({
       const firstItem = order.items[0];
       const itemId = firstItem?.itemId ?? firstItem?.publicId ?? firstItem?.id;
       if (orderId && itemId) {
-        void runAction('reject', `/orders/${orderId}/items/${itemId}/kitchen-reject`, {
-          reason: 'Insumo físico insuficiente en cocina',
-        });
+        void runAction(
+          'reject',
+          `/orders/${orderId}/items/${itemId}/kitchen-reject`,
+          {
+            reason: 'Insumo físico insuficiente en cocina',
+          },
+          {
+            text: `Comanda #${order.orderNumber ?? orderId} rechazada por falta de insumos.`,
+            type: 'info',
+          },
+        );
       }
     },
     [runAction],
@@ -162,7 +216,10 @@ function KdsBoardContent({
       if (order.status === 'RESERVED' && actionClient) {
         await actionClient.patch(`/orders/${orderId}/start-preparation`);
       }
-      await runAction(`item:${itemId}`, `/orders/${orderId}/items/${itemId}/ready`);
+      await runAction(`item:${itemId}`, `/orders/${orderId}/items/${itemId}/ready`, undefined, {
+        text: `${item.name} marcado como listo.`,
+        type: 'success',
+      });
     },
     [actionClient, runAction],
   );
@@ -174,7 +231,10 @@ function KdsBoardContent({
       if (order.status === 'RESERVED' && actionClient) {
         await actionClient.patch(`/orders/${orderId}/start-preparation`);
       }
-      await runAction('order-ready', `/orders/${orderId}/ready`);
+      await runAction('order-ready', `/orders/${orderId}/ready`, undefined, {
+        text: `Comanda #${order.orderNumber ?? orderId} marcada como lista.`,
+        type: 'success',
+      });
     },
     [actionClient, runAction],
   );
@@ -411,9 +471,53 @@ function KdsBoardContent({
         aria-label="Cuadrícula de comandas KDS"
         className="flex-1 min-h-0 p-6 overflow-hidden flex flex-col justify-center bg-canvas"
       >
+        {feedbackMessage && (
+          <div
+            role="status"
+            data-testid="kds-action-feedback"
+            className={`mb-3 rounded-control border px-4 py-2.5 text-sm sm:text-base font-semibold flex items-center justify-between shadow-sm ${
+              feedbackMessage.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-blue-50 border-blue-200 text-blue-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
+                  feedbackMessage.type === 'success' ? 'bg-emerald-600' : 'bg-blue-600'
+                }`}
+              />
+              <span>{feedbackMessage.text}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFeedbackMessage(null)}
+              aria-label="Cerrar notificación"
+              className="text-body hover:text-ink font-bold px-2 py-0.5 rounded hover:bg-black/5"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {actionError && (
-          <div role="alert" className="mb-3 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-red-700 font-medium">
-            {actionError}
+          <div
+            role="alert"
+            data-testid="kds-action-error"
+            className="mb-3 rounded-control bg-red-50 border border-red-300 px-4 py-2.5 text-red-800 font-medium flex items-center justify-between shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block shrink-0" />
+              <span>{actionError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              aria-label="Cerrar mensaje de error"
+              className="text-red-700 hover:text-red-900 font-bold px-2 py-0.5 rounded hover:bg-red-100/60"
+            >
+              ✕
+            </button>
           </div>
         )}
         {gridContent}

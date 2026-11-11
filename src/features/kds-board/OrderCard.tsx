@@ -40,64 +40,36 @@ function OrderCardItem({
 }>) {
   const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
+  const isFinished = item.status === 'READY' || item.status === 'DELIVERED';
 
   return (
     <li
       data-testid={`order-item-${itemId}`}
       style={{ minHeight: isCompact ? 44 : 64 }}
       data-redo-pending={isRedoPending ? 'true' : undefined}
-      className={`border-b border-border last:border-b-0 flex flex-col gap-1 ${
-        isCompact ? 'min-h-[44px]' : 'min-h-[64px]'
+      className={`border-b border-border last:border-b-0 flex flex-col justify-center py-2 gap-1 ${
+        isCompact ? 'min-h-[44px] py-1' : 'min-h-[64px] py-2'
       } ${
         isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-50 px-2' : ''
       }`}
     >
-      <button
-        type="button"
-        data-testid={`order-item-action-${itemId}`}
-        disabled={
-          item.status === 'READY' ||
-          item.status === 'DELIVERED' ||
-          isPending
-        }
-        aria-label={`Marcar ${item.name} como listo`}
-        {...pointerAction(() => {
-          if (item.status !== 'READY' && item.status !== 'DELIVERED') onReady?.();
-        })}
-        onKeyDown={(event) => {
-          if (
-            (event.key === 'Enter' || event.key === ' ') &&
-            item.status !== 'READY' &&
-            item.status !== 'DELIVERED'
-          ) {
-            event.preventDefault();
-            onReady?.();
-          }
-        }}
-        className={`w-full text-left flex flex-col justify-center bg-transparent border-0 ${
-          isCompact ? 'min-h-[44px] py-1' : 'min-h-[64px] py-2'
-        } ${
-          item.status === 'READY' || item.status === 'DELIVERED'
-            ? 'opacity-60 cursor-default'
-            : 'cursor-pointer active:bg-gray-100'
-        } focus:outline-none`}
-      >
-        <div className="flex items-baseline justify-between gap-2">
-          <div className="flex items-baseline gap-2.5">
-            <span
-              className="text-lg font-black text-fmat-primary min-w-[28px]"
-              data-testid={`order-item-qty-${itemId}`}
-            >
-              {item.quantity}x
-            </span>
-            <span
-              className="text-lg font-bold text-ink leading-tight"
-              data-testid={`order-item-name-${itemId}`}
-            >
-              {item.name}
-            </span>
-          </div>
+      <div className="flex items-start justify-between gap-2 w-full">
+        <div className="flex items-baseline gap-2.5 min-w-0 flex-1">
+          <span
+            className="text-lg font-black text-fmat-primary min-w-[28px] shrink-0"
+            data-testid={`order-item-qty-${itemId}`}
+          >
+            {item.quantity}x
+          </span>
+          <span
+            className="text-base sm:text-lg font-bold text-ink leading-tight break-words"
+            data-testid={`order-item-name-${itemId}`}
+          >
+            {item.name}
+          </span>
+        </div>
 
+        <div className="flex items-center gap-1.5 shrink-0">
           {prepTime && (
             <span
               className="text-xs font-mono font-semibold text-muted bg-gray-100 border border-border px-2 py-0.5 rounded shrink-0"
@@ -106,46 +78,83 @@ function OrderCardItem({
               {prepTime}
             </span>
           )}
+
+          {/* Dedicated Checkmark Ready Action Button (RF-09, RF-10) */}
+          <button
+            type="button"
+            data-testid={`order-item-action-${itemId}`}
+            disabled={isFinished || isPending}
+            aria-label={`Marcar ${item.name} como listo`}
+            {...pointerAction(() => {
+              if (!isFinished) onReady?.();
+            })}
+            onKeyDown={(event) => {
+              if ((event.key === 'Enter' || event.key === ' ') && !isFinished) {
+                event.preventDefault();
+                onReady?.();
+              }
+            }}
+            className={`min-h-[36px] px-2.5 py-1 rounded-[6px] text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+              isFinished
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-80'
+                : 'bg-white hover:bg-emerald-50 active:bg-emerald-100 text-body hover:text-emerald-700 border border-border hover:border-emerald-300 cursor-pointer shadow-sm'
+            }`}
+          >
+            {isFinished ? (
+              <>
+                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Listo</span>
+              </>
+            ) : (
+              <>
+                <span className="w-3.5 h-3.5 rounded-full border border-gray-400 inline-block shrink-0" />
+                <span>Listo</span>
+              </>
+            )}
+          </button>
         </div>
+      </div>
 
-        {item.modifiers && item.modifiers.length > 0 && (
-          <div
-            className="pl-8 flex flex-wrap gap-1.5 mt-0.5"
-            data-testid={`order-item-modifiers-${itemId}`}
-          >
-            {item.modifiers.map((modifier, modIdx) => (
-              <span
-                key={`${itemId}-mod-${modIdx}`}
-                className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-100 text-body border border-border ${
-                  isCompact ? 'text-[11px]' : 'text-xs'
-                }`}
-                data-testid={`order-item-modifier-${itemId}-${modIdx}`}
-              >
-                + {modifier}
-              </span>
-            ))}
-          </div>
-        )}
+      {item.modifiers && item.modifiers.length > 0 && (
+        <div
+          className="pl-8 flex flex-wrap gap-1.5 mt-0.5"
+          data-testid={`order-item-modifiers-${itemId}`}
+        >
+          {item.modifiers.map((modifier, modIdx) => (
+            <span
+              key={`${itemId}-mod-${modIdx}`}
+              className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-100 text-body border border-border ${
+                isCompact ? 'text-[11px]' : 'text-xs'
+              }`}
+              data-testid={`order-item-modifier-${itemId}-${modIdx}`}
+            >
+              + {modifier}
+            </span>
+          ))}
+        </div>
+      )}
 
-        {item.notes && (
-          <div
-            className="pl-8 text-sm text-body italic flex items-start gap-1"
-            data-testid={`order-item-notes-${itemId}`}
-          >
-            <span className="font-bold not-italic shrink-0 text-ink">Nota:</span>
-            <span className="sr-only">Note:</span>
-            <span className="break-words">{item.notes}</span>
-          </div>
-        )}
-        {isRedoPending && (
-          <output
-            data-testid={`redo-pending-${itemId}`}
-            className="pl-8 text-xs font-black uppercase tracking-wide text-amber-800 block"
-          >
-            Rehacer pendiente
-          </output>
-        )}
-      </button>
+      {item.notes && (
+        <div
+          className="pl-8 text-sm text-body italic flex items-start gap-1"
+          data-testid={`order-item-notes-${itemId}`}
+        >
+          <span className="font-bold not-italic shrink-0 text-ink">Nota:</span>
+          <span className="sr-only">Note:</span>
+          <span className="break-words">{item.notes}</span>
+        </div>
+      )}
+
+      {isRedoPending && (
+        <output
+          data-testid={`redo-pending-${itemId}`}
+          className="pl-8 text-xs font-black uppercase tracking-wide text-amber-800 block"
+        >
+          Rehacer pendiente
+        </output>
+      )}
     </li>
   );
 }
@@ -184,7 +193,7 @@ function TableHeader({
   if (tableNumber !== null && tableNumber !== undefined) {
     return (
       <span
-        className="text-2xl font-black text-white tracking-wide"
+        className="text-xl sm:text-2xl font-black text-white tracking-wide whitespace-nowrap"
         data-testid={`order-table-${displayId}`}
       >
         Mesa {tableNumber}{' '}
@@ -195,7 +204,7 @@ function TableHeader({
   if (isTakeaway) {
     return (
       <span
-        className="text-xl font-black text-amber-300 uppercase tracking-wider"
+        className="text-lg sm:text-xl font-black text-amber-200 uppercase tracking-wider whitespace-nowrap"
         data-testid={`order-takeaway-${displayId}`}
       >
         Para llevar{' '}
@@ -347,6 +356,17 @@ export function OrderCard({
   isFocused = false,
 }: Readonly<OrderCardProps>) {
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(displayId);
+  const orderNumberDisplay =
+    order.orderNumber != null
+      ? String(order.orderNumber)
+      : isUuid
+      ? displayId.slice(-4).toUpperCase()
+      : displayId.replace(/^ord-/, '');
+  const hasTableHeader =
+    (order.tableNumber !== null && order.tableNumber !== undefined) || order.isTakeaway;
+
   const [isCompact, setIsCompact] = useState(order.items.length >= 5);
 
   const { inPrepAt, stockReservedAt, isFinished } = getStopwatchState(order);
@@ -399,18 +419,22 @@ export function OrderCard({
         }`}
       >
         <div className="flex items-center justify-between gap-2 w-full min-w-0">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 whitespace-nowrap overflow-hidden">
             <TableHeader
               tableNumber={order.tableNumber}
               isTakeaway={order.isTakeaway}
               displayId={displayId}
             />
+            {hasTableHeader && (
+              <span className="text-white/80 font-mono font-bold text-sm">·</span>
+            )}
             <span
-              className="text-sm font-bold font-mono tracking-wider text-white/90 truncate max-w-[120px]"
+              className="text-sm sm:text-base font-bold font-mono tracking-wider text-white truncate"
               data-testid={`order-id-${displayId}`}
               title={`#${displayId}`}
             >
-              #{displayId}
+              #{orderNumberDisplay}
+              <span className="sr-only">#{displayId}</span>
             </span>
           </div>
 

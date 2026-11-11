@@ -860,6 +860,23 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(onItemReady).toHaveBeenCalledTimes(3);
     });
 
+    it('does not trigger onItemReady when clicking on dish notes, modifiers or name (User Requirement 4)', () => {
+      const onItemReady = vi.fn();
+      render(<OrderCard order={reservedOrder} onItemReady={onItemReady} />);
+
+      const notesElement = screen.getByTestId('order-item-notes-dish-1');
+      fireEvent.click(notesElement);
+      expect(onItemReady).not.toHaveBeenCalled();
+
+      const nameElement = screen.getByTestId('order-item-name-dish-1');
+      fireEvent.click(nameElement);
+      expect(onItemReady).not.toHaveBeenCalled();
+
+      const modElement = screen.getByTestId('order-item-modifier-dish-1-0');
+      fireEvent.click(modElement);
+      expect(onItemReady).not.toHaveBeenCalled();
+    });
+
     it('renders item safely when optional fields are omitted or pendingAction matches', () => {
       const minimalOrder: Order = {
         ...reservedOrder,

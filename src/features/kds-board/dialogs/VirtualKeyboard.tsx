@@ -42,7 +42,7 @@ export function VirtualKeyboard({
       {KEYBOARD_ROWS.map((row, rowIndex) => (
         <div
           key={`kb-row-${rowIndex}`}
-          className="flex flex-wrap justify-center gap-2"
+          className="flex flex-nowrap justify-center gap-1.5 sm:gap-2 w-full"
         >
           {row.map((letter) => (
             <button
@@ -53,7 +53,7 @@ export function VirtualKeyboard({
               aria-label={`Tecla ${letter}`}
               {...pointerAction(() => handleKeyPress(letter))}
               style={{ minHeight: 64, minWidth: 64 }}
-              className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-md bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+              className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-control bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center select-none"
             >
               {letter}
             </button>
@@ -61,7 +61,7 @@ export function VirtualKeyboard({
         </div>
       ))}
 
-      <div className="flex flex-wrap justify-center gap-2 mt-1">
+      <div className="flex flex-nowrap justify-center gap-2 mt-1 w-full">
         <button
           type="button"
           disabled={disabled}
@@ -69,7 +69,7 @@ export function VirtualKeyboard({
           aria-label="Espacio"
           {...pointerAction(handleSpace)}
           style={{ minHeight: 64, minWidth: 64 }}
-          className="min-h-[64px] min-w-[64px] flex-1 max-w-xs px-6 py-2 rounded-md bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+          className="min-h-[64px] min-w-[64px] flex-1 max-w-sm px-6 py-2 rounded-control bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
         >
           Espacio
         </button>
@@ -80,7 +80,7 @@ export function VirtualKeyboard({
           aria-label="Borrar"
           {...pointerAction(handleBackspace)}
           style={{ minHeight: 64, minWidth: 64 }}
-          className="min-h-[64px] min-w-[64px] px-6 py-2 rounded-md bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 font-bold text-lg border border-red-300 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+          className="min-h-[64px] min-w-[64px] px-6 py-2 rounded-control bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 font-bold text-lg border border-red-300 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
         >
           Borrar
         </button>
