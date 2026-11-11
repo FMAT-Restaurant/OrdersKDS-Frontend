@@ -187,8 +187,8 @@ function TableHeader({
         className="text-2xl font-black text-white tracking-wide"
         data-testid={`order-table-${displayId}`}
       >
-        Mesa {tableNumber}
-        <span className="sr-only"> Table {tableNumber}</span>
+        Mesa {tableNumber}{' '}
+        <span className="sr-only">Table {tableNumber}</span>
       </span>
     );
   }
@@ -198,8 +198,8 @@ function TableHeader({
         className="text-xl font-black text-amber-300 uppercase tracking-wider"
         data-testid={`order-takeaway-${displayId}`}
       >
-        Para llevar
-        <span className="sr-only"> Takeaway</span>
+        Para llevar{' '}
+        <span className="sr-only">Takeaway</span>
       </span>
     );
   }

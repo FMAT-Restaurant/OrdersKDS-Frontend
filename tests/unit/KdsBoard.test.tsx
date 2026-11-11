@@ -46,6 +46,7 @@ function generateOrders(count: number): Order[] {
         {
           id: `item-${index}`,
           itemId: `item-${index}`,
+          dishId: `dish-${index}`,
           name: `Dish ${index + 1}`,
           quantity: 1,
           unitPrice: 50,
@@ -603,6 +604,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
           items: [
             {
               id: 'it-empty',
+              dishId: 'dish-soda',
               name: 'Soda',
               quantity: 1,
               unitPrice: 50,
