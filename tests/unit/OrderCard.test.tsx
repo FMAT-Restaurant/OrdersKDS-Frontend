@@ -1100,5 +1100,37 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(stopwatch).toHaveAttribute('data-delay-status', 'on_time');
       expect(screen.getByTestId('order-delay-label-ord-reserved-1')).toHaveTextContent('Entregada');
     });
+
+    it('applies compact layout styling when isCompact is true', () => {
+      const inPrepOrder: Order = { ...reservedOrder, status: OrderStatus.IN_PREPARATION };
+      const { rerender } = render(
+        <OrderCard order={inPrepOrder} isCompact={true} />,
+      );
+
+      const headerStub = screen.getByTestId('order-card-stub-ord-reserved-1');
+      expect(headerStub).toHaveClass('p-2');
+
+      const footerBtn = screen.getByTestId('order-card-footer-ord-reserved-1');
+      expect(footerBtn).toHaveClass('text-[11px]');
+
+      const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
+      expect(readyBtn).toHaveStyle({ minHeight: '48px' });
+
+      // Rerender with normal layout
+      rerender(<OrderCard order={inPrepOrder} isCompact={false} />);
+      expect(headerStub).toHaveClass('p-3');
+      expect(footerBtn).toHaveClass('text-xs');
+      expect(readyBtn).toHaveStyle({ minHeight: '64px' });
+    });
+
+    it('triggers onClick when the footer is clicked to view order details', () => {
+      const inPrepOrder: Order = { ...reservedOrder, status: OrderStatus.IN_PREPARATION };
+      const onClick = vi.fn();
+      render(<OrderCard order={inPrepOrder} onClick={onClick} />);
+
+      const footerBtn = screen.getByTestId('order-card-footer-ord-reserved-1');
+      fireEvent.click(footerBtn);
+      expect(onClick).toHaveBeenCalledWith(inPrepOrder);
+    });
   });
 });

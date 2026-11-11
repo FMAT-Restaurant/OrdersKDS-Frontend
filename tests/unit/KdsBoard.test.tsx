@@ -804,7 +804,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-card-stub-ord-101')).toBeInTheDocument();
@@ -917,7 +917,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-start-ord-res-default')).toBeInTheDocument();
@@ -940,7 +940,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
@@ -964,7 +964,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
@@ -992,7 +992,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
@@ -1019,7 +1019,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-admin-void-ord-101')).toBeInTheDocument();
@@ -1048,7 +1048,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-chef-void-ord-101')).toBeInTheDocument();
@@ -1138,7 +1138,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-ready-ord-inprep-1')).toBeInTheDocument();
@@ -1171,7 +1171,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-start-ord-res-noprep')).toBeInTheDocument();
@@ -1201,7 +1201,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-reject-ord-res-reject')).toBeInTheDocument();
@@ -1241,7 +1241,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-reject-ord-res-cancel-reject')).toBeInTheDocument();
@@ -1320,7 +1320,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-item-action-item-last-pending')).toBeInTheDocument();
@@ -1358,7 +1358,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       // Wait for items to render
       await vi.waitFor(() => {
@@ -1380,6 +1380,183 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       });
 
       vi.useRealTimers();
+    });
+
+    it('opens OrderDetailsDialog when an order card header or footer is clicked', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([mockOrder1]),
+        post: vi.fn(),
+        patch: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={createTestQueryClient()}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-101')).toBeInTheDocument();
+      });
+
+      // Initially no modal dialog
+      expect(screen.queryByTestId('order-details-dialog')).not.toBeInTheDocument();
+
+      // Click card stub
+      fireEvent.click(screen.getByTestId('order-card-stub-ord-101'));
+
+      // Modal dialog is opened
+      expect(await screen.findByTestId('order-details-dialog')).toBeInTheDocument();
+      expect(screen.getByTestId('order-details-table')).toHaveTextContent('Mesa 4');
+
+      // Click close button
+      fireEvent.click(screen.getByTestId('order-details-close-btn'));
+      expect(screen.queryByTestId('order-details-dialog')).not.toBeInTheDocument();
+    });
+
+    it('responsively enables compact card layout when there are more than 4 orders on the board', async () => {
+      // 5 orders on screen
+      const fiveOrders: Order[] = Array.from({ length: 5 }, (_, i) => ({
+        ...mockOrder1,
+        id: `ord-multi-${i + 1}`,
+        orderId: `ord-multi-${i + 1}`,
+        orderNumber: 200 + i,
+      }));
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(fiveOrders),
+        post: vi.fn(),
+        patch: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={createTestQueryClient()}
+          pageSize={8}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-multi-1')).toBeInTheDocument();
+      });
+
+      // With 5 orders (> 4), compact layout padding is applied (p-2 instead of p-3)
+      expect(screen.getByTestId('order-card-stub-ord-multi-1')).toHaveClass('p-2');
+    });
+
+    it('keeps spacious card layout when there are 4 or fewer orders on the board', async () => {
+      // 2 orders on screen (mockKdsQueue has 2 active orders)
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={createTestQueryClient()}
+          pageSize={8}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-101')).toBeInTheDocument();
+      });
+
+      // With 2 orders (<= 4), normal spacious layout padding is retained (p-3 instead of p-2)
+      expect(screen.getByTestId('order-card-stub-ord-101')).toHaveClass('p-3');
+    });
+
+    it('opens ConfirmReadyDialog over OrderDetailsDialog when the last pending item is clicked from inside the dialog', async () => {
+      const orderWithOnePending: Order = {
+        id: 'ord-last-pending',
+        orderId: 'ord-last-pending',
+        orderNumber: 55,
+        tableNumber: 7,
+        isTakeaway: false,
+        status: OrderStatus.IN_PREPARATION,
+        version: 1,
+        totalAmount: 120,
+        createdAt: '2026-11-11T12:00:00Z',
+        items: [
+          {
+            id: 'item-done',
+            itemId: 'item-done',
+            dishId: 'dish-done',
+            name: 'Guacamole',
+            quantity: 1,
+            unitPrice: 50,
+            status: ItemStatus.READY,
+            station: 'frio',
+            version: 1,
+          },
+          {
+            id: 'item-last',
+            itemId: 'item-last',
+            dishId: 'dish-last',
+            name: 'Hamburguesa',
+            quantity: 1,
+            unitPrice: 70,
+            status: ItemStatus.PENDING,
+            station: 'parrilla',
+            version: 1,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([orderWithOnePending]),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({}),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={createTestQueryClient()}
+          undoGracePeriodMs={0}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-last-pending')).toBeInTheDocument();
+      });
+
+      // 1. Open individual order details dialog
+      fireEvent.click(screen.getByTestId('order-card-stub-ord-last-pending'));
+      expect(await screen.findByTestId('order-details-dialog')).toBeInTheDocument();
+
+      // 2. Click the ready button for the last pending item inside OrderDetailsDialog
+      const readyBtn = screen.getByTestId('order-details-item-action-item-last');
+      expect(readyBtn).toBeInTheDocument();
+      fireEvent.click(readyBtn);
+
+      // 3. ConfirmReadyDialog must open AND be rendered on top
+      expect(await screen.findByTestId('confirm-ready-dialog')).toBeInTheDocument();
+
+      // Both dialogs exist in DOM, with ConfirmReadyDialog styled with z-[60] over OrderDetailsDialog z-50
+      const detailsDialog = screen.getByTestId('order-details-dialog');
+      const confirmDialog = screen.getByTestId('confirm-ready-dialog');
+      expect(detailsDialog).toHaveClass('z-50');
+      expect(confirmDialog).toHaveClass('z-[60]');
+
+      // 4. Confirming via ConfirmReadyDialog dispatches order ready and leaves OrderDetailsDialog intact
+      fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('confirm-ready-dialog')).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId('order-details-dialog')).toBeInTheDocument();
     });
   });
 });

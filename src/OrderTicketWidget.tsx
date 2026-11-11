@@ -34,6 +34,8 @@ export interface OrderTicketWidgetProps {
   readonly apiBaseUrl?: string;
   readonly webSocketBaseUrl?: string;
   readonly diningSessionId?: string;
+  readonly fetchFn?: typeof fetch;
+  readonly WebSocketClass?: typeof WebSocket;
 }
 
 interface EditableOrderItem {
@@ -522,11 +524,13 @@ function OrderTicket({
   apiBaseUrl,
   webSocketBaseUrl,
   diningSessionId: propDiningSessionId,
+  fetchFn,
+  WebSocketClass,
 }: Readonly<OrderTicketWidgetProps>) {
   const client = useQueryClient();
   const api = useMemo(
-    () => createApiClient({ baseUrl: apiBaseUrl, tokenProvider }),
-    [apiBaseUrl, tokenProvider],
+    () => createApiClient({ baseUrl: apiBaseUrl, tokenProvider, fetchFn }),
+    [apiBaseUrl, tokenProvider, fetchFn],
   );
   const queryKey = useMemo(() => [...ORDER_QUERY_PREFIX, orderId], [orderId]);
   const channels = useMemo(() => ['floor', `user:${userId}`], [userId]);
@@ -653,6 +657,7 @@ function OrderTicket({
     channels,
     queryClient: client,
     baseUrl: webSocketBaseUrl,
+    WebSocketClass,
     onOrderStatusChanged: handleOrderStatusChanged,
   });
 
