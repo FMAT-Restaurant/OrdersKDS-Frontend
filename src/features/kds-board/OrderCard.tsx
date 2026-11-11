@@ -50,10 +50,10 @@ function OrderCardItem({
   return (
     <li
       data-testid={`order-item-${itemId}`}
-      style={{ minHeight: isManyItems ? 36 : 48 }}
+      style={{ minHeight: isManyItems ? 40 : 64 }}
       data-redo-pending={isRedoPending ? 'true' : undefined}
-      className={`border-b border-border last:border-b-0 flex flex-col justify-center py-1.5 gap-0.5 ${
-        isManyItems ? 'min-h-[36px] py-1' : 'min-h-[48px] py-1.5'
+      className={`border-b border-border last:border-b-0 flex flex-col justify-center py-2 gap-1 ${
+        isManyItems ? 'min-h-[40px] py-1' : 'min-h-[64px] py-2'
       } ${
         isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-50 px-2' : ''
       }`}
