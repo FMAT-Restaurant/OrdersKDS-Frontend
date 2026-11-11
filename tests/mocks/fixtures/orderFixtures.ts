@@ -52,7 +52,7 @@ export const mockOrder2: Order = {
     {
       id: 'item-3',
       itemId: 'item-3',
-      dishId: 'dish-salad-1',
+      dishId: undefined,
       name: 'Ensalada César',
       quantity: 1,
       unitPrice: 180.0,
