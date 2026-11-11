@@ -94,11 +94,11 @@ export function ChefVoidDialog({
       aria-modal="true"
       aria-labelledby="chef-void-dialog-title"
       data-testid="chef-void-dialog"
-      className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/75 border-none select-none overflow-y-auto"
+      className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto"
     >
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-fmat bg-gray-900 border border-gray-700 p-5 text-white shadow-2xl flex flex-col gap-4">
-        <header className="flex items-center justify-between border-b border-gray-800 pb-3">
-          <h2 id="chef-void-dialog-title" className="text-2xl font-black text-white">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
+        <header className="flex items-center justify-between border-b border-border pb-3">
+          <h2 id="chef-void-dialog-title" className="text-2xl font-black text-ink">
             Anulación por Error de Cocina #{displayId}
           </h2>
         </header>
@@ -106,7 +106,7 @@ export function ChefVoidDialog({
         <div
           role="alert"
           data-testid="chef-void-warning"
-          className="rounded-md bg-blue-950/90 border border-blue-500/60 px-4 py-3 text-blue-200 font-bold text-lg"
+          className="rounded-md bg-blue-50 border border-blue-200 px-4 py-3 text-blue-800 font-bold text-lg"
         >
           No se cobrará por error de cocina
         </div>
@@ -115,14 +115,14 @@ export function ChefVoidDialog({
           <div
             role="alert"
             data-testid="chef-void-invalid-status"
-            className="rounded-md bg-red-950 border border-red-500 px-4 py-3 text-red-200 font-semibold text-base"
+            className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-red-700 font-semibold text-base"
           >
             Operación bloqueada: la comanda debe estar en estado EN PREPARACIÓN ({OrderStatus.IN_PREPARATION}).
           </div>
         )}
 
         <section aria-label="Motivos rápidos de error de cocina" className="flex flex-col gap-2">
-          <span className="text-sm font-semibold uppercase tracking-wider text-gray-300">
+          <span className="text-sm font-semibold uppercase tracking-wider text-body">
             Seleccione uno o más motivos rápidos:
           </span>
           <div
@@ -142,8 +142,8 @@ export function ChefVoidDialog({
                   style={{ minHeight: 64, minWidth: 64 }}
                   className={`min-h-[64px] min-w-[64px] px-4 py-3 rounded-md font-bold text-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed ${
                     isSelected
-                      ? 'bg-fmat-primary text-white border-fmat-accent shadow-md'
-                      : 'bg-gray-800 text-gray-200 border-gray-700 hover:bg-gray-700'
+                      ? 'bg-fmat-primary text-white border-fmat-primary shadow-sm'
+                      : 'bg-surface text-ink border border-border hover:bg-fmat-soft hover:border-fmat-primary'
                   }`}
                 >
                   {reason}
@@ -156,7 +156,7 @@ export function ChefVoidDialog({
         <section aria-label="Detalle adicional del motivo" className="flex flex-col gap-3">
           <label
             htmlFor="chef-void-note-input"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
+            className="text-sm font-semibold uppercase tracking-wider text-body"
           >
             Nota adicional (opcional si eligió motivo rápido):
           </label>
@@ -168,7 +168,7 @@ export function ChefVoidDialog({
             onChange={(event) => setCustomNote(event.target.value)}
             placeholder="Escriba con el teclado en pantalla..."
             data-testid="chef-void-note-input"
-            className="w-full min-h-[48px] px-4 py-2 rounded-md bg-gray-950 border border-gray-700 text-white text-lg font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
+            className="w-full min-h-[48px] px-4 py-2 rounded-md bg-surface border border-border text-ink placeholder:text-muted text-lg font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
           />
 
           <VirtualKeyboard
@@ -178,14 +178,14 @@ export function ChefVoidDialog({
           />
         </section>
 
-        <footer className="sticky -bottom-5 bg-gray-900 flex items-center justify-end gap-4 pt-3 pb-1 border-t border-gray-800 shrink-0 -mx-5 px-5">
+        <footer className="sticky -bottom-6 bg-surface flex items-center justify-end gap-4 pt-3 pb-1 border-t border-border shrink-0 -mx-6 px-6">
           <button
             type="button"
             data-testid="chef-void-cancel"
             disabled={isSubmitting}
             {...pointerAction(onCancel)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-md bg-gray-800 hover:bg-gray-700 text-white font-bold text-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-md bg-surface hover:bg-gray-100 text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Cancelar
           </button>
@@ -195,7 +195,7 @@ export function ChefVoidDialog({
             disabled={!isConfirmEnabled}
             {...pointerAction(handleConfirm)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-md bg-red-600 hover:bg-red-700 text-white font-bold text-lg focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-md bg-red-600 hover:bg-red-700 text-white font-bold text-lg focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Confirmar
           </button>

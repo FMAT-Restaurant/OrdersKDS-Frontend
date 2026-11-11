@@ -46,10 +46,10 @@ function OrderCardItem({
       data-testid={`order-item-${itemId}`}
       style={{ minHeight: isCompact ? 44 : 64 }}
       data-redo-pending={isRedoPending ? 'true' : undefined}
-      className={`border-b border-gray-700/50 last:border-b-0 flex flex-col gap-1 ${
+      className={`border-b border-border last:border-b-0 flex flex-col gap-1 ${
         isCompact ? 'min-h-[44px]' : 'min-h-[64px]'
       } ${
-        isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-950/40 px-2' : ''
+        isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-50 px-2' : ''
       }`}
     >
       <button
@@ -79,19 +79,19 @@ function OrderCardItem({
         } ${
           item.status === 'READY' || item.status === 'DELIVERED'
             ? 'opacity-60 cursor-default'
-            : 'cursor-pointer active:bg-gray-700'
+            : 'cursor-pointer active:bg-gray-100'
         } focus:outline-none`}
       >
         <div className="flex items-baseline justify-between gap-2">
           <div className="flex items-baseline gap-2.5">
             <span
-              className="text-lg font-black text-amber-400 min-w-[28px]"
+              className="text-lg font-black text-fmat-primary min-w-[28px]"
               data-testid={`order-item-qty-${itemId}`}
             >
               {item.quantity}x
             </span>
             <span
-              className="text-lg font-bold text-gray-100 leading-tight"
+              className="text-lg font-bold text-ink leading-tight"
               data-testid={`order-item-name-${itemId}`}
             >
               {item.name}
@@ -100,7 +100,7 @@ function OrderCardItem({
 
           {prepTime && (
             <span
-              className="text-xs font-mono font-semibold text-gray-400 bg-gray-900/80 px-2 py-0.5 rounded shrink-0"
+              className="text-xs font-mono font-semibold text-muted bg-gray-100 border border-border px-2 py-0.5 rounded shrink-0"
               data-testid={`order-item-prep-time-${itemId}`}
             >
               {prepTime}
@@ -116,7 +116,7 @@ function OrderCardItem({
             {item.modifiers.map((modifier, modIdx) => (
               <span
                 key={`${itemId}-mod-${modIdx}`}
-                className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-700/80 text-amber-200 border border-amber-400/30 ${
+                className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-100 text-body border border-border ${
                   isCompact ? 'text-[11px]' : 'text-xs'
                 }`}
                 data-testid={`order-item-modifier-${itemId}-${modIdx}`}
@@ -129,10 +129,10 @@ function OrderCardItem({
 
         {item.notes && (
           <div
-            className="pl-8 text-sm text-yellow-300 italic flex items-start gap-1"
+            className="pl-8 text-sm text-body italic flex items-start gap-1"
             data-testid={`order-item-notes-${itemId}`}
           >
-            <span className="font-bold not-italic shrink-0">Nota:</span>
+            <span className="font-bold not-italic shrink-0 text-ink">Nota:</span>
             <span className="sr-only">Note:</span>
             <span className="break-words">{item.notes}</span>
           </div>
@@ -140,7 +140,7 @@ function OrderCardItem({
         {isRedoPending && (
           <output
             data-testid={`redo-pending-${itemId}`}
-            className="pl-8 text-xs font-black uppercase tracking-wide text-amber-300 block"
+            className="pl-8 text-xs font-black uppercase tracking-wide text-amber-800 block"
           >
             Rehacer pendiente
           </output>
@@ -308,7 +308,7 @@ function OrderCardActions({
           {...pointerAction(() => onMarkOrderReady?.(order))}
           onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
           style={{ minHeight: 64 }}
-          className="shrink-0 mx-4 mb-3 min-h-[64px] min-h-[48px] rounded-md bg-green-700 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 active:scale-[.98] disabled:opacity-50"
+          className="shrink-0 mx-4 mb-3 min-h-[64px] min-h-[48px] rounded-md bg-fmat-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50"
         >
           Orden lista
         </button>
@@ -381,20 +381,20 @@ export function OrderCard({
     <article
       data-testid={`order-card-${displayId}`}
       aria-label={`Order ${displayId}`}
-      className={`h-full min-h-0 flex flex-col rounded-fmat border transition-all duration-150 select-none overflow-hidden ${
+      className={`h-full min-h-0 flex flex-col rounded-card border transition-all duration-150 select-none overflow-hidden bg-surface ${
         isFocused
-          ? 'bg-gray-800 border-fmat-primary ring-2 ring-fmat-primary shadow-xl'
-          : 'bg-gray-800/95 border-gray-700 hover:border-gray-500 shadow-md'
+          ? 'border-fmat-primary ring-2 ring-fmat-primary shadow-xl'
+          : 'border-border hover:border-gray-400 shadow-sm'
       }`}
     >
-      {/* Clickable Card Header for Order Selection */}
+      {/* Clickable Card Header for Order Selection - Solid Orange Banner (Image 10) */}
       <button
         type="button"
         data-testid={`order-card-stub-${displayId}`}
         aria-label={`Order ${displayId}`}
         {...pointerAction(() => onClick?.(order))}
         onKeyDown={handleKeyDown}
-        className={`w-full shrink-0 p-4 pb-2.5 select-none cursor-pointer flex flex-col justify-between text-left bg-transparent border-0 border-b border-gray-700/80 focus:outline-none ${
+        className={`w-full shrink-0 p-4 pb-3 select-none cursor-pointer flex flex-col justify-between text-left bg-fmat-primary text-white border-0 border-b border-fmat-primary-hover focus:outline-none ${
           isFocused ? 'ring-2 ring-fmat-primary' : ''
         }`}
       >
@@ -406,7 +406,7 @@ export function OrderCard({
               displayId={displayId}
             />
             <span
-              className="text-sm font-bold font-mono tracking-wider text-gray-300 truncate max-w-[120px]"
+              className="text-sm font-bold font-mono tracking-wider text-white/90 truncate max-w-[120px]"
               data-testid={`order-id-${displayId}`}
               title={`#${displayId}`}
             >
@@ -458,8 +458,8 @@ export function OrderCard({
       </button>
 
       {order.items.length >= 5 && (
-        <div className="shrink-0 px-4 py-1 flex items-center justify-between bg-gray-900/60 border-b border-gray-700/40 text-xs">
-          <span className="text-gray-300 font-medium">
+        <div className="shrink-0 px-4 py-1.5 flex items-center justify-between bg-gray-50 border-b border-border text-xs">
+          <span className="text-muted font-medium">
             {order.items.length} platillos en comanda
           </span>
           <button
@@ -469,7 +469,7 @@ export function OrderCard({
               e.stopPropagation();
               setIsCompact((prev) => !prev);
             }}
-            className="text-fmat-primary hover:text-fmat-primary-hover font-semibold px-2 py-0.5 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-fmat-primary cursor-pointer"
+            className="text-fmat-primary hover:text-fmat-primary-hover font-semibold px-2 py-0.5 rounded bg-surface border border-border focus:outline-none focus:ring-1 focus:ring-fmat-primary cursor-pointer"
           >
             {isCompact ? 'Expandir detalles' : 'Vista compacta'}
           </button>
@@ -479,7 +479,7 @@ export function OrderCard({
       {/* Dish Items List */}
       <ul
         data-testid={`order-items-list-${displayId}`}
-        className="flex-1 min-h-0 list-none m-0 px-4 my-1 overflow-y-auto divide-y divide-gray-700/50 scrollbar-thin scrollbar-thumb-gray-600"
+        className="flex-1 min-h-0 list-none m-0 px-4 my-1 overflow-y-auto divide-y divide-border bg-surface scrollbar-thin scrollbar-thumb-gray-300"
         aria-label={`Platillos para la orden ${displayId}`}
       >
         {order.items.map((item, index) => {
@@ -502,7 +502,7 @@ export function OrderCard({
       </ul>
 
       {/* Footer info: Total items count */}
-      <div className="shrink-0 px-4 py-1.5 border-t border-gray-700/60 flex items-center justify-between text-xs text-gray-400 w-full">
+      <div className="shrink-0 px-4 py-1.5 border-t border-border flex items-center justify-between text-xs text-muted w-full bg-gray-50/50">
         <span>{order.items.length} {order.items.length === 1 ? 'platillo' : 'platillos'}</span>
         <span>Toca o presiona Enter para seleccionar</span>
       </div>

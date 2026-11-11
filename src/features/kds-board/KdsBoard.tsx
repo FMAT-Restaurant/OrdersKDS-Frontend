@@ -315,7 +315,7 @@ function KdsBoardContent({
     gridContent = (
       <div
         data-testid="kds-empty"
-        className="flex items-center justify-center h-full text-2xl font-semibold text-gray-500"
+        className="flex items-center justify-center h-full text-2xl font-semibold text-muted"
       >
         No hay órdenes en esta vista
       </div>
@@ -348,16 +348,16 @@ function KdsBoardContent({
   return (
     <div
       data-testid="kds-board-container"
-      className="orders-kds-root w-full h-full max-w-[1920px] max-h-[1080px] min-w-[1024px] min-h-[600px] flex flex-col bg-gray-900 text-white select-none overflow-hidden"
+      className="orders-kds-root w-full h-full max-w-[1920px] max-h-[1080px] min-w-[1024px] min-h-[600px] flex flex-col bg-canvas text-ink select-none overflow-hidden"
       style={{ overflow: 'hidden' }}
     >
       {/* Top Header: Tabs and Station Selector */}
-      <header className="px-8 py-4 bg-gray-950 border-b border-gray-800 flex items-center justify-between gap-6 flex-wrap">
+      <header className="px-8 py-4 bg-surface border-b border-border flex items-center justify-between gap-6 flex-wrap shadow-sm">
         {/* View Tabs (Touch target >= 64px, with min-h-[48px] baseline) */}
         <div
           role="tablist"
           aria-label="Vistas KDS"
-          className="flex items-center gap-3 bg-gray-950/90 p-1.5 rounded-lg border border-gray-800"
+          className="flex items-center gap-2 bg-gray-100 p-1.5 rounded-lg border border-border"
         >
           <button
             type="button"
@@ -369,10 +369,11 @@ function KdsBoardContent({
             data-testid="tab-active-view"
             {...pointerAction(() => handleViewChange('active'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${view === 'active'
-                ? 'bg-fmat-primary text-white shadow-lg'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
+            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+              view === 'active'
+                ? 'bg-fmat-primary text-white shadow-sm'
+                : 'text-body hover:text-ink hover:bg-surface'
+            }`}
           >
             Vista activa
           </button>
@@ -386,10 +387,11 @@ function KdsBoardContent({
             data-testid="tab-delivered"
             {...pointerAction(() => handleViewChange('delivered'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${view === 'delivered'
-                ? 'bg-fmat-primary text-white shadow-lg'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
+            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+              view === 'delivered'
+                ? 'bg-fmat-primary text-white shadow-sm'
+                : 'text-body hover:text-ink hover:bg-surface'
+            }`}
           >
             Entregadas
           </button>
@@ -407,10 +409,10 @@ function KdsBoardContent({
       <section
         id="panel-kds-grid"
         aria-label="Cuadrícula de comandas KDS"
-        className="flex-1 min-h-0 p-6 overflow-hidden flex flex-col justify-center"
+        className="flex-1 min-h-0 p-6 overflow-hidden flex flex-col justify-center bg-canvas"
       >
         {actionError && (
-          <div role="alert" className="mb-3 rounded-md bg-red-950 px-4 py-3 text-red-200">
+          <div role="alert" className="mb-3 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-red-700 font-medium">
             {actionError}
           </div>
         )}
@@ -418,8 +420,8 @@ function KdsBoardContent({
       </section>
 
       {/* Touch Pagination Footer */}
-      <footer className="h-20 px-8 py-3 bg-gray-950 border-t border-gray-800 flex items-center justify-between">
-        <div data-testid="kds-page-info" className="text-xl font-bold font-mono text-gray-200">
+      <footer className="h-20 px-8 py-3 bg-surface border-t border-border flex items-center justify-between shadow-sm">
+        <div data-testid="kds-page-info" className="text-xl font-bold font-mono text-ink">
           Página {currentPage} de {totalPages}
         </div>
         <div className="flex items-center gap-4">
@@ -430,7 +432,7 @@ function KdsBoardContent({
             disabled={currentPage <= 1}
             {...pointerAction(() => handlePageChange(currentPage - 1))}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-gray-800 text-white border border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150"
+            className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-surface text-ink border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm"
           >
             Anterior
           </button>
@@ -441,7 +443,7 @@ function KdsBoardContent({
             disabled={currentPage >= totalPages}
             {...pointerAction(() => handlePageChange(currentPage + 1))}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-gray-800 text-white border border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150"
+            className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-surface text-ink border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm"
           >
             Siguiente
           </button>

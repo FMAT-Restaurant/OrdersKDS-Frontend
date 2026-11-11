@@ -41,20 +41,20 @@ export function OrderCardStub({
         onKeyDown={handleKeyDown}
         className={`w-full h-full p-5 rounded-fmat border transition-all duration-150 select-none cursor-pointer flex flex-col justify-between min-h-[160px] text-left ${
           isFocused
-            ? 'bg-gray-800 border-fmat-primary ring-2 ring-fmat-primary shadow-lg'
-            : 'bg-gray-800/95 border-gray-700 hover:border-gray-500 shadow'
+            ? 'bg-surface border-fmat-primary ring-2 ring-fmat-primary shadow-md'
+            : 'bg-surface/90 border-border hover:border-gray-400 shadow-sm'
         } focus:outline-none focus:ring-2 focus:ring-fmat-primary`}
       >
         <div className="flex items-center justify-between w-full">
           <span
-            className="text-2xl font-bold font-mono tracking-wider text-white"
+            className="text-2xl font-bold font-mono tracking-wider text-ink"
             data-testid={`order-id-${displayId}`}
           >
             #{displayId}
           </span>
           {order.tableNumber !== null && order.tableNumber !== undefined && (
             <span
-              className="text-sm font-semibold text-gray-300 bg-gray-700/80 px-2.5 py-1 rounded"
+              className="text-sm font-semibold text-body bg-gray-100 px-2.5 py-1 rounded border border-border"
               data-testid={`order-table-${displayId}`}
             >
               Mesa {order.tableNumber}
@@ -63,10 +63,10 @@ export function OrderCardStub({
           )}
         </div>
 
-        <div className="mt-4 pt-3 border-t border-gray-700/60 flex items-center justify-between text-base w-full">
-          <span className="text-gray-400 font-medium">Status</span>
+        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-base w-full">
+          <span className="text-muted font-medium">Status</span>
           <span
-            className="font-bold uppercase tracking-wide text-gray-200"
+            className="font-bold uppercase tracking-wide text-body"
             data-testid={`order-status-${displayId}`}
           >
             {order.status}
