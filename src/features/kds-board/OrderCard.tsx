@@ -311,7 +311,7 @@ function OrderCardActions({
               {...pointerAction(() => onAdminVoid?.(order))}
               onKeyDown={(e) => handleButtonKey(e, () => onAdminVoid?.(order))}
               style={{ minHeight: 64 }}
-              className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-amber-600 hover:bg-amber-700 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm"
+              className="min-h-[64px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-amber-600 hover:bg-amber-700 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm"
             >
               Anular (Admin)
             </button>
@@ -325,7 +325,7 @@ function OrderCardActions({
               {...pointerAction(() => onChefVoid?.(order))}
               onKeyDown={(e) => handleButtonKey(e, () => onChefVoid?.(order))}
               style={{ minHeight: 64 }}
-              className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-red-600 hover:bg-red-700 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm"
+              className="min-h-[64px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-red-600 hover:bg-red-700 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm"
             >
               Anular (Cocina)
             </button>
@@ -341,8 +341,8 @@ function OrderCardActions({
           disabled={pendingAction === 'order-ready'}
           {...pointerAction(() => onMarkOrderReady?.(order))}
           onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
-          style={{ minHeight: 48 }}
-          className="shrink-0 mx-4 mb-3 min-h-[48px] rounded-control bg-fmat-primary px-4 py-2.5 text-sm sm:text-base font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50 shadow-sm flex items-center justify-center cursor-pointer"
+          style={{ minHeight: 44 }}
+          className="shrink-0 mx-3 sm:mx-4 mb-2.5 sm:mb-3 min-h-[44px] sm:min-h-[48px] rounded-control bg-fmat-primary px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-base font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50 shadow-sm flex items-center justify-center cursor-pointer"
         >
           Comanda lista
         </button>
@@ -419,7 +419,7 @@ export function OrderCard({
     <article
       data-testid={`order-card-${displayId}`}
       aria-label={`Order ${displayId}`}
-      className={`h-full min-h-0 flex flex-col rounded-card border transition-all duration-150 select-none overflow-hidden bg-surface ${
+      className={`h-full min-h-[300px] sm:min-h-0 flex flex-col rounded-card border transition-all duration-150 select-none overflow-hidden bg-surface ${
         isFocused
           ? 'border-fmat-primary ring-2 ring-fmat-primary shadow-xl'
           : 'border-border hover:border-gray-400 shadow-sm'
@@ -504,7 +504,7 @@ export function OrderCard({
       {/* Dish Items List */}
       <ul
         data-testid={`order-items-list-${displayId}`}
-        className="flex-1 min-h-0 list-none m-0 px-4 my-1 overflow-y-auto divide-y divide-border bg-surface scrollbar-thin scrollbar-thumb-gray-300"
+        className="flex-1 min-h-[120px] list-none m-0 px-3 sm:px-4 my-1 overflow-y-auto divide-y divide-border bg-surface scrollbar-thin scrollbar-thumb-gray-300"
         aria-label={`Platillos para la comanda ${displayId}`}
       >
         {order.items.map((item, index) => {

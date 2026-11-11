@@ -417,7 +417,7 @@ function KdsBoardContent({
         data-testid="kds-empty"
         className="flex items-center justify-center h-full text-2xl font-semibold text-muted"
       >
-        No hay comandas pendientes
+        <span>No hay comandas pendientes</span>
         <span className="sr-only">No hay órdenes en esta vista</span>
       </div>
     );
@@ -425,7 +425,7 @@ function KdsBoardContent({
     gridContent = (
       <div
         data-testid="kds-grid"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 h-full min-h-0 auto-rows-fr content-start"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 min-h-0 auto-rows-max lg:auto-rows-fr lg:h-full content-start overflow-y-auto"
       >
         {paginatedOrders.map((order) => (
           <OrderCard
@@ -510,11 +510,11 @@ function KdsBoardContent({
       <section
         id="panel-kds-grid"
         aria-label="Cuadrícula de comandas KDS"
-        className="flex-1 min-h-0 p-6 overflow-hidden flex flex-col justify-center bg-canvas"
+        className="flex-1 min-h-0 p-4 sm:p-6 overflow-hidden flex flex-col justify-center bg-canvas"
       >
         {feedbackMessage && (
-          <div
-            role="status"
+          <output
+            aria-live="polite"
             data-testid="kds-action-feedback"
             className={`mb-3 rounded-control border px-4 py-2.5 text-sm sm:text-base font-semibold flex items-center justify-between shadow-sm ${
               feedbackMessage.type === 'success'
@@ -538,7 +538,7 @@ function KdsBoardContent({
             >
               ✕
             </button>
-          </div>
+          </output>
         )}
 
         {actionError && (

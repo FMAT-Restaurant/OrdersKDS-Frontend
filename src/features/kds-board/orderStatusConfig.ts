@@ -19,8 +19,8 @@ export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
     className: 'bg-warning text-white',
   },
   RESERVED: {
-    label: 'Reservado / Por iniciar',
-    englishLabel: 'Reservado / Por iniciar',
+    label: 'Por iniciar',
+    englishLabel: 'Por iniciar',
     token: 'var(--color-info)',
     className: 'bg-info text-white',
   },

@@ -209,7 +209,7 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
   describe('UT-FE-06: StatusBadge y estados con tokens', () => {
     const expectedTokens: Record<OrderStatus, { label: string; token: string }> = {
       CREATED: { label: 'Created', token: 'var(--color-warning)' },
-      RESERVED: { label: 'Reservado / Por iniciar', token: 'var(--color-info)' },
+      RESERVED: { label: 'Por iniciar', token: 'var(--color-info)' },
       IN_PREPARATION: { label: 'In Preparation', token: 'var(--color-info)' },
       DELIVERED: { label: 'Delivered', token: 'var(--color-success)' },
       PAID: { label: 'Paid', token: 'var(--color-success)' },
@@ -239,7 +239,7 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(keys).toHaveLength(10);
       expect(STATUS_CONFIG.CREATED.token).toBe('var(--color-warning)');
       expect(STATUS_CONFIG.RESERVED.token).toBe('var(--color-info)');
-      expect(STATUS_CONFIG.RESERVED.label).toBe('Reservado / Por iniciar');
+      expect(STATUS_CONFIG.RESERVED.label).toBe('Por iniciar');
       expect(STATUS_CONFIG.IN_PREPARATION.token).toBe('var(--color-info)');
       expect(STATUS_CONFIG.DELIVERED.token).toBe('var(--color-success)');
       expect(STATUS_CONFIG.PAID.token).toBe('var(--color-success)');

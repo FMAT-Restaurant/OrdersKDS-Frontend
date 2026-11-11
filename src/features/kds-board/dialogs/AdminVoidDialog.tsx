@@ -44,8 +44,13 @@ export function AdminVoidDialog({
   const isOperable = validation.success && order.status === OrderStatus.IN_PREPARATION;
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
-  const tableDisplay =
-    order.tableNumber != null ? `Mesa ${order.tableNumber}` : order.isTakeaway ? 'Para llevar' : null;
+
+  let tableDisplay: string | null = null;
+  if (order.tableNumber != null) {
+    tableDisplay = `Mesa ${order.tableNumber}`;
+  } else if (order.isTakeaway) {
+    tableDisplay = 'Para llevar';
+  }
 
   const handleConfirm = () => {
     onConfirm(order);
@@ -72,7 +77,7 @@ export function AdminVoidDialog({
           data-testid="admin-void-warning"
           className="rounded-control bg-amber-50 border border-amber-300 px-4 py-3 text-amber-900 font-bold text-center text-base"
         >
-          Se cobrará la comanda mermada al cliente
+          <span>Se cobrará la comanda mermada al cliente</span>
           <span className="sr-only">Se cobrará la comanda mermada</span>
         </div>
 
