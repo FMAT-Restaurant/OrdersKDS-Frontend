@@ -58,7 +58,7 @@ export function OrderCardStub({
         className={`w-full h-full p-5 rounded-fmat border transition-all duration-150 select-none cursor-pointer flex flex-col justify-between min-h-[160px] text-left ${
           isFocused
             ? 'bg-surface border-fmat-primary ring-2 ring-fmat-primary shadow-md'
-            : 'bg-surface/90 border-border hover:border-gray-400 shadow-sm'
+            : 'bg-surface/90 border-border hover:border-gray-400 shadow hover:shadow-md'
         } focus:outline-none focus:ring-2 focus:ring-fmat-primary`}
       >
         <div className="flex items-center justify-between w-full">

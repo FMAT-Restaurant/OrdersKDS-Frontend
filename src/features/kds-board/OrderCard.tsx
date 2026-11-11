@@ -277,8 +277,8 @@ function OrderCardActions({
             disabled={pendingAction === 'start'}
             {...pointerAction(() => onStartPreparation?.(order))}
             onKeyDown={(e) => handleButtonKey(e, () => onStartPreparation?.(order))}
-            style={{ minHeight: 48 }}
-            className="min-h-[48px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
+            style={{ minHeight: 64 }}
+            className="min-h-[64px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
           >
             Iniciar preparación
           </button>
@@ -289,8 +289,8 @@ function OrderCardActions({
             disabled={pendingAction === 'reject'}
             {...pointerAction(() => onRejectSupplies?.(order))}
             onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
-            style={{ minHeight: 48 }}
-            className="min-h-[48px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
+            style={{ minHeight: 64 }}
+            className="min-h-[64px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
           >
             Rechazar insumo
           </button>
@@ -341,8 +341,8 @@ function OrderCardActions({
           disabled={pendingAction === 'order-ready'}
           {...pointerAction(() => onMarkOrderReady?.(order))}
           onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
-          style={{ minHeight: 44 }}
-          className="shrink-0 mx-3 sm:mx-4 mb-2.5 sm:mb-3 min-h-[44px] sm:min-h-[48px] rounded-control bg-fmat-primary px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-base font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50 shadow-sm flex items-center justify-center cursor-pointer border-0"
+          style={{ minHeight: 64 }}
+          className="shrink-0 mx-3 sm:mx-4 mb-2.5 sm:mb-3 min-h-[64px] rounded-control bg-fmat-primary px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-base font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50 shadow-sm flex items-center justify-center cursor-pointer border-0"
         >
           Comanda lista
         </button>
@@ -422,7 +422,7 @@ export function OrderCard({
       className={`h-full min-h-[300px] sm:min-h-0 flex flex-col rounded-card border transition-all duration-150 select-none overflow-hidden bg-surface ${
         isFocused
           ? 'border-fmat-primary ring-2 ring-fmat-primary shadow-xl'
-          : 'border-border hover:border-gray-400 shadow-sm'
+          : 'border-border hover:border-gray-400 shadow hover:shadow-md'
       }`}
     >
       {/* Clickable Card Header for Order Selection - Solid Orange Banner (Image 10) */}

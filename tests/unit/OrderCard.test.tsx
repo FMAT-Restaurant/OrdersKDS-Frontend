@@ -477,11 +477,11 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
 
       expect(startBtn).toBeInTheDocument();
       expect(startBtn).toHaveTextContent('Iniciar preparación');
-      expect(startBtn).toHaveClass('min-h-[48px]');
+      expect(startBtn).toHaveClass('min-h-[64px]');
 
       expect(rejectBtn).toBeInTheDocument();
       expect(rejectBtn).toHaveTextContent('Rechazar insumo');
-      expect(rejectBtn).toHaveClass('min-h-[48px]');
+      expect(rejectBtn).toHaveClass('min-h-[64px]');
 
       // Click start preparation
       fireEvent.click(startBtn);
