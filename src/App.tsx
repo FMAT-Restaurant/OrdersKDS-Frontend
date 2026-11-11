@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import KdsApp from './KdsApp.tsx';
 import OrderTicketWidget from './OrderTicketWidget.tsx';
 import { ReadyOrdersAlert } from './ReadyOrdersAlert.tsx';
@@ -14,6 +14,11 @@ type ViewMode = 'kds' | 'ticket' | 'alerts';
  */
 const DEV_WAITER_JWT =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VyX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwicm9sZSI6IndhaXRlciIsImV4cCI6MjUzMzcwNzY0ODAwfQ.signature';
+
+const devTokenProvider = () => Promise.resolve(DEV_WAITER_JWT);
+
+const ORDER_ID_REGEX = /\/orders\/([^/]+)/;
+const REDO_ITEM_REGEX = /\/orders\/[^/]+\/items\/([^/]+)\/redo/;
 
 /**
  * Mock WebSocket for visual preset simulation mode.
@@ -32,8 +37,9 @@ class MockWebSocket {
     }, 50);
   }
 
-  send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-    void _data;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  send(_data?: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+    // Mock WebSocket send no-op
   }
 
   close(): void {
@@ -207,6 +213,400 @@ const PRESETS: Record<string, Order> = {
   'ord-entregada-rehacer': MOCK_ORDER_DELIVERED,
 };
 
+interface PresetItemConfig {
+  readonly id: string;
+  readonly label: string;
+  readonly activeBg?: string;
+}
+
+const UI_PRESET_ITEMS: readonly PresetItemConfig[] = [
+  { id: 'ord-mesa-4', label: 'Mesa 4 (Creada)', activeBg: 'bg-blue-500 text-white border-blue-400' },
+  { id: 'ord-rechazada-stock', label: '⚠️ Rechazo Stock (Inventario)', activeBg: 'bg-red-600 text-white border-red-500' },
+  { id: 'ord-reservada-kds', label: 'Mesa 12 (Reservada)', activeBg: 'bg-emerald-600 text-white border-emerald-500' },
+  { id: 'ord-entregada-rehacer', label: 'Mesa 3 (Rehacer)', activeBg: 'bg-purple-600 text-white border-purple-500' },
+];
+
+const SEED_ORDER_ITEMS: readonly PresetItemConfig[] = [
+  { id: '44444444-4444-4444-4444-444444444444', label: 'Seed Creada' },
+  { id: '11111111-1111-1111-1111-111111111111', label: 'Seed Reservada' },
+  { id: '22222222-2222-2222-2222-222222222222', label: 'Seed En Prep' },
+  { id: '33333333-3333-3333-3333-333333333333', label: 'Seed Entregada (Rehacer Real)' },
+];
+
+function extractRawUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input.url;
+}
+
+function handleConfirmOrder(order: Order): Order {
+  return {
+    ...order,
+    status: OrderStatus.RESERVED,
+    version: order.version + 1,
+  };
+}
+
+function handleCancelOrder(order: Order): Order {
+  return {
+    ...order,
+    status: OrderStatus.CANCELLED,
+    version: order.version + 1,
+  };
+}
+
+function parseRedoNote(body?: string | null): string {
+  if (!body) return 'Platillo solicitado para rehacer';
+  try {
+    const parsed = JSON.parse(body);
+    if (typeof parsed?.note === 'string' && parsed.note.trim()) {
+      return parsed.note;
+    }
+  } catch {
+    // fallback default note
+  }
+  return 'Platillo solicitado para rehacer';
+}
+
+function handleRedoItem(order: Order, targetItemId: string, body?: string | null): Order {
+  const note = parseRedoNote(body);
+  return {
+    ...order,
+    version: order.version + 1,
+    items: order.items.map((item) => {
+      const match = (item.id ?? item.itemId) === targetItemId;
+      return match
+        ? { ...item, status: ItemStatus.PENDING, notes: note, version: (item.version ?? 1) + 1 }
+        : item;
+    }),
+  };
+}
+
+function parseUpdatedItems(
+  currentItems: Order['items'],
+  body?: string | null,
+): Order['items'] {
+  if (!body) return currentItems;
+  try {
+    const parsed = JSON.parse(body);
+    if (Array.isArray(parsed.items)) {
+      return parsed.items.map((it: Partial<Order['items'][number]>, idx: number) => ({
+        ...currentItems[idx],
+        ...it,
+      }));
+    }
+  } catch {
+    // ignore
+  }
+  return currentItems;
+}
+
+function handleUpdateItems(order: Order, body?: string | null): Order {
+  return {
+    ...order,
+    items: parseUpdatedItems(order.items, body),
+    version: order.version + 1,
+  };
+}
+
+function handleMockPatch(
+  url: string,
+  currentOrder: Order,
+  body?: string | null,
+): Order | null {
+  if (url.endsWith('/cancel')) {
+    return handleCancelOrder(currentOrder);
+  }
+  const redoMatch = REDO_ITEM_REGEX.exec(url);
+  if (redoMatch) {
+    const targetItemId = decodeURIComponent(redoMatch[1]);
+    return handleRedoItem(currentOrder, targetItemId, body);
+  }
+  if (url.endsWith('/items')) {
+    return handleUpdateItems(currentOrder, body);
+  }
+  return null;
+}
+
+function savePresetOrder(
+  presetsRef: React.RefObject<Record<string, Order>>,
+  orderId: string,
+  updated: Order,
+): void {
+  if (presetsRef.current) {
+    presetsRef.current[orderId] = updated;
+  }
+}
+
+function getRequestBodyString(init?: RequestInit): string | null {
+  return typeof init?.body === 'string' ? init.body : null;
+}
+
+function executeMockFetch(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  presetsRef: React.RefObject<Record<string, Order>>,
+  selectedOrderId: string,
+): Response {
+  const rawUrl = extractRawUrl(input);
+  const url = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+  const method = (init?.method ?? 'GET').toUpperCase();
+
+  const orderIdMatch = ORDER_ID_REGEX.exec(url);
+  const targetOrderId = orderIdMatch ? decodeURIComponent(orderIdMatch[1]) : selectedOrderId;
+  const currentOrder = presetsRef.current?.[targetOrderId] ?? PRESETS[targetOrderId];
+
+  if (!currentOrder) {
+    return new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'Order not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (method === 'GET') {
+    return new Response(JSON.stringify(currentOrder), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (method === 'POST' && url.endsWith('/confirm')) {
+    const updated = handleConfirmOrder(currentOrder);
+    savePresetOrder(presetsRef, targetOrderId, updated);
+    return new Response(JSON.stringify(updated), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (method === 'PATCH') {
+    const bodyString = getRequestBodyString(init);
+    const updated = handleMockPatch(url, currentOrder, bodyString);
+    if (updated) {
+      savePresetOrder(presetsRef, targetOrderId, updated);
+      return new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
+  return new Response(JSON.stringify(currentOrder), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function DevNavbar({
+  view,
+  onViewChange,
+}: Readonly<{
+  view: ViewMode;
+  onViewChange: (view: ViewMode) => void;
+}>) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-bold text-slate-400 uppercase tracking-wider">Dev Views:</span>
+      <nav className="inline-flex rounded-md shadow-sm" aria-label="Selector de vistas">
+        <button
+          type="button"
+          onClick={() => onViewChange('kds')}
+          className={`px-3 py-1.5 rounded-l-md font-medium border border-slate-700 transition-colors ${
+            view === 'kds'
+              ? 'bg-amber-600 text-white border-amber-600'
+              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+          }`}
+        >
+          🍳 KDS Cocina
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewChange('ticket')}
+          className={`px-3 py-1.5 font-medium border-t border-b border-r border-slate-700 transition-colors ${
+            view === 'ticket'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+          }`}
+        >
+          📝 Comanda Mesero (OrderTicketWidget)
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewChange('alerts')}
+          className={`px-3 py-1.5 rounded-r-md font-medium border-t border-b border-r border-slate-700 transition-colors ${
+            view === 'alerts'
+              ? 'bg-emerald-600 text-white border-emerald-600'
+              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+          }`}
+        >
+          🔔 Alerta Órdenes Listas
+        </button>
+      </nav>
+    </div>
+  );
+}
+
+function SimulationButton({
+  item,
+  isSelected,
+  onClick,
+  defaultActiveBg,
+}: Readonly<{
+  item: PresetItemConfig;
+  isSelected: boolean;
+  onClick: (id: string) => void;
+  defaultActiveBg?: string;
+}>) {
+  const activeClass = item.activeBg ?? defaultActiveBg ?? 'bg-teal-600 text-white border-teal-500';
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(item.id)}
+      className={`px-2 py-1 rounded text-xs border ${
+        isSelected ? activeClass : 'bg-slate-800 text-slate-300 border-slate-700'
+      }`}
+    >
+      {item.label}
+    </button>
+  );
+}
+
+function TicketSimulationBar({
+  isBackendMode,
+  selectedOrderId,
+  customOrderId,
+  onSelectPreset,
+  onSelectSeedOrder,
+  onCustomOrderIdChange,
+  onApplyCustomOrder,
+}: Readonly<{
+  isBackendMode: boolean;
+  selectedOrderId: string;
+  customOrderId: string;
+  onSelectPreset: (id: string) => void;
+  onSelectSeedOrder: (uuid: string) => void;
+  onCustomOrderIdChange: (val: string) => void;
+  onApplyCustomOrder: () => void;
+}>) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-slate-400">Simulación UI:</span>
+      {UI_PRESET_ITEMS.map((item) => (
+        <SimulationButton
+          key={item.id}
+          item={item}
+          isSelected={!isBackendMode && selectedOrderId === item.id}
+          onClick={onSelectPreset}
+        />
+      ))}
+
+      <span className="text-slate-500 ml-2">| Backend Real:</span>
+      {SEED_ORDER_ITEMS.map((item) => (
+        <SimulationButton
+          key={item.id}
+          item={item}
+          isSelected={isBackendMode && selectedOrderId === item.id}
+          onClick={onSelectSeedOrder}
+          defaultActiveBg="bg-teal-600 text-white border-teal-500"
+        />
+      ))}
+
+      <div className="flex items-center gap-1 pl-2 border-l border-slate-700">
+        <input
+          type="text"
+          placeholder="UUID de Orden..."
+          value={customOrderId}
+          onChange={(e) => onCustomOrderIdChange(e.target.value)}
+          className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-100 placeholder-slate-500 text-xs w-36"
+        />
+        <button
+          type="button"
+          onClick={onApplyCustomOrder}
+          className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs"
+        >
+          Cargar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TicketViewContent({
+  selectedOrderId,
+  isBackendMode,
+  mockFetch,
+  onSelectPreset,
+}: Readonly<{
+  selectedOrderId: string;
+  isBackendMode: boolean;
+  mockFetch: typeof fetch;
+  onSelectPreset: (id: string) => void;
+}>) {
+  return (
+    <div className="p-6 flex flex-col items-center justify-start min-h-full bg-slate-100 text-slate-900">
+      <div className="w-full max-w-3xl mb-4 bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-xs text-slate-600 flex justify-between items-center">
+        <div>
+          <strong className="text-slate-800">Vista Mesero (OrderTicketWidget):</strong>
+          <p className="mt-0.5">
+            {isBackendMode
+              ? 'Conectado a orders-backend en http://localhost:8000 con JWT de rol waiter.'
+              : 'Modo simulación visual en memoria (presets interactivos).'}
+          </p>
+        </div>
+        <span
+          className={`px-2 py-0.5 rounded text-xs font-semibold ${
+            isBackendMode ? 'bg-teal-100 text-teal-800' : 'bg-blue-100 text-blue-800'
+          }`}
+        >
+          {isBackendMode ? 'Live Backend' : 'Mock Preset'}
+        </span>
+      </div>
+      <div className="orders-kds-root w-full max-w-3xl">
+        <OrderTicketWidget
+          key={selectedOrderId}
+          orderId={selectedOrderId}
+          userId="00000000-0000-0000-0000-000000000001"
+          tokenProvider={devTokenProvider}
+          apiBaseUrl={isBackendMode ? 'http://localhost:8000' : ''}
+          webSocketBaseUrl={isBackendMode ? 'ws://localhost:8000' : undefined}
+          fetchFn={isBackendMode ? undefined : mockFetch}
+          WebSocketClass={
+            isBackendMode ? undefined : (MockWebSocket as unknown as typeof WebSocket)
+          }
+          diningSessionId="00000000-0000-0000-0000-000000000099"
+          onCreateNewOrder={() => onSelectPreset('ord-mesa-4')}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AlertsViewContent() {
+  return (
+    <div className="p-6 flex flex-col items-center justify-start min-h-full bg-slate-900 text-slate-100">
+      <div className="w-full max-w-xl mb-4 bg-slate-800 p-4 rounded-lg border border-slate-700 text-sm">
+        <h2 className="font-bold text-white mb-2">Simulador de Alertas para Meseros</h2>
+        <p className="text-slate-300 text-xs mb-3">
+          Escucha el canal WebSocket de cocina y emite un sonido (chime) y una notificación emergente
+          cuando un platillo pasa a <code>DELIVERED</code>.
+        </p>
+      </div>
+      <div className="w-full max-w-xl">
+        <ReadyOrdersAlert
+          userId="00000000-0000-0000-0000-000000000001"
+          tokenProvider={devTokenProvider}
+          webSocketBaseUrl="ws://localhost:8000"
+          enableSound={true}
+        />
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [view, setView] = useState<ViewMode>('kds');
   const [selectedOrderId, setSelectedOrderId] = useState<string>('ord-mesa-4');
@@ -220,354 +620,64 @@ function App() {
     });
   }, []);
 
-  const handleSelectPreset = (orderId: string) => {
+  const handleSelectPreset = useCallback((orderId: string) => {
     setIsBackendMode(false);
     setSelectedOrderId(orderId);
     presetsRef.current[orderId] = { ...PRESETS[orderId] };
     queryClient.setQueryData(['order', orderId], presetsRef.current[orderId]);
-  };
+  }, []);
 
-  const handleSelectSeedOrder = (orderUuid: string) => {
+  const handleSelectSeedOrder = useCallback((orderUuid: string) => {
     setIsBackendMode(true);
     setSelectedOrderId(orderUuid);
     queryClient.invalidateQueries({ queryKey: ['order', orderUuid] });
-  };
+  }, []);
 
-  const handleApplyCustomOrder = () => {
+  const handleApplyCustomOrder = useCallback(() => {
     const trimmed = customOrderId.trim();
     if (trimmed) {
       setIsBackendMode(true);
       setSelectedOrderId(trimmed);
       queryClient.invalidateQueries({ queryKey: ['order', trimmed] });
     }
-  };
+  }, [customOrderId]);
 
-  const mockFetch: typeof fetch = async (input, init) => {
-    const rawUrl =
-      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const url = rawUrl.replace(/^https?:\/\/[^/]+/, '');
-    const method = (init?.method ?? 'GET').toUpperCase();
-
-    const orderIdMatch = url.match(/\/orders\/([^/]+)/);
-    const targetOrderId = orderIdMatch ? decodeURIComponent(orderIdMatch[1]) : selectedOrderId;
-    const currentOrder = presetsRef.current[targetOrderId] ?? PRESETS[targetOrderId];
-
-    if (!currentOrder) {
-      return new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'Order not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (method === 'GET') {
-      return new Response(JSON.stringify(currentOrder), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (method === 'POST' && url.endsWith('/confirm')) {
-      const updated: Order = {
-        ...currentOrder,
-        status: OrderStatus.RESERVED,
-        version: currentOrder.version + 1,
-      };
-      presetsRef.current[targetOrderId] = updated;
-      return new Response(JSON.stringify(updated), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (method === 'PATCH' && url.endsWith('/cancel')) {
-      const updated: Order = {
-        ...currentOrder,
-        status: OrderStatus.CANCELLED,
-        version: currentOrder.version + 1,
-      };
-      presetsRef.current[targetOrderId] = updated;
-      return new Response(JSON.stringify(updated), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    const redoMatch = url.match(/\/orders\/[^/]+\/items\/([^/]+)\/redo/);
-    if (method === 'PATCH' && redoMatch) {
-      const targetItemId = decodeURIComponent(redoMatch[1]);
-      let note = 'Platillo solicitado para rehacer';
-      if (init?.body && typeof init.body === 'string') {
-        try {
-          const parsed = JSON.parse(init.body);
-          if (parsed.note) note = parsed.note;
-        } catch {
-          // ignore
-        }
-      }
-      const updated: Order = {
-        ...currentOrder,
-        version: currentOrder.version + 1,
-        items: currentOrder.items.map((item) => {
-          const match = (item.id ?? item.itemId) === targetItemId;
-          return match
-            ? { ...item, status: ItemStatus.PENDING, notes: note, version: (item.version ?? 1) + 1 }
-            : item;
-        }),
-      };
-      presetsRef.current[targetOrderId] = updated;
-      return new Response(JSON.stringify(updated), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (method === 'PATCH' && url.endsWith('/items')) {
-      let updatedItems = currentOrder.items;
-      if (init?.body && typeof init.body === 'string') {
-        try {
-          const parsed = JSON.parse(init.body);
-          if (Array.isArray(parsed.items)) {
-            updatedItems = parsed.items.map((it: Partial<Order['items'][number]>, idx: number) => ({
-              ...currentOrder.items[idx],
-              ...it,
-            }));
-          }
-        } catch {
-          // ignore
-        }
-      }
-      const updated: Order = {
-        ...currentOrder,
-        items: updatedItems,
-        version: currentOrder.version + 1,
-      };
-      presetsRef.current[targetOrderId] = updated;
-      return new Response(JSON.stringify(updated), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    return new Response(JSON.stringify(currentOrder), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  };
+  const mockFetch: typeof fetch = useCallback(
+    (input, init) => Promise.resolve(executeMockFetch(input, init, presetsRef, selectedOrderId)),
+    [selectedOrderId],
+  );
 
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-slate-900 text-slate-100">
       {/* Dev Switcher Bar */}
       <header className="flex flex-wrap items-center justify-between px-4 py-2 bg-slate-950 border-b border-slate-800 text-xs gap-2 shrink-0 z-50">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-slate-400 uppercase tracking-wider">Dev Views:</span>
-          <nav className="inline-flex rounded-md shadow-sm" aria-label="Selector de vistas">
-            <button
-              type="button"
-              onClick={() => setView('kds')}
-              className={`px-3 py-1.5 rounded-l-md font-medium border border-slate-700 transition-colors ${
-                view === 'kds'
-                  ? 'bg-amber-600 text-white border-amber-600'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              🍳 KDS Cocina
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('ticket')}
-              className={`px-3 py-1.5 font-medium border-t border-b border-r border-slate-700 transition-colors ${
-                view === 'ticket'
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              📝 Comanda Mesero (OrderTicketWidget)
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('alerts')}
-              className={`px-3 py-1.5 rounded-r-md font-medium border-t border-b border-r border-slate-700 transition-colors ${
-                view === 'alerts'
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              🔔 Alerta Órdenes Listas
-            </button>
-          </nav>
-        </div>
+        <DevNavbar view={view} onViewChange={setView} />
 
         {view === 'ticket' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-slate-400">Simulación UI:</span>
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('ord-mesa-4')}
-              className={`px-2 py-1 rounded text-xs border ${
-                !isBackendMode && selectedOrderId === 'ord-mesa-4'
-                  ? 'bg-blue-500 text-white border-blue-400'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-            >
-              Mesa 4 (Creada)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('ord-rechazada-stock')}
-              className={`px-2 py-1 rounded text-xs border ${
-                !isBackendMode && selectedOrderId === 'ord-rechazada-stock'
-                  ? 'bg-red-600 text-white border-red-500'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-            >
-              ⚠️ Rechazo Stock (Inventario)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('ord-reservada-kds')}
-              className={`px-2 py-1 rounded text-xs border ${
-                !isBackendMode && selectedOrderId === 'ord-reservada-kds'
-                  ? 'bg-emerald-600 text-white border-emerald-500'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-            >
-              Mesa 12 (Reservada)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('ord-entregada-rehacer')}
-              className={`px-2 py-1 rounded text-xs border ${
-                !isBackendMode && selectedOrderId === 'ord-entregada-rehacer'
-                  ? 'bg-purple-600 text-white border-purple-500'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-            >
-              Mesa 3 (Rehacer)
-            </button>
-
-            <span className="text-slate-500 ml-2">| Backend Real:</span>
-            <button
-              type="button"
-              onClick={() => handleSelectSeedOrder('44444444-4444-4444-4444-444444444444')}
-              className={`px-2 py-1 rounded text-xs border ${
-                isBackendMode && selectedOrderId === '44444444-4444-4444-4444-444444444444'
-                  ? 'bg-teal-600 text-white border-teal-500'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-            >
-              Seed Creada
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectSeedOrder('11111111-1111-1111-1111-111111111111')}
-              className={`px-2 py-1 rounded text-xs border ${
-                isBackendMode && selectedOrderId === '11111111-1111-1111-1111-111111111111'
-                  ? 'bg-teal-600 text-white border-teal-500'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-            >
-              Seed Reservada
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectSeedOrder('22222222-2222-2222-2222-222222222222')}
-              className={`px-2 py-1 rounded text-xs border ${
-                isBackendMode && selectedOrderId === '22222222-2222-2222-2222-222222222222'
-                  ? 'bg-teal-600 text-white border-teal-500'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-            >
-              Seed En Prep
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectSeedOrder('33333333-3333-3333-3333-333333333333')}
-              className={`px-2 py-1 rounded text-xs border ${
-                isBackendMode && selectedOrderId === '33333333-3333-3333-3333-333333333333'
-                  ? 'bg-teal-600 text-white border-teal-500'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-            >
-              Seed Entregada (Rehacer Real)
-            </button>
-
-            <div className="flex items-center gap-1 pl-2 border-l border-slate-700">
-              <input
-                type="text"
-                placeholder="UUID de Orden..."
-                value={customOrderId}
-                onChange={(e) => setCustomOrderId(e.target.value)}
-                className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-100 placeholder-slate-500 text-xs w-36"
-              />
-              <button
-                type="button"
-                onClick={handleApplyCustomOrder}
-                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs"
-              >
-                Cargar
-              </button>
-            </div>
-          </div>
+          <TicketSimulationBar
+            isBackendMode={isBackendMode}
+            selectedOrderId={selectedOrderId}
+            customOrderId={customOrderId}
+            onSelectPreset={handleSelectPreset}
+            onSelectSeedOrder={handleSelectSeedOrder}
+            onCustomOrderIdChange={setCustomOrderId}
+            onApplyCustomOrder={handleApplyCustomOrder}
+          />
         )}
       </header>
 
       {/* Main View Area */}
       <main className="flex-1 w-full h-full overflow-auto">
         {view === 'kds' && <KdsApp />}
-
         {view === 'ticket' && (
-          <div className="p-6 flex flex-col items-center justify-start min-h-full bg-slate-100 text-slate-900">
-            <div className="w-full max-w-3xl mb-4 bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-xs text-slate-600 flex justify-between items-center">
-              <div>
-                <strong className="text-slate-800">Vista Mesero (OrderTicketWidget):</strong>
-                <p className="mt-0.5">
-                  {isBackendMode
-                    ? 'Conectado a orders-backend en http://localhost:8000 con JWT de rol waiter.'
-                    : 'Modo simulación visual en memoria (presets interactivos).'}
-                </p>
-              </div>
-              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${isBackendMode ? 'bg-teal-100 text-teal-800' : 'bg-blue-100 text-blue-800'}`}>
-                {isBackendMode ? 'Live Backend' : 'Mock Preset'}
-              </span>
-            </div>
-            <div className="orders-kds-root w-full max-w-3xl">
-              <OrderTicketWidget
-                key={selectedOrderId}
-                orderId={selectedOrderId}
-                userId="00000000-0000-0000-0000-000000000001"
-                tokenProvider={async () => DEV_WAITER_JWT}
-                apiBaseUrl={isBackendMode ? 'http://localhost:8000' : ''}
-                webSocketBaseUrl={isBackendMode ? 'ws://localhost:8000' : undefined}
-                fetchFn={isBackendMode ? undefined : mockFetch}
-                WebSocketClass={
-                  isBackendMode ? undefined : (MockWebSocket as unknown as typeof WebSocket)
-                }
-                diningSessionId="00000000-0000-0000-0000-000000000099"
-                onCreateNewOrder={() => handleSelectPreset('ord-mesa-4')}
-              />
-            </div>
-          </div>
+          <TicketViewContent
+            selectedOrderId={selectedOrderId}
+            isBackendMode={isBackendMode}
+            mockFetch={mockFetch}
+            onSelectPreset={handleSelectPreset}
+          />
         )}
-
-        {view === 'alerts' && (
-          <div className="p-6 flex flex-col items-center justify-start min-h-full bg-slate-900 text-slate-100">
-            <div className="w-full max-w-xl mb-4 bg-slate-800 p-4 rounded-lg border border-slate-700 text-sm">
-              <h2 className="font-bold text-white mb-2">Simulador de Alertas para Meseros</h2>
-              <p className="text-slate-300 text-xs mb-3">
-                Escucha el canal WebSocket de cocina y emite un sonido (chime) y una notificación emergente
-                cuando un platillo pasa a <code>DELIVERED</code>.
-              </p>
-            </div>
-            <div className="w-full max-w-xl">
-              <ReadyOrdersAlert
-                userId="00000000-0000-0000-0000-000000000001"
-                tokenProvider={async () => DEV_WAITER_JWT}
-                webSocketBaseUrl="ws://localhost:8000"
-                enableSound={true}
-              />
-            </div>
-          </div>
-        )}
+        {view === 'alerts' && <AlertsViewContent />}
       </main>
     </div>
   );
