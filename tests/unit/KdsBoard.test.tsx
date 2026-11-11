@@ -804,7 +804,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-card-stub-ord-101')).toBeInTheDocument();
@@ -917,7 +917,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-start-ord-res-default')).toBeInTheDocument();
@@ -940,7 +940,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
@@ -964,7 +964,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
@@ -992,7 +992,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
@@ -1019,7 +1019,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-admin-void-ord-101')).toBeInTheDocument();
@@ -1048,7 +1048,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-chef-void-ord-101')).toBeInTheDocument();
@@ -1138,7 +1138,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-ready-ord-inprep-1')).toBeInTheDocument();
@@ -1171,7 +1171,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-start-ord-res-noprep')).toBeInTheDocument();
@@ -1201,7 +1201,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-reject-ord-res-reject')).toBeInTheDocument();
@@ -1241,7 +1241,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-action-reject-ord-res-cancel-reject')).toBeInTheDocument();
@@ -1320,7 +1320,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('order-item-action-item-last-pending')).toBeInTheDocument();
@@ -1358,7 +1358,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       } as unknown as ApiClient;
 
       const queryClient = createTestQueryClient();
-      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+      render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
       // Wait for items to render
       await vi.waitFor(() => {

@@ -14,6 +14,7 @@ import { OrderCard, type PendingUndoItem } from './OrderCard.tsx';
 import { StationSelector } from './StationSelector.tsx';
 import { type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 import { pointerAction } from './pointerAction.ts';
+import { getItemKey, getOrderKey, getOrderNumberDisplay } from './orderNumberDisplay.ts';
 import { AdminVoidDialog } from './dialogs/AdminVoidDialog.tsx';
 import { ChefVoidDialog } from './dialogs/ChefVoidDialog.tsx';
 import { ConfirmReadyDialog } from './dialogs/ConfirmReadyDialog.tsx';
@@ -136,7 +137,7 @@ function KdsBoardContent({
 
   const handleAdminVoidConfirm = useCallback(
     async (order: Order) => {
-      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const orderId = getOrderKey(order);
       if (orderId) {
         if (onAdminVoid) {
           onAdminVoid(order);
@@ -155,7 +156,7 @@ function KdsBoardContent({
 
   const handleChefVoidConfirm = useCallback(
     async (order: Order, note: string) => {
-      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const orderId = getOrderKey(order);
       if (orderId) {
         if (onChefVoid) {
           onChefVoid(order, note);
@@ -179,7 +180,7 @@ function KdsBoardContent({
 
   const startPreparation = useCallback(
     (order: Order) => {
-      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const orderId = getOrderKey(order);
       if (orderId) {
         void runAction('start', `/orders/${orderId}/start-preparation`, undefined, {
           text: `Comanda #${order.orderNumber ?? orderId} en preparación.`,
@@ -194,9 +195,9 @@ function KdsBoardContent({
 
   const executeRejectSupplies = useCallback(
     (order: Order) => {
-      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const orderId = getOrderKey(order);
       const firstItem = order.items[0];
-      const itemId = firstItem?.itemId ?? firstItem?.publicId ?? firstItem?.id;
+      const itemId = firstItem ? getItemKey(firstItem) : '';
       if (orderId && itemId) {
         void runAction(
           'reject',
@@ -238,34 +239,93 @@ function KdsBoardContent({
   } | null>(null);
 
   // Pending undo grace period state (TASK-40b)
-  const [pendingUndo, setPendingUndo] = useState<PendingUndoItem | null>(null);
+  const [pendingUndoMap, setPendingUndoMap] = useState<Record<string, PendingUndoItem>>({});
+  const optimisticReadyItemIdsRef = useRef<Set<string>>(new Set());
+  const [optimisticReadyItemIds, setOptimisticReadyItemIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
-  const pendingUndoRef = useRef<{
-    timerId: ReturnType<typeof setTimeout> | null;
-    intervalId: ReturnType<typeof setInterval> | null;
-    order: Order;
-    item: Order['items'][number];
-    execute: () => Promise<void>;
-  } | null>(null);
+  const pendingUndoRefs = useRef<
+    Map<
+      string,
+      {
+        timerId: ReturnType<typeof setTimeout> | null;
+        intervalId: ReturnType<typeof setInterval> | null;
+        type: 'item' | 'order';
+        order: Order;
+        item?: Order['items'][number];
+        execute: () => Promise<void>;
+      }
+    >
+  >(new Map());
 
-  const flushPendingUndo = useCallback(async () => {
-    if (!pendingUndoRef.current) return;
-    const current = pendingUndoRef.current;
-    if (current.timerId) clearTimeout(current.timerId);
-    if (current.intervalId) clearInterval(current.intervalId);
-    pendingUndoRef.current = null;
-    setPendingUndo(null);
-    await current.execute();
+  const flushPendingItemUndos = useCallback(async () => {
+    const itemEntries: {
+      key: string;
+      execute: () => Promise<void>;
+    }[] = [];
+
+    for (const [key, entry] of pendingUndoRefs.current.entries()) {
+      if (entry.type === 'item') {
+        if (entry.timerId) clearTimeout(entry.timerId);
+        if (entry.intervalId) clearInterval(entry.intervalId);
+        pendingUndoRefs.current.delete(key);
+        itemEntries.push({ key, execute: entry.execute });
+      }
+    }
+
+    if (itemEntries.length > 0) {
+      setPendingUndoMap((prev) => {
+        const next = { ...prev };
+        for (const { key } of itemEntries) {
+          delete next[key];
+        }
+        return next;
+      });
+      await Promise.all(itemEntries.map(({ execute }) => execute()));
+    }
   }, []);
 
-  const handleUndoReady = useCallback(() => {
-    if (!pendingUndoRef.current) return;
-    const current = pendingUndoRef.current;
+  const handleUndoReady = useCallback((targetOrder?: Order) => {
+    const targetKey = targetOrder ? getOrderKey(targetOrder) : undefined;
+    const orderKey = targetKey || Array.from(pendingUndoRefs.current.keys()).at(-1);
+    if (!orderKey) return;
+
+    const current = pendingUndoRefs.current.get(orderKey);
+    if (!current) return;
+
     if (current.timerId) clearTimeout(current.timerId);
     if (current.intervalId) clearInterval(current.intervalId);
-    const itemName = current.item.name;
-    pendingUndoRef.current = null;
-    setPendingUndo(null);
+
+    pendingUndoRefs.current.delete(orderKey);
+    setPendingUndoMap((prev) => {
+      const next = { ...prev };
+      delete next[orderKey];
+      return next;
+    });
+
+    if (current.item) {
+      const itemId = getItemKey(current.item);
+      optimisticReadyItemIdsRef.current.delete(itemId);
+      setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
+    }
+
+    if (current.type === 'order') {
+      const orderNumberDisplay = getOrderNumberDisplay(
+        current.order.orderNumber,
+        getOrderKey(current.order) || 'unknown',
+      );
+      const triggeringItemName = current.item?.name;
+      setFeedbackMessage({
+        text: triggeringItemName
+          ? `Envío cancelado. ${triggeringItemName} se mantiene pendiente y la comanda #${orderNumberDisplay} sigue en preparación.`
+          : `Envío cancelado. Comanda #${orderNumberDisplay} se mantiene en preparación.`,
+        type: 'info',
+      });
+      return;
+    }
+
+    const itemName = current.item?.name ?? 'Platillo';
     setFeedbackMessage({
       text: `Envío cancelado. ${itemName} se mantiene pendiente.`,
       type: 'info',
@@ -274,8 +334,8 @@ function KdsBoardContent({
 
   const executeMarkItemReady = useCallback(
     async (order: Order, item: Order['items'][number]) => {
-      const orderId = order.orderId ?? order.publicId ?? order.id;
-      const itemId = item.itemId ?? item.publicId ?? item.id;
+      const orderId = getOrderKey(order);
+      const itemId = getItemKey(item);
       if (!orderId || !itemId) return;
       if (order.status === 'RESERVED' && actionClient) {
         await actionClient.patch(`/orders/${orderId}/start-preparation`);
@@ -290,13 +350,17 @@ function KdsBoardContent({
 
   const startItemReadyGracePeriod = useCallback(
     (order: Order, item: Order['items'][number]) => {
-      if (pendingUndoRef.current) {
-        void flushPendingUndo();
+      const orderId = getOrderKey(order);
+      const itemId = getItemKey(item);
+      if (!orderId || !itemId) return;
+
+      // If this order is already counting down to be sent as ready, ignore item clicks
+      if (pendingUndoRefs.current.get(orderId)?.type === 'order') {
+        return;
       }
 
-      const orderId = order.orderId ?? order.publicId ?? order.id;
-      const itemId = item.itemId ?? item.publicId ?? item.id;
-      if (!orderId || !itemId) return;
+      // Flush any pending ITEM countdowns across the board
+      void flushPendingItemUndos();
 
       const graceMs = undoGracePeriodMs ?? 15000;
       if (graceMs <= 0) {
@@ -305,106 +369,113 @@ function KdsBoardContent({
       }
 
       const totalSeconds = Math.max(1, Math.ceil(graceMs / 1000));
-      setPendingUndo({
-        orderId,
-        itemId,
-        secondsLeft: totalSeconds,
-      });
+      optimisticReadyItemIdsRef.current.add(itemId);
+      setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
+
+      setPendingUndoMap((prev) => ({
+        ...prev,
+        [orderId]: {
+          orderId,
+          itemId,
+          type: 'item',
+          secondsLeft: totalSeconds,
+        },
+      }));
 
       const execute = async () => {
         await executeMarkItemReady(order, item);
       };
 
       const intervalId = setInterval(() => {
-        setPendingUndo((prev) => {
-          if (prev?.itemId !== itemId) return prev;
-          const nextSeconds = prev.secondsLeft - 1;
+        setPendingUndoMap((prev) => {
+          const current = prev[orderId];
+          if (current?.itemId !== itemId || current?.type !== 'item') return prev;
           return {
             ...prev,
-            secondsLeft: Math.max(0, nextSeconds),
+            [orderId]: {
+              ...current,
+              secondsLeft: Math.max(0, current.secondsLeft - 1),
+            },
           };
         });
       }, 1000);
 
       const timerId = setTimeout(async () => {
-        if (pendingUndoRef.current?.item === item) {
+        const currentRef = pendingUndoRefs.current.get(orderId);
+        if (currentRef?.type === 'item') {
           clearInterval(intervalId);
-          pendingUndoRef.current = null;
-          setPendingUndo(null);
+          pendingUndoRefs.current.delete(orderId);
+          setPendingUndoMap((prev) => {
+            const next = { ...prev };
+            delete next[orderId];
+            return next;
+          });
           await execute();
         }
       }, graceMs);
 
-      pendingUndoRef.current = {
+      pendingUndoRefs.current.set(orderId, {
         timerId,
         intervalId,
+        type: 'item',
         order,
         item,
         execute,
-      };
+      });
     },
-    [flushPendingUndo, executeMarkItemReady, undoGracePeriodMs],
+    [undoGracePeriodMs, flushPendingItemUndos, executeMarkItemReady],
   );
 
   const markItemReady = useCallback(
     (order: Order, item: Order['items'][number]) => {
-      const targetItemId = item.itemId ?? item.publicId ?? item.id;
+      const orderId = getOrderKey(order);
+      if (pendingUndoRefs.current.get(orderId)?.type === 'order') {
+        return;
+      }
+      const targetItemId = getItemKey(item);
       const remainingPending = order.items.filter((i) => {
-        const id = i.itemId ?? i.publicId ?? i.id;
-        return id !== targetItemId && i.status === 'PENDING';
+        const id = getItemKey(i);
+        if (id === targetItemId) return false;
+        if (optimisticReadyItemIdsRef.current.has(id)) return false;
+        return i.status === 'PENDING';
       });
+      // Flush any pending item countdowns across the board
+      void flushPendingItemUndos();
+
       if (remainingPending.length === 0) {
         setConfirmReadyTarget({ order, item });
         return;
       }
       startItemReadyGracePeriod(order, item);
     },
-    [startItemReadyGracePeriod],
+    [flushPendingItemUndos, startItemReadyGracePeriod],
   );
 
-  // Dispatch pending item ready on window unload/reload (TASK-40b)
+  // Dispatch pending item/order ready on window unload/reload (TASK-40b)
   useEffect(() => {
+    const activeRefs = pendingUndoRefs.current;
     const handleBeforeUnload = () => {
-      if (pendingUndoRef.current) {
-        const { execute, timerId, intervalId } = pendingUndoRef.current;
-        if (timerId) clearTimeout(timerId);
-        if (intervalId) clearInterval(intervalId);
-        pendingUndoRef.current = null;
-        void execute();
+      for (const entry of activeRefs.values()) {
+        if (entry.timerId) clearTimeout(entry.timerId);
+        if (entry.intervalId) clearInterval(entry.intervalId);
+        void entry.execute();
       }
+      activeRefs.clear();
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      if (pendingUndoRef.current) {
-        if (pendingUndoRef.current.timerId) clearTimeout(pendingUndoRef.current.timerId);
-        if (pendingUndoRef.current.intervalId) clearInterval(pendingUndoRef.current.intervalId);
+      for (const entry of activeRefs.values()) {
+        if (entry.timerId) clearTimeout(entry.timerId);
+        if (entry.intervalId) clearInterval(entry.intervalId);
       }
     };
   }, []);
 
-  const handleConfirmReadyDialog = useCallback(async () => {
-    if (!confirmReadyTarget) return;
-    const { order, item } = confirmReadyTarget;
-    setConfirmReadyTarget(null);
-    await executeMarkItemReady(order, item);
-  }, [confirmReadyTarget, executeMarkItemReady]);
-
-  const handleKeepInPrepDialog = useCallback(() => {
-    if (!confirmReadyTarget) return;
-    const orderNumberDisplay =
-      confirmReadyTarget.order.orderNumber ?? confirmReadyTarget.order.id;
-    setConfirmReadyTarget(null);
-    setFeedbackMessage({
-      text: `Comanda #${orderNumberDisplay} se mantiene en preparación. Podrás marcarla como lista cuando finalices el emplatado.`,
-      type: 'info',
-    });
-  }, [confirmReadyTarget]);
-
-  const markOrderReady = useCallback(
+  const executeMarkOrderReady = useCallback(
     async (order: Order) => {
-      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const orderId = getOrderKey(order);
       if (!orderId) return;
       if (order.status === 'RESERVED' && actionClient) {
         await actionClient.patch(`/orders/${orderId}/start-preparation`);
@@ -416,6 +487,117 @@ function KdsBoardContent({
     },
     [actionClient, runAction],
   );
+
+  const startOrderReadyGracePeriod = useCallback(
+    (order: Order, triggeringItem?: Order['items'][number]) => {
+      const orderId = getOrderKey(order);
+      if (!orderId) return;
+
+      // Clear any pending undo for this order (e.g. an individual item on this order)
+      const existingEntry = pendingUndoRefs.current.get(orderId);
+      if (existingEntry) {
+        if (existingEntry.timerId) clearTimeout(existingEntry.timerId);
+        if (existingEntry.intervalId) clearInterval(existingEntry.intervalId);
+        pendingUndoRefs.current.delete(orderId);
+        if (existingEntry.type === 'item') {
+          void existingEntry.execute();
+        }
+      }
+
+      if (triggeringItem) {
+        const triggeringItemId = getItemKey(triggeringItem);
+        optimisticReadyItemIdsRef.current.add(triggeringItemId);
+        setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
+      }
+
+      const graceMs = undoGracePeriodMs ?? 15000;
+      if (graceMs <= 0) {
+        if (triggeringItem) {
+          void executeMarkItemReady(order, triggeringItem);
+        } else {
+          void executeMarkOrderReady(order);
+        }
+        return;
+      }
+
+      const totalSeconds = Math.max(1, Math.ceil(graceMs / 1000));
+      const triggeringItemId = triggeringItem ? getItemKey(triggeringItem) : undefined;
+
+      setPendingUndoMap((prev) => ({
+        ...prev,
+        [orderId]: {
+          orderId,
+          itemId: triggeringItemId,
+          type: 'order',
+          secondsLeft: totalSeconds,
+        },
+      }));
+
+      const execute = async () => {
+        if (triggeringItem) {
+          await executeMarkItemReady(order, triggeringItem);
+        } else {
+          await executeMarkOrderReady(order);
+        }
+      };
+
+      const intervalId = setInterval(() => {
+        setPendingUndoMap((prev) => {
+          const current = prev[orderId];
+          if (current?.orderId !== orderId || current?.type !== 'order') return prev;
+          return {
+            ...prev,
+            [orderId]: {
+              ...current,
+              secondsLeft: Math.max(0, current.secondsLeft - 1),
+            },
+          };
+        });
+      }, 1000);
+
+      const timerId = setTimeout(async () => {
+        const currentRef = pendingUndoRefs.current.get(orderId);
+        if (currentRef?.type === 'order') {
+          clearInterval(intervalId);
+          pendingUndoRefs.current.delete(orderId);
+          setPendingUndoMap((prev) => {
+            const next = { ...prev };
+            delete next[orderId];
+            return next;
+          });
+          await execute();
+        }
+      }, graceMs);
+
+      pendingUndoRefs.current.set(orderId, {
+        timerId,
+        intervalId,
+        type: 'order',
+        order,
+        item: triggeringItem,
+        execute,
+      });
+    },
+    [undoGracePeriodMs, executeMarkOrderReady, executeMarkItemReady],
+  );
+
+  const handleConfirmReadyDialog = useCallback(() => {
+    if (!confirmReadyTarget) return;
+    const { order, item } = confirmReadyTarget;
+    setConfirmReadyTarget(null);
+    startOrderReadyGracePeriod(order, item);
+  }, [confirmReadyTarget, startOrderReadyGracePeriod]);
+
+  const handleKeepInPrepDialog = useCallback(() => {
+    if (!confirmReadyTarget) return;
+    const orderNumberDisplay =
+      confirmReadyTarget.order.orderNumber ?? confirmReadyTarget.order.id;
+    setConfirmReadyTarget(null);
+    setFeedbackMessage({
+      text: `Comanda #${orderNumberDisplay} se mantiene en preparación. Podrás marcarla como lista cuando finalices el emplatado.`,
+      type: 'info',
+    });
+  }, [confirmReadyTarget]);
 
   // Dynamically derive available stations from current queue items, always including static "general"
   const availableStations = useMemo<string[]>(() => {
@@ -570,20 +752,30 @@ function KdsBoardContent({
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 min-h-0 auto-rows-max lg:auto-rows-fr lg:h-full content-start overflow-y-auto"
       >
         {paginatedOrders.map((order) => {
-          const orderId = order.id ?? order.orderId ?? order.publicId;
-          const activePendingUndo =
-            pendingUndo && pendingUndo.orderId === orderId ? pendingUndo : null;
+          const orderKey = getOrderKey(order);
+          const pendingUndo = pendingUndoMap[orderKey];
+          const isPendingUndoOrder = pendingUndo?.type === 'order';
+          const activePendingUndoItem =
+            pendingUndo?.type === 'item' ? pendingUndo : null;
+          const undoOrderSecondsLeft = isPendingUndoOrder ? pendingUndo?.secondsLeft : undefined;
+          const pendingOrderTriggeringItemId = isPendingUndoOrder ? pendingUndo?.itemId : undefined;
+
           return (
             <OrderCard
-              key={orderId}
+              key={orderKey}
               order={order}
               onClick={onOrderSelect}
               onStartPreparation={onStartPreparation ?? startPreparation}
               onRejectSupplies={handleRejectClick}
-              onMarkOrderReady={markOrderReady}
+              onMarkOrderReady={startOrderReadyGracePeriod}
               onItemReady={markItemReady}
-              onUndoReady={handleUndoReady}
-              pendingUndoItem={activePendingUndo}
+              onUndoReady={() => handleUndoReady(order)}
+              pendingUndoItem={activePendingUndoItem}
+              isPendingUndoOrder={isPendingUndoOrder}
+              undoOrderSecondsLeft={undoOrderSecondsLeft}
+              pendingOrderTriggeringItemId={pendingOrderTriggeringItemId}
+              onUndoOrderReady={() => handleUndoReady(order)}
+              optimisticReadyItemIds={optimisticReadyItemIds}
               onAdminVoid={handleOpenAdminVoid}
               onChefVoid={handleOpenChefVoid}
               userRole={userRole}
@@ -625,7 +817,7 @@ function KdsBoardContent({
                 : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
             }`}
           >
-            Comandas en Activas
+            Comandas Activas
           </button>
           <button
             type="button"
@@ -659,55 +851,60 @@ function KdsBoardContent({
       <section
         id="panel-kds-grid"
         aria-label="Cuadrícula de comandas KDS"
-        className="flex-1 min-h-0 p-4 sm:p-6 overflow-hidden flex flex-col justify-center bg-canvas"
+        className="relative flex-1 min-h-0 p-4 sm:p-6 overflow-hidden flex flex-col justify-center bg-canvas"
       >
-        {feedbackMessage && (
-          <output
-            aria-live="polite"
-            data-testid="kds-action-feedback"
-            className={`mb-3 rounded-control border px-4 py-2.5 text-sm sm:text-base font-semibold flex items-center justify-between shadow-sm ${
-              feedbackMessage.type === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : 'bg-blue-50 border-blue-200 text-blue-900'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
-                  feedbackMessage.type === 'success' ? 'bg-emerald-600' : 'bg-blue-600'
+        {/* Floating Notification Toast Layer (Does not shift or shrink the grid) */}
+        {(feedbackMessage || actionError) && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-2rem)] max-w-2xl pointer-events-none flex flex-col gap-2">
+            {feedbackMessage && (
+              <output
+                aria-live="polite"
+                data-testid="kds-action-feedback"
+                className={`pointer-events-auto rounded-control border px-4 py-2.5 text-sm sm:text-base font-semibold flex items-center justify-between shadow-lg backdrop-blur-sm transition-all ${
+                  feedbackMessage.type === 'success'
+                    ? 'bg-emerald-50/95 border-emerald-300 text-emerald-950'
+                    : 'bg-blue-50/95 border-blue-300 text-blue-950'
                 }`}
-              />
-              <span>{feedbackMessage.text}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setFeedbackMessage(null)}
-              aria-label="Cerrar notificación"
-              className="text-body hover:text-ink font-bold px-2 py-0.5 rounded hover:bg-black/5"
-            >
-              ✕
-            </button>
-          </output>
-        )}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
+                      feedbackMessage.type === 'success' ? 'bg-emerald-600' : 'bg-blue-600'
+                    }`}
+                  />
+                  <span>{feedbackMessage.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFeedbackMessage(null)}
+                  aria-label="Cerrar notificación"
+                  className="text-body hover:text-ink font-bold px-2 py-0.5 rounded hover:bg-black/10 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </output>
+            )}
 
-        {actionError && (
-          <div
-            role="alert"
-            data-testid="kds-action-error"
-            className="mb-3 rounded-control bg-red-50 border border-red-300 px-4 py-2.5 text-red-800 font-medium flex items-center justify-between shadow-sm"
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block shrink-0" />
-              <span>{actionError}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActionError(null)}
-              aria-label="Cerrar mensaje de error"
-              className="text-red-700 hover:text-red-900 font-bold px-2 py-0.5 rounded hover:bg-red-100/60"
-            >
-              ✕
-            </button>
+            {actionError && (
+              <div
+                role="alert"
+                data-testid="kds-action-error"
+                className="pointer-events-auto rounded-control bg-red-50/95 border border-red-400 px-4 py-2.5 text-red-900 font-medium flex items-center justify-between shadow-lg backdrop-blur-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block shrink-0" />
+                  <span>{actionError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActionError(null)}
+                  aria-label="Cerrar mensaje de error"
+                  className="text-red-700 hover:text-red-900 font-bold px-2 py-0.5 rounded hover:bg-red-100/60 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
         )}
         {gridContent}

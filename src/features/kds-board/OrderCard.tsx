@@ -4,11 +4,12 @@ import type { UserRole } from '../../shared/types/auth.ts';
 import { StatusBadge } from './StatusBadge.tsx';
 import { useElapsedTime } from './useElapsedTime.ts';
 import { pointerAction } from './pointerAction.ts';
-import { getOrderNumberDisplay } from './orderNumberDisplay.ts';
+import { getItemKey, getOrderKey, getOrderNumberDisplay } from './orderNumberDisplay.ts';
 
 export interface PendingUndoItem {
   readonly orderId: string;
-  readonly itemId: string;
+  readonly itemId?: string;
+  readonly type?: 'item' | 'order';
   readonly secondsLeft: number;
 }
 
@@ -26,6 +27,11 @@ export interface OrderCardProps {
   readonly isFocused?: boolean;
   readonly pendingUndoItem?: PendingUndoItem | null;
   readonly onUndoReady?: (order: Order, item: OrderItem) => void;
+  readonly isPendingUndoOrder?: boolean;
+  readonly undoOrderSecondsLeft?: number;
+  readonly pendingOrderTriggeringItemId?: string;
+  readonly onUndoOrderReady?: (order: Order) => void;
+  readonly optimisticReadyItemIds?: Set<string>;
 }
 
 interface OrderItemUndoBannerProps {
@@ -196,6 +202,7 @@ function OrderCardItem({
   isPending,
   isRedoPending,
   isPendingUndo = false,
+  isOptimisticallyReady = false,
   undoSecondsLeft = 15,
   isManyItems = false,
 }: Readonly<{
@@ -206,13 +213,14 @@ function OrderCardItem({
   isPending: boolean;
   isRedoPending: boolean;
   isPendingUndo?: boolean;
+  isOptimisticallyReady?: boolean;
   undoSecondsLeft?: number;
   isManyItems?: boolean;
 }>) {
-  const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
+  const itemId = getItemKey(item, index);
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
-  const isFinished = item.status === 'READY' || item.status === 'DELIVERED';
-  const hasDetails = Boolean((item.modifiers && item.modifiers.length > 0) || item.notes);
+  const isFinished = item.status === 'READY' || item.status === 'DELIVERED' || Boolean(isOptimisticallyReady);
+  const hasDetails = Boolean(item.modifiers?.length || item.notes);
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(!isManyItems);
   const showDetails = !isManyItems || isDetailsExpanded;
 
@@ -295,10 +303,10 @@ function OrderCardItem({
         />
       )}
 
-      {showDetails && item.modifiers && item.modifiers.length > 0 && (
+      {showDetails && Boolean(item.modifiers?.length) && (
         <OrderItemModifiers
           itemId={itemId}
-          modifiers={item.modifiers}
+          modifiers={item.modifiers ?? []}
           isManyItems={isManyItems}
         />
       )}
@@ -319,6 +327,46 @@ function OrderCardItem({
   );
 }
 
+interface OrderReadyUndoBannerProps {
+  readonly displayId: string;
+  readonly undoSecondsLeft?: number;
+  readonly onUndo?: () => void;
+}
+
+function OrderReadyUndoBanner({
+  displayId,
+  undoSecondsLeft = 15,
+  onUndo,
+}: Readonly<OrderReadyUndoBannerProps>) {
+  return (
+    <div
+      data-testid={`order-undo-ready-${displayId}`}
+      className="shrink-0 mx-3 sm:mx-4 mb-2.5 sm:mb-3 p-2.5 rounded-control bg-amber-50 border border-amber-300 flex flex-wrap items-center justify-between gap-2 shadow-xs min-h-[64px]"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+        <span
+          data-testid={`order-undo-countdown-${displayId}`}
+          className="text-xs sm:text-sm font-bold text-amber-900 leading-tight"
+        >
+          Comanda lista — enviando en {undoSecondsLeft}s
+        </span>
+      </div>
+      <button
+        type="button"
+        data-testid={`order-action-undo-ready-${displayId}`}
+        aria-label={`Deshacer comanda lista para #${displayId}`}
+        {...pointerAction(() => onUndo?.())}
+        onKeyDown={(event) => handleButtonKey(event, onUndo)}
+        style={{ minWidth: 64, minHeight: 44 }}
+        className="min-w-[64px] min-h-[44px] px-4 py-2 rounded-control font-extrabold text-xs sm:text-sm bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto"
+      >
+        Deshacer
+      </button>
+    </div>
+  );
+}
+
 interface OrderCardActionsProps {
   readonly order: Order;
   readonly displayId: string;
@@ -329,6 +377,9 @@ interface OrderCardActionsProps {
   readonly onAdminVoid?: (order: Order) => void;
   readonly onChefVoid?: (order: Order) => void;
   readonly onMarkOrderReady?: (order: Order) => void;
+  readonly isPendingUndoOrder?: boolean;
+  readonly undoOrderSecondsLeft?: number;
+  readonly onUndoOrderReady?: (order: Order) => void;
 }
 
 function handleButtonKey(
@@ -385,6 +436,9 @@ function OrderCardActions({
   onAdminVoid,
   onChefVoid,
   onMarkOrderReady,
+  isPendingUndoOrder,
+  undoOrderSecondsLeft,
+  onUndoOrderReady,
 }: Readonly<OrderCardActionsProps>) {
   const isReserved = order.status === 'RESERVED';
   const isInPrep = order.status === 'IN_PREPARATION';
@@ -465,20 +519,27 @@ function OrderCardActions({
         </div>
       )}
 
-      {canShowReady && (
-        <button
-          type="button"
-          data-testid={`order-action-ready-${displayId}`}
-          aria-label={`Comanda lista para la comanda ${displayId}`}
-          disabled={pendingAction === 'order-ready'}
-          {...pointerAction(() => onMarkOrderReady?.(order))}
-          onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
-          style={{ minHeight: 64 }}
-          className="shrink-0 mx-3 sm:mx-4 mb-2.5 sm:mb-3 min-h-[64px] rounded-control bg-fmat-primary px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-base font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50 shadow-sm flex items-center justify-center cursor-pointer border-0"
-        >
-          Comanda lista
-        </button>
-      )}
+      {canShowReady &&
+        (isPendingUndoOrder ? (
+          <OrderReadyUndoBanner
+            displayId={displayId}
+            undoSecondsLeft={undoOrderSecondsLeft}
+            onUndo={() => onUndoOrderReady?.(order)}
+          />
+        ) : (
+          <button
+            type="button"
+            data-testid={`order-action-ready-${displayId}`}
+            aria-label={`Comanda lista para la comanda ${displayId}`}
+            disabled={pendingAction === 'order-ready'}
+            {...pointerAction(() => onMarkOrderReady?.(order))}
+            onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
+            style={{ minHeight: 64 }}
+            className="shrink-0 mx-3 sm:mx-4 mb-2.5 sm:mb-3 min-h-[64px] rounded-control bg-fmat-primary px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-base font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50 shadow-sm flex items-center justify-center cursor-pointer border-0"
+          >
+            Comanda lista
+          </button>
+        ))}
     </>
   );
 }
@@ -513,11 +574,15 @@ export function OrderCard({
   isFocused = false,
   pendingUndoItem,
   onUndoReady,
+  isPendingUndoOrder,
+  undoOrderSecondsLeft,
+  pendingOrderTriggeringItemId,
+  onUndoOrderReady,
+  optimisticReadyItemIds,
 }: Readonly<OrderCardProps>) {
-  const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const displayId = getOrderKey(order) || 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
-  const hasTableHeader =
-    (order.tableNumber !== null && order.tableNumber !== undefined) || order.isTakeaway;
+  const hasTableHeader = order.tableNumber != null || order.isTakeaway;
 
   const isManyItems = order.items.length >= 5;
 
@@ -642,9 +707,13 @@ export function OrderCard({
         aria-label={`Platillos para la comanda ${displayId}`}
       >
         {order.items.map((item, index) => {
-          const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
+          const itemId = getItemKey(item, index);
           const isRedoPending = order.status === 'DELIVERED' && item.status === 'PENDING';
           const isPendingUndo = pendingUndoItem?.itemId === itemId;
+          const isOptimisticallyReady =
+            Boolean(optimisticReadyItemIds?.has(itemId)) ||
+            (isPendingUndoOrder &&
+              (pendingOrderTriggeringItemId ? pendingOrderTriggeringItemId === itemId : true));
           return (
             <OrderCardItem
               key={itemId}
@@ -652,11 +721,10 @@ export function OrderCard({
               index={index}
               onReady={() => onItemReady?.(order, item)}
               onUndo={() => onUndoReady?.(order, item)}
-              isPending={
-                pendingAction === `item:${item.id ?? item.itemId ?? item.publicId ?? index}`
-              }
+              isPending={pendingAction === `item:${itemId}`}
               isRedoPending={isRedoPending}
               isPendingUndo={isPendingUndo}
+              isOptimisticallyReady={isOptimisticallyReady}
               undoSecondsLeft={pendingUndoItem?.secondsLeft}
               isManyItems={isManyItems}
             />
@@ -680,6 +748,9 @@ export function OrderCard({
         onAdminVoid={onAdminVoid}
         onChefVoid={onChefVoid}
         onMarkOrderReady={onMarkOrderReady}
+        isPendingUndoOrder={isPendingUndoOrder}
+        undoOrderSecondsLeft={undoOrderSecondsLeft}
+        onUndoOrderReady={onUndoOrderReady}
       />
     </article>
   );
