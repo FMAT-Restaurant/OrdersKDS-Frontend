@@ -22,7 +22,7 @@ export function StatusBadge({ status, className = '' }: Readonly<StatusBadgeProp
       data-testid={`status-badge-${status.toLowerCase()}`}
       data-status={status}
       style={{ backgroundColor: config.token }}
-      className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm select-none ${config.className} ${className}`.trim()}
+      className={`inline-flex items-center justify-center px-2 sm:px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-normal sm:tracking-wider shadow-sm select-none whitespace-nowrap shrink-0 ${config.className} ${className}`.trim()}
     >
       {config.label}
       {config.englishLabel && (

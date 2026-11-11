@@ -221,7 +221,7 @@ function TableHeader({
   if (tableNumber !== null && tableNumber !== undefined) {
     return (
       <span
-        className="text-lg sm:text-xl font-black text-white tracking-wide whitespace-nowrap shrink-0"
+        className="text-base sm:text-lg font-black text-white tracking-wide whitespace-nowrap shrink-0"
         data-testid={`order-table-${displayId}`}
       >
         Mesa {tableNumber}{' '}
@@ -436,8 +436,8 @@ export function OrderCard({
           isFocused ? 'ring-2 ring-fmat-primary' : ''
         }`}
       >
-        <div className="flex items-center justify-between gap-1.5 w-full flex-wrap sm:flex-nowrap min-w-0">
-          <div className="flex items-baseline gap-1.5 shrink-0 whitespace-nowrap">
+        <div className="flex items-center justify-between gap-x-2 gap-y-1.5 w-full flex-wrap min-w-0">
+          <div className="flex items-baseline gap-1.5 shrink-0 whitespace-nowrap min-w-0">
             <TableHeader
               tableNumber={order.tableNumber}
               isTakeaway={order.isTakeaway}

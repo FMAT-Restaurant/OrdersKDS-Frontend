@@ -1204,12 +1204,51 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       });
 
       fireEvent.click(screen.getByTestId('order-action-reject-ord-res-reject'));
+      const confirmRejectBtn = await screen.findByTestId('confirm-reject-submit-btn');
+      fireEvent.click(confirmRejectBtn);
+
       await waitFor(() => {
         expect(mockClient.patch).toHaveBeenCalledWith(
           '/orders/ord-res-reject/items/item-res-reject/kitchen-reject',
           { reason: 'Insumo físico insuficiente en cocina' },
         );
       });
+    });
+
+    it('allows cancelling ConfirmRejectDialog without dispatching kitchen-reject', async () => {
+      const reservedOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-res-cancel-reject',
+        orderId: 'ord-res-cancel-reject',
+        status: OrderStatus.RESERVED,
+        items: [
+          {
+            ...mockOrder1.items[0],
+            id: 'item-res-cancel-reject',
+            itemId: 'item-res-cancel-reject',
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([reservedOrder]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-reject-ord-res-cancel-reject')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-reject-ord-res-cancel-reject'));
+      const cancelRejectBtn = await screen.findByTestId('confirm-reject-cancel-btn');
+      fireEvent.click(cancelRejectBtn);
+
+      expect(screen.queryByTestId('confirm-reject-dialog')).not.toBeInTheDocument();
+      expect(mockClient.patch).not.toHaveBeenCalled();
     });
 
     it('cancels AdminVoidDialog and ChefVoidDialog without submitting', async () => {

@@ -17,6 +17,7 @@ import { pointerAction } from './pointerAction.ts';
 import { AdminVoidDialog } from './dialogs/AdminVoidDialog.tsx';
 import { ChefVoidDialog } from './dialogs/ChefVoidDialog.tsx';
 import { ConfirmReadyDialog } from './dialogs/ConfirmReadyDialog.tsx';
+import { ConfirmRejectDialog } from './dialogs/ConfirmRejectDialog.tsx';
 
 export interface KdsBoardProps {
   readonly client?: ApiClientType;
@@ -187,7 +188,9 @@ function KdsBoardContent({
     [runAction],
   );
 
-  const rejectSupplies = useCallback(
+  const [confirmRejectTarget, setConfirmRejectTarget] = useState<Order | null>(null);
+
+  const executeRejectSupplies = useCallback(
     (order: Order) => {
       const orderId = order.orderId ?? order.publicId ?? order.id;
       const firstItem = order.items[0];
@@ -208,6 +211,24 @@ function KdsBoardContent({
     },
     [runAction],
   );
+
+  const handleRejectClick = useCallback(
+    (order: Order) => {
+      if (onRejectSupplies) {
+        onRejectSupplies(order);
+      } else {
+        setConfirmRejectTarget(order);
+      }
+    },
+    [onRejectSupplies],
+  );
+
+  const handleConfirmRejectDialog = useCallback(() => {
+    if (!confirmRejectTarget) return;
+    const order = confirmRejectTarget;
+    setConfirmRejectTarget(null);
+    executeRejectSupplies(order);
+  }, [confirmRejectTarget, executeRejectSupplies]);
 
   const [confirmReadyTarget, setConfirmReadyTarget] = useState<{
     order: Order;
@@ -433,7 +454,7 @@ function KdsBoardContent({
             order={order}
             onClick={onOrderSelect}
             onStartPreparation={onStartPreparation ?? startPreparation}
-            onRejectSupplies={onRejectSupplies ?? rejectSupplies}
+            onRejectSupplies={handleRejectClick}
             onMarkOrderReady={markOrderReady}
             onItemReady={markItemReady}
             onAdminVoid={handleOpenAdminVoid}
@@ -603,6 +624,16 @@ function KdsBoardContent({
           isSubmitting={Boolean(pendingAction)}
           onConfirm={handleConfirmReadyDialog}
           onKeepInPrep={handleKeepInPrepDialog}
+        />
+      )}
+
+      {confirmRejectTarget && (
+        <ConfirmRejectDialog
+          order={confirmRejectTarget}
+          isOpen={true}
+          isSubmitting={pendingAction === 'reject'}
+          onConfirm={handleConfirmRejectDialog}
+          onCancel={() => setConfirmRejectTarget(null)}
         />
       )}
 
