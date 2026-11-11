@@ -491,10 +491,10 @@ function KdsBoardContent({
             data-testid="tab-active-view"
             {...pointerAction(() => handleViewChange('active'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-md font-bold text-base sm:text-lg whitespace-nowrap transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary border-0 ${
               view === 'active'
                 ? 'bg-fmat-primary text-white shadow-sm'
-                : 'text-body hover:text-ink hover:bg-surface'
+                : 'bg-transparent text-body hover:text-ink hover:bg-white/80'
             }`}
           >
             Comandas en Activas
@@ -509,10 +509,10 @@ function KdsBoardContent({
             data-testid="tab-delivered"
             {...pointerAction(() => handleViewChange('delivered'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-md font-bold text-base sm:text-lg whitespace-nowrap transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary border-0 ${
               view === 'delivered'
                 ? 'bg-fmat-primary text-white shadow-sm'
-                : 'text-body hover:text-ink hover:bg-surface'
+                : 'bg-transparent text-body hover:text-ink hover:bg-white/80'
             }`}
           >
             Entregadas
@@ -598,7 +598,7 @@ function KdsBoardContent({
             disabled={currentPage <= 1}
             {...pointerAction(() => handlePageChange(currentPage - 1))}
             style={{ minHeight: 64 }}
-            className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-ink border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm"
+            className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-fmat-primary border-2 border-fmat-primary disabled:opacity-40 disabled:border-border disabled:text-muted disabled:cursor-not-allowed hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm cursor-pointer"
           >
             Anterior
           </button>
@@ -609,7 +609,7 @@ function KdsBoardContent({
             disabled={currentPage >= totalPages}
             {...pointerAction(() => handlePageChange(currentPage + 1))}
             style={{ minHeight: 64 }}
-            className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-ink border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm"
+            className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-fmat-primary text-white border-0 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm cursor-pointer"
           >
             Siguiente
           </button>

@@ -114,7 +114,7 @@ export function ConfirmRejectDialog({
             onClick={onConfirm}
             disabled={isSubmitting}
             style={{ minHeight: 48 }}
-            className="w-full sm:w-auto min-h-[48px] px-5 py-2.5 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer shadow-sm disabled:opacity-50"
+            className="w-full sm:w-auto min-h-[48px] px-5 py-2.5 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer shadow-sm disabled:opacity-50 border-0"
           >
             {isSubmitting ? 'Rechazando...' : 'Confirmar rechazo'}
           </button>

@@ -110,7 +110,7 @@ export function ConfirmReadyDialog({
             data-testid="confirm-ready-submit-btn"
             onClick={onConfirm}
             disabled={isSubmitting}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-control font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer shadow-sm disabled:opacity-50"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-control font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer shadow-sm disabled:opacity-50 border-0"
           >
             {isSubmitting ? 'Marcando...' : 'Marcar comanda lista'}
           </button>

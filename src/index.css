@@ -30,7 +30,17 @@
   --space-unit: 4px;
 }
 
-.orders-kds-root button,
+.orders-kds-root button {
+  font-family: inherit;
+  border: 0 solid transparent;
+  background-color: transparent;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .orders-kds-root input,
 .orders-kds-root select,
 .orders-kds-root textarea {
