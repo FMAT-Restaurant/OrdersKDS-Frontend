@@ -50,46 +50,44 @@ function OrderCardItem({
   return (
     <li
       data-testid={`order-item-${itemId}`}
-      style={{ minHeight: isManyItems ? 44 : 56 }}
+      style={{ minHeight: isManyItems ? 36 : 48 }}
       data-redo-pending={isRedoPending ? 'true' : undefined}
-      className={`border-b border-border last:border-b-0 flex flex-col justify-center py-2 gap-1 ${
-        isManyItems ? 'min-h-[44px] py-1.5' : 'min-h-[56px] py-2'
+      className={`border-b border-border last:border-b-0 flex flex-col justify-center py-1.5 gap-0.5 ${
+        isManyItems ? 'min-h-[36px] py-1' : 'min-h-[48px] py-1.5'
       } ${
         isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-50 px-2' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-2 w-full">
-        <div className="flex flex-col min-w-0 flex-1">
-          <div className="flex items-baseline gap-2.5 min-w-0">
-            <span
-              className="text-lg font-black text-fmat-primary min-w-[28px] shrink-0"
-              data-testid={`order-item-qty-${itemId}`}
-            >
-              {item.quantity}x
-            </span>
-            <span
-              className="text-base sm:text-lg font-bold text-ink leading-tight break-words"
-              data-testid={`order-item-name-${itemId}`}
-            >
-              {item.name}
-            </span>
-          </div>
-
+        <div className="flex items-baseline gap-1.5 min-w-0 flex-1 flex-wrap">
+          <span
+            className="text-base sm:text-lg font-black text-fmat-primary shrink-0 min-w-[24px]"
+            data-testid={`order-item-qty-${itemId}`}
+          >
+            {item.quantity}x
+          </span>
+          <span
+            className="text-sm sm:text-base font-bold text-ink leading-snug break-words"
+            data-testid={`order-item-name-${itemId}`}
+          >
+            {item.name}
+          </span>
           {isManyItems && hasDetails && (
-            <div className="pl-9 mt-0.5">
-              <button
-                type="button"
-                data-testid={`order-item-toggle-details-${itemId}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsDetailsExpanded((prev) => !prev);
-                }}
-                aria-expanded={isDetailsExpanded}
-                className="text-xs text-fmat-primary hover:text-fmat-primary-hover font-semibold inline-flex items-center gap-1 cursor-pointer select-none focus:outline-none"
-              >
-                <span>{isDetailsExpanded ? '▾ Ocultar detalles' : '▸ Ver detalles'}</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              data-testid={`order-item-toggle-details-${itemId}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDetailsExpanded((prev) => !prev);
+              }}
+              aria-expanded={isDetailsExpanded}
+              className="inline-flex items-center gap-0.5 text-[11px] font-bold text-fmat-primary bg-orange-50 hover:bg-orange-100 border border-orange-200 px-1.5 py-0.5 rounded cursor-pointer select-none leading-none shrink-0"
+            >
+              <span>{isDetailsExpanded ? '− notas' : '+ notas'}</span>
+              <span className="sr-only">
+                {isDetailsExpanded ? 'Ocultar detalles' : 'Ver detalles'}
+              </span>
+            </button>
           )}
         </div>
 
@@ -223,7 +221,7 @@ function TableHeader({
   if (tableNumber !== null && tableNumber !== undefined) {
     return (
       <span
-        className="text-xl sm:text-2xl font-black text-white tracking-wide whitespace-nowrap"
+        className="text-lg sm:text-xl font-black text-white tracking-wide whitespace-nowrap shrink-0"
         data-testid={`order-table-${displayId}`}
       >
         Mesa {tableNumber}{' '}
@@ -234,7 +232,7 @@ function TableHeader({
   if (isTakeaway) {
     return (
       <span
-        className="text-lg sm:text-xl font-black text-amber-200 uppercase tracking-wider whitespace-nowrap"
+        className="text-base sm:text-lg font-black text-amber-200 uppercase tracking-wider whitespace-nowrap shrink-0"
         data-testid={`order-takeaway-${displayId}`}
       >
         Para llevar{' '}
@@ -263,10 +261,7 @@ function OrderCardActions({
   const canShowChefVoid =
     Boolean(onChefVoid) &&
     (!userRole || userRole === 'chef' || userRole === 'admin');
-  const canShowReady =
-    order.status !== 'DELIVERED' &&
-    order.status !== 'PAID' &&
-    order.status !== 'CANCELLED';
+  const canShowReady = order.status === 'IN_PREPARATION';
 
   return (
     <>
@@ -437,12 +432,12 @@ export function OrderCard({
         aria-label={`Order ${displayId}`}
         {...pointerAction(() => onClick?.(order))}
         onKeyDown={handleKeyDown}
-        className={`w-full shrink-0 p-4 pb-3 select-none cursor-pointer flex flex-col justify-between text-left bg-fmat-primary text-white border-0 border-b border-fmat-primary-hover focus:outline-none ${
+        className={`w-full shrink-0 p-3 sm:p-4 pb-2 sm:pb-2.5 select-none cursor-pointer flex flex-col justify-between text-left bg-fmat-primary text-white border-0 border-b border-fmat-primary-hover focus:outline-none ${
           isFocused ? 'ring-2 ring-fmat-primary' : ''
         }`}
       >
-        <div className="flex items-center justify-between gap-2 w-full min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1 whitespace-nowrap overflow-hidden">
+        <div className="flex items-center justify-between gap-1.5 w-full flex-wrap sm:flex-nowrap min-w-0">
+          <div className="flex items-baseline gap-1.5 shrink-0 whitespace-nowrap">
             <TableHeader
               tableNumber={order.tableNumber}
               isTakeaway={order.isTakeaway}
@@ -452,7 +447,7 @@ export function OrderCard({
               <span className="text-white/80 font-mono font-bold text-sm">·</span>
             )}
             <span
-              className="text-sm sm:text-base font-bold font-mono tracking-wider text-white truncate"
+              className="text-sm sm:text-base font-bold font-mono tracking-wider text-white shrink-0"
               data-testid={`order-id-${displayId}`}
               title={`#${displayId}`}
             >
@@ -463,7 +458,7 @@ export function OrderCard({
 
           <div
             data-testid={`order-status-${displayId}`}
-            className="flex items-center gap-1.5 shrink-0"
+            className="flex items-center gap-1.5 shrink-0 ml-auto"
           >
             <StatusBadge status={order.status} />
             <span className="sr-only">{order.status}</span>
@@ -471,18 +466,18 @@ export function OrderCard({
         </div>
 
         {/* Live Stopwatch & Semáforo */}
-        <div className="flex items-center justify-between w-full mt-2">
+        <div className="flex items-center justify-between w-full mt-1.5 sm:mt-2">
           <div
             data-testid={`order-stopwatch-${displayId}`}
             data-delay-status={delayStatus}
-            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md font-mono text-sm font-bold shadow-sm ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 rounded-md font-mono text-xs sm:text-sm font-bold shadow-sm whitespace-nowrap shrink-0 flex-nowrap ${
               delayStatus === 'warning' ? 'text-gray-950 font-black' : 'text-white'
             }`}
             style={{ backgroundColor: delayColorToken }}
             aria-label={`Tiempo transcurrido: ${formattedTime}, estado: ${delayLabel}`}
           >
             <svg
-              className="w-4 h-4 shrink-0"
+              className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -498,7 +493,7 @@ export function OrderCard({
             <span data-testid={`order-timer-${displayId}`}>{formattedTime}</span>
             <span
               data-testid={`order-delay-label-${displayId}`}
-              className="text-xs uppercase tracking-wider opacity-95"
+              className="text-[11px] sm:text-xs uppercase tracking-wider opacity-95"
             >
               ({delayLabel})
             </span>
@@ -532,9 +527,9 @@ export function OrderCard({
       </ul>
 
       {/* Footer info: Total items count */}
-      <div className="shrink-0 px-4 py-1.5 border-t border-border flex items-center justify-between text-xs text-muted w-full bg-gray-50/50">
-        <span>{order.items.length} {order.items.length === 1 ? 'platillo' : 'platillos'}</span>
-        <span>Toca o presiona Enter para seleccionar</span>
+      <div className="shrink-0 px-3 py-1 border-t border-border flex items-center justify-between text-xs text-muted w-full bg-gray-50/50">
+        <span className="font-medium whitespace-nowrap">{order.items.length} {order.items.length === 1 ? 'platillo' : 'platillos'}</span>
+        <span className="truncate ml-2 text-right">Toca o Enter para seleccionar</span>
       </div>
 
       <OrderCardActions

@@ -755,17 +755,23 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(screen.getByTestId('order-action-reject-ord-reserved-1')).toBeDisabled();
     });
 
-    it('handles "Orden lista" button click, keyboard, and disabled states', () => {
+    it('handles "Orden lista" button click, keyboard, and disabled states on IN_PREPARATION order', () => {
       const onReady = vi.fn();
+      const inPrepOrder: Order = {
+        ...reservedOrder,
+        id: 'ord-inprep-ready-1',
+        orderId: 'ord-inprep-ready-1',
+        status: OrderStatus.IN_PREPARATION,
+      };
       const { rerender } = render(
-        <OrderCard order={reservedOrder} onMarkOrderReady={onReady} />,
+        <OrderCard order={inPrepOrder} onMarkOrderReady={onReady} />,
       );
 
-      const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
+      const readyBtn = screen.getByTestId('order-action-ready-ord-inprep-ready-1');
       expect(readyBtn).toBeInTheDocument();
 
       fireEvent.click(readyBtn);
-      expect(onReady).toHaveBeenCalledWith(reservedOrder);
+      expect(onReady).toHaveBeenCalledWith(inPrepOrder);
 
       fireEvent.keyDown(readyBtn, { key: 'Enter' });
       expect(onReady).toHaveBeenCalledTimes(2);
@@ -774,8 +780,13 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       fireEvent.keyDown(readyBtn, { key: 'ArrowRight' });
       expect(onReady).toHaveBeenCalledTimes(3);
 
-      rerender(<OrderCard order={reservedOrder} pendingAction="order-ready" />);
-      expect(screen.getByTestId('order-action-ready-ord-reserved-1')).toBeDisabled();
+      rerender(<OrderCard order={inPrepOrder} pendingAction="order-ready" />);
+      expect(screen.getByTestId('order-action-ready-ord-inprep-ready-1')).toBeDisabled();
+    });
+
+    it('does not render "Comanda lista" button on RESERVED orders (anti-pattern prevention)', () => {
+      render(<OrderCard order={reservedOrder} onMarkOrderReady={vi.fn()} />);
+      expect(screen.queryByTestId('order-action-ready-ord-reserved-1')).not.toBeInTheDocument();
     });
 
     it('hides "Orden lista" button when order is DELIVERED, PAID, or CANCELLED', () => {

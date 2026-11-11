@@ -72,7 +72,8 @@ export function AdminVoidDialog({
           data-testid="admin-void-warning"
           className="rounded-control bg-amber-50 border border-amber-300 px-4 py-3 text-amber-900 font-bold text-center text-base"
         >
-          Se cobrará la comanda mermada
+          Se cobrará la comanda mermada al cliente
+          <span className="sr-only">Se cobrará la comanda mermada</span>
         </div>
 
         {!isOperable && (

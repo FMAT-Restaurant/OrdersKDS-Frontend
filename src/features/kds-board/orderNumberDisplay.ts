@@ -16,3 +16,4 @@ export function getOrderNumberDisplay(
   }
   return displayId.replace(/^ord-/, '');
 }
+

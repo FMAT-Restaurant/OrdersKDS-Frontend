@@ -1112,12 +1112,12 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       );
     });
 
-    it('auto-starts preparation when marking order or item ready on a RESERVED order', async () => {
-      const reservedOrder: Order = {
+    it('marks order and item ready on an IN_PREPARATION order', async () => {
+      const inPrepOrder: Order = {
         ...mockOrder1,
-        id: 'ord-res-1',
-        orderId: 'ord-res-1',
-        status: OrderStatus.RESERVED,
+        id: 'ord-inprep-1',
+        orderId: 'ord-inprep-1',
+        status: OrderStatus.IN_PREPARATION,
         items: [
           {
             ...mockOrder1.items[0],
@@ -1129,7 +1129,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       };
 
       const mockClient = {
-        get: vi.fn().mockResolvedValue([reservedOrder]),
+        get: vi.fn().mockResolvedValue([inPrepOrder]),
         patch: vi.fn().mockResolvedValue({ success: true }),
       } as unknown as ApiClient;
 
@@ -1137,23 +1137,42 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       render(<KdsBoard client={mockClient} queryClient={queryClient} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('order-action-ready-ord-res-1')).toBeInTheDocument();
+        expect(screen.getByTestId('order-action-ready-ord-inprep-1')).toBeInTheDocument();
       });
 
-      // Mark order ready: auto patches start-preparation then ready
-      fireEvent.click(screen.getByTestId('order-action-ready-ord-res-1'));
+      // Mark order ready: patches ready
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-inprep-1'));
       await waitFor(() => {
-        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-1/start-preparation');
-        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-1/ready');
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-inprep-1/ready');
       });
 
-      // Mark item ready: auto patches start-preparation then item ready after dialog confirmation
+      // Mark item ready: opens confirm dialog and patches item ready
       fireEvent.click(screen.getByTestId('order-item-action-item-res-1'));
       const confirmItemBtn = await screen.findByTestId('confirm-ready-submit-btn');
       fireEvent.click(confirmItemBtn);
       await waitFor(() => {
-        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-1/items/item-res-1/ready');
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-inprep-1/items/item-res-1/ready');
       });
+    });
+
+    it('does not display "Comanda lista" on RESERVED orders (anti-pattern prevention)', async () => {
+      const reservedOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-res-noprep',
+        orderId: 'ord-res-noprep',
+        status: OrderStatus.RESERVED,
+      };
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([reservedOrder]),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-start-ord-res-noprep')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('order-action-ready-ord-res-noprep')).not.toBeInTheDocument();
     });
 
     it('dispatches kitchen-reject when onRejectSupplies prop is omitted on RESERVED order', async () => {
