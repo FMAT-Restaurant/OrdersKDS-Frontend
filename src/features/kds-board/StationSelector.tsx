@@ -42,10 +42,10 @@ export function StationSelector({
             {...pointerAction(() => onSelectStation(station))}
             onKeyDown={(event) => handleKeyDown(event, station)}
             style={{ minHeight: 64 }}
-            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-base capitalize whitespace-nowrap shrink-0 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] border-0 ${
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-base capitalize whitespace-nowrap shrink-0 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] cursor-pointer ${
               isSelected
-                ? 'bg-fmat-primary text-white shadow-sm'
-                : 'bg-transparent text-body hover:text-ink hover:bg-white/80'
+                ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
+                : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
             }`}
           >
             {station === 'general' ? 'Todas' : station}

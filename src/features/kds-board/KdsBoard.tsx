@@ -491,10 +491,10 @@ function KdsBoardContent({
             data-testid="tab-active-view"
             {...pointerAction(() => handleViewChange('active'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary border-0 ${
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${
               view === 'active'
-                ? 'bg-fmat-primary text-white shadow-sm'
-                : 'bg-transparent text-body hover:text-ink hover:bg-white/80'
+                ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
+                : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
             }`}
           >
             Comandas en Activas
@@ -509,10 +509,10 @@ function KdsBoardContent({
             data-testid="tab-delivered"
             {...pointerAction(() => handleViewChange('delivered'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary border-0 ${
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${
               view === 'delivered'
-                ? 'bg-fmat-primary text-white shadow-sm'
-                : 'bg-transparent text-body hover:text-ink hover:bg-white/80'
+                ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
+                : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
             }`}
           >
             Entregadas
