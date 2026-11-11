@@ -931,7 +931,7 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       }).not.toThrow();
     });
 
-    it('renders orders with 10+ dishes compactly and toggles compact/expanded view', () => {
+    it('renders orders with 10+ dishes compactly and toggles compact/expanded details per dish', () => {
       const manyItems = Array.from({ length: 10 }, (_, i) => ({
         id: `dish-id-${i}`,
         itemId: `dish-id-${i}`,
@@ -954,13 +954,21 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
 
       render(<OrderCard order={largeOrder} />);
 
-      const toggleBtn = screen.getByTestId('order-compact-toggle-ord-large-10');
-      expect(toggleBtn).toBeInTheDocument();
-      expect(toggleBtn).toHaveTextContent('Expandir detalles');
+      // On >= 5 dishes, dish notes are collapsed by default with per-dish toggle button
+      const dish0Toggle = screen.getByTestId('order-item-toggle-details-dish-id-0');
+      expect(dish0Toggle).toBeInTheDocument();
+      expect(dish0Toggle).toHaveTextContent('Ver detalles');
+      expect(screen.queryByTestId('order-item-notes-dish-id-0')).not.toBeInTheDocument();
 
-      // Toggle to expanded view
-      fireEvent.click(toggleBtn);
-      expect(toggleBtn).toHaveTextContent('Vista compacta');
+      // Toggle to expanded view for dish 0
+      fireEvent.click(dish0Toggle);
+      expect(dish0Toggle).toHaveTextContent('Ocultar detalles');
+      expect(screen.getByTestId('order-item-notes-dish-id-0')).toBeInTheDocument();
+
+      // Toggle back to collapsed view
+      fireEvent.click(dish0Toggle);
+      expect(dish0Toggle).toHaveTextContent('Ver detalles');
+      expect(screen.queryByTestId('order-item-notes-dish-id-0')).not.toBeInTheDocument();
 
       // All 10 items are rendered and reachable
       for (let i = 0; i < 10; i++) {

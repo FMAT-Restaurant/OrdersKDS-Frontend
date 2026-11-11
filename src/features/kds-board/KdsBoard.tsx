@@ -476,7 +476,7 @@ function KdsBoardContent({
                 : 'text-body hover:text-ink hover:bg-surface'
             }`}
           >
-            Vista activa
+            Comandas en Activas
           </button>
           <button
             type="button"

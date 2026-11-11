@@ -4,6 +4,7 @@ import type { UserRole } from '../../shared/types/auth.ts';
 import { StatusBadge } from './StatusBadge.tsx';
 import { useElapsedTime } from './useElapsedTime.ts';
 import { pointerAction } from './pointerAction.ts';
+import { getOrderNumberDisplay } from './orderNumberDisplay.ts';
 
 export interface OrderCardProps {
   readonly order: Order;
@@ -22,6 +23,7 @@ export interface OrderCardProps {
 /**
  * Renders a single dish item inside an order card.
  * Notes, modifiers and preparationTimeText are safely escaped by React (ST-19 / XSS prevention).
+ * In large orders (>= 5 items), details are collapsed by default with an individual toggle button per dish.
  */
 function OrderCardItem({
   item,
@@ -29,44 +31,66 @@ function OrderCardItem({
   onReady,
   isPending,
   isRedoPending,
-  isCompact = false,
+  isManyItems = false,
 }: Readonly<{
   item: OrderItem;
   index: number;
   onReady?: () => void;
   isPending: boolean;
   isRedoPending: boolean;
-  isCompact?: boolean;
+  isManyItems?: boolean;
 }>) {
   const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
   const isFinished = item.status === 'READY' || item.status === 'DELIVERED';
+  const hasDetails = Boolean((item.modifiers && item.modifiers.length > 0) || item.notes);
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(!isManyItems);
+  const showDetails = !isManyItems || isDetailsExpanded;
 
   return (
     <li
       data-testid={`order-item-${itemId}`}
-      style={{ minHeight: isCompact ? 44 : 64 }}
+      style={{ minHeight: isManyItems ? 44 : 56 }}
       data-redo-pending={isRedoPending ? 'true' : undefined}
       className={`border-b border-border last:border-b-0 flex flex-col justify-center py-2 gap-1 ${
-        isCompact ? 'min-h-[44px] py-1' : 'min-h-[64px] py-2'
+        isManyItems ? 'min-h-[44px] py-1.5' : 'min-h-[56px] py-2'
       } ${
         isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-50 px-2' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-2 w-full">
-        <div className="flex items-baseline gap-2.5 min-w-0 flex-1">
-          <span
-            className="text-lg font-black text-fmat-primary min-w-[28px] shrink-0"
-            data-testid={`order-item-qty-${itemId}`}
-          >
-            {item.quantity}x
-          </span>
-          <span
-            className="text-base sm:text-lg font-bold text-ink leading-tight break-words"
-            data-testid={`order-item-name-${itemId}`}
-          >
-            {item.name}
-          </span>
+        <div className="flex flex-col min-w-0 flex-1">
+          <div className="flex items-baseline gap-2.5 min-w-0">
+            <span
+              className="text-lg font-black text-fmat-primary min-w-[28px] shrink-0"
+              data-testid={`order-item-qty-${itemId}`}
+            >
+              {item.quantity}x
+            </span>
+            <span
+              className="text-base sm:text-lg font-bold text-ink leading-tight break-words"
+              data-testid={`order-item-name-${itemId}`}
+            >
+              {item.name}
+            </span>
+          </div>
+
+          {isManyItems && hasDetails && (
+            <div className="pl-9 mt-0.5">
+              <button
+                type="button"
+                data-testid={`order-item-toggle-details-${itemId}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDetailsExpanded((prev) => !prev);
+                }}
+                aria-expanded={isDetailsExpanded}
+                className="text-xs text-fmat-primary hover:text-fmat-primary-hover font-semibold inline-flex items-center gap-1 cursor-pointer select-none focus:outline-none"
+              >
+                <span>{isDetailsExpanded ? '▾ Ocultar detalles' : '▸ Ver detalles'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
@@ -123,7 +147,7 @@ function OrderCardItem({
         </div>
       </div>
 
-      {item.modifiers && item.modifiers.length > 0 && (
+      {showDetails && item.modifiers && item.modifiers.length > 0 && (
         <div
           className="pl-8 flex flex-wrap gap-1.5 mt-0.5"
           data-testid={`order-item-modifiers-${itemId}`}
@@ -132,7 +156,7 @@ function OrderCardItem({
             <span
               key={`${itemId}-mod-${modIdx}`}
               className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-100 text-body border border-border ${
-                isCompact ? 'text-[11px]' : 'text-xs'
+                isManyItems ? 'text-[11px]' : 'text-xs'
               }`}
               data-testid={`order-item-modifier-${itemId}-${modIdx}`}
             >
@@ -142,7 +166,7 @@ function OrderCardItem({
         </div>
       )}
 
-      {item.notes && (
+      {showDetails && item.notes && (
         <div
           className="pl-8 text-sm text-body italic flex items-start gap-1"
           data-testid={`order-item-notes-${itemId}`}
@@ -249,7 +273,7 @@ function OrderCardActions({
       {isReserved && (
         <div
           data-testid={`order-actions-${displayId}`}
-          className="shrink-0 px-4 pb-2 pt-1.5 flex items-center gap-3 w-full bg-transparent"
+          className="shrink-0 px-4 pb-3 pt-1 flex items-center gap-3 w-full bg-transparent"
         >
           <button
             type="button"
@@ -258,8 +282,8 @@ function OrderCardActions({
             disabled={pendingAction === 'start'}
             {...pointerAction(() => onStartPreparation?.(order))}
             onKeyDown={(e) => handleButtonKey(e, () => onStartPreparation?.(order))}
-            style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            style={{ minHeight: 48 }}
+            className="min-h-[48px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm"
           >
             Iniciar preparación
           </button>
@@ -270,8 +294,8 @@ function OrderCardActions({
             disabled={pendingAction === 'reject'}
             {...pointerAction(() => onRejectSupplies?.(order))}
             onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
-            style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+            style={{ minHeight: 48 }}
+            className="min-h-[48px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm"
           >
             Rechazar insumo
           </button>
@@ -281,7 +305,7 @@ function OrderCardActions({
       {isInPrep && (canShowAdminVoid || canShowChefVoid) && (
         <div
           data-testid={`order-void-actions-${displayId}`}
-          className="shrink-0 px-4 pb-2 pt-1.5 flex items-center gap-3 w-full bg-transparent"
+          className="shrink-0 px-4 pb-2 pt-1 flex items-center gap-3 w-full bg-transparent"
         >
           {canShowAdminVoid && (
             <button
@@ -292,7 +316,7 @@ function OrderCardActions({
               {...pointerAction(() => onAdminVoid?.(order))}
               onKeyDown={(e) => handleButtonKey(e, () => onAdminVoid?.(order))}
               style={{ minHeight: 64 }}
-              className="min-h-[64px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-amber-700 hover:bg-amber-600 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+              className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-amber-600 hover:bg-amber-700 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm"
             >
               Anular (Admin)
             </button>
@@ -306,7 +330,7 @@ function OrderCardActions({
               {...pointerAction(() => onChefVoid?.(order))}
               onKeyDown={(e) => handleButtonKey(e, () => onChefVoid?.(order))}
               style={{ minHeight: 64 }}
-              className="min-h-[64px] flex-1 px-3 py-2 rounded-md font-bold text-sm bg-red-700 hover:bg-red-600 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors duration-150 flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50"
+              className="min-h-[64px] min-h-[48px] flex-1 px-4 py-2.5 rounded-control font-bold text-sm bg-red-600 hover:bg-red-700 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm"
             >
               Anular (Cocina)
             </button>
@@ -322,8 +346,8 @@ function OrderCardActions({
           disabled={pendingAction === 'order-ready'}
           {...pointerAction(() => onMarkOrderReady?.(order))}
           onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
-          style={{ minHeight: 64 }}
-          className="shrink-0 mx-4 mb-3 min-h-[64px] min-h-[48px] rounded-md bg-fmat-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50"
+          style={{ minHeight: 48 }}
+          className="shrink-0 mx-4 mb-3 min-h-[48px] rounded-control bg-fmat-primary px-4 py-2.5 text-sm sm:text-base font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50 shadow-sm flex items-center justify-center cursor-pointer"
         >
           Comanda lista
         </button>
@@ -346,23 +370,8 @@ function getStopwatchState(order: Order) {
 /**
  * Production-ready OrderCard component for the KDS (TASK-15 Phase 2, ADR-0012, TASK-40a).
  * Displays large table number, order ID, live delay stopwatch (OP-11), StatusBadge,
- * high-contrast kitchen items list, touch-friendly 64px actions, and keyboard parity.
+ * high-contrast kitchen items list, touch-friendly 48px actions, and keyboard parity.
  */
-function getOrderNumberDisplay(
-  orderNumber: number | null | undefined,
-  displayId: string,
-): string {
-  if (orderNumber != null) {
-    return String(orderNumber);
-  }
-  const isUuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(displayId);
-  if (isUuid) {
-    return displayId.slice(-4).toUpperCase();
-  }
-  return displayId.replace(/^ord-/, '');
-}
-
 export function OrderCard({
   order,
   onClick,
@@ -381,7 +390,7 @@ export function OrderCard({
   const hasTableHeader =
     (order.tableNumber !== null && order.tableNumber !== undefined) || order.isTakeaway;
 
-  const [isCompact, setIsCompact] = useState(order.items.length >= 5);
+  const isManyItems = order.items.length >= 5;
 
   const { inPrepAt, stockReservedAt, isFinished } = getStopwatchState(order);
 
@@ -497,25 +506,6 @@ export function OrderCard({
         </div>
       </button>
 
-      {order.items.length >= 5 && (
-        <div className="shrink-0 px-4 py-1.5 flex items-center justify-between bg-gray-50 border-b border-border text-xs">
-          <span className="text-muted font-medium">
-            {order.items.length} platillos en comanda
-          </span>
-          <button
-            type="button"
-            data-testid={`order-compact-toggle-${displayId}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsCompact((prev) => !prev);
-            }}
-            className="text-fmat-primary hover:text-fmat-primary-hover font-semibold px-2 py-0.5 rounded bg-surface border border-border focus:outline-none focus:ring-1 focus:ring-fmat-primary cursor-pointer"
-          >
-            {isCompact ? 'Expandir detalles' : 'Vista compacta'}
-          </button>
-        </div>
-      )}
-
       {/* Dish Items List */}
       <ul
         data-testid={`order-items-list-${displayId}`}
@@ -535,7 +525,7 @@ export function OrderCard({
                 pendingAction === `item:${item.id ?? item.itemId ?? item.publicId ?? index}`
               }
               isRedoPending={isRedoPending}
-              isCompact={isCompact}
+              isManyItems={isManyItems}
             />
           );
         })}

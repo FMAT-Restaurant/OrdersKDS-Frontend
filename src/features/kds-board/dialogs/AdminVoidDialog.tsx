@@ -3,6 +3,7 @@ import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
 import { pointerAction } from '../pointerAction.ts';
+import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
 
 const InPreparationOrderSchema = OrderSchema.extend({
   status: z.literal(OrderStatus.IN_PREPARATION),
@@ -42,6 +43,9 @@ export function AdminVoidDialog({
   const validation = InPreparationOrderSchema.safeParse(order);
   const isOperable = validation.success && order.status === OrderStatus.IN_PREPARATION;
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
+  const tableDisplay =
+    order.tableNumber != null ? `Mesa ${order.tableNumber}` : order.isTakeaway ? 'Para llevar' : null;
 
   const handleConfirm = () => {
     onConfirm(order);
@@ -58,14 +62,15 @@ export function AdminVoidDialog({
       <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
         <header className="flex items-center justify-between border-b border-border pb-3">
           <h2 id="admin-void-dialog-title" className="text-2xl font-black text-ink">
-            Anulación Administrativa #{displayId}
+            Anulación Administrativa {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
+            <span className="sr-only">#{displayId}</span>
           </h2>
         </header>
 
         <div
           role="alert"
           data-testid="admin-void-warning"
-          className="rounded-md bg-amber-50 border border-amber-300 px-4 py-3 text-amber-800 font-bold text-lg"
+          className="rounded-control bg-amber-50 border border-amber-300 px-4 py-3 text-amber-900 font-bold text-center text-base"
         >
           Se cobrará la comanda mermada
         </div>
