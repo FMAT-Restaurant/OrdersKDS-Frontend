@@ -1,4 +1,4 @@
-import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -46,6 +46,7 @@ function generateOrders(count: number): Order[] {
         {
           id: `item-${index}`,
           itemId: `item-${index}`,
+          dishId: `dish-${index}`,
           name: `Dish ${index + 1}`,
           quantity: 1,
           unitPrice: 50,
@@ -603,6 +604,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
           items: [
             {
               id: 'it-empty',
+              dishId: 'dish-soda',
               name: 'Soda',
               quantity: 1,
               unitPrice: 50,
@@ -816,9 +818,11 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/ready');
       });
 
-      // 2. Mark item ready
+      // 2. Mark item ready (opens confirmation dialog for the last pending dish)
       const item1Btn = screen.getByTestId('order-item-action-item-1');
       fireEvent.click(item1Btn);
+      const confirmBtn = await screen.findByTestId('confirm-ready-submit-btn');
+      fireEvent.click(confirmBtn);
 
       await waitFor(() => {
         expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/items/item-1/ready');
@@ -972,6 +976,37 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         const alert = screen.getByRole('alert');
         expect(alert).toHaveTextContent('No se pudo completar la acción.');
       });
+
+      const dismissErrBtn = screen.getByRole('button', { name: 'Cerrar mensaje de error' });
+      fireEvent.click(dismissErrBtn);
+      expect(screen.queryByTestId('kds-action-error')).not.toBeInTheDocument();
+    });
+
+    it('displays action feedback toast on success and supports manual dismissal (User Requirement 5)', async () => {
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-101'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('kds-action-feedback')).toBeInTheDocument();
+      });
+
+      const dismissBtn = screen.getByRole('button', { name: 'Cerrar notificación' });
+      fireEvent.click(dismissBtn);
+      expect(screen.queryByTestId('kds-action-feedback')).not.toBeInTheDocument();
     });
 
     it('opens and confirms AdminVoidDialog from KdsBoard and dispatches void request', async () => {
@@ -1079,6 +1114,272 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         expect.objectContaining({ id: 'ord-101' }),
         'Quemado',
       );
+    });
+
+    it('marks order and item ready on an IN_PREPARATION order', async () => {
+      const inPrepOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-inprep-1',
+        orderId: 'ord-inprep-1',
+        status: OrderStatus.IN_PREPARATION,
+        items: [
+          {
+            ...mockOrder1.items[0],
+            id: 'item-res-1',
+            itemId: 'item-res-1',
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([inPrepOrder]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-ready-ord-inprep-1')).toBeInTheDocument();
+      });
+
+      // Mark order ready: patches ready
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-inprep-1'));
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-inprep-1/ready');
+      });
+
+      // Mark item ready: opens confirm dialog and patches item ready
+      fireEvent.click(screen.getByTestId('order-item-action-item-res-1'));
+      const confirmItemBtn = await screen.findByTestId('confirm-ready-submit-btn');
+      fireEvent.click(confirmItemBtn);
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-inprep-1/items/item-res-1/ready');
+      });
+    });
+
+    it('does not display "Comanda lista" on RESERVED orders (anti-pattern prevention)', async () => {
+      const reservedOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-res-noprep',
+        orderId: 'ord-res-noprep',
+        status: OrderStatus.RESERVED,
+      };
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([reservedOrder]),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-start-ord-res-noprep')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('order-action-ready-ord-res-noprep')).not.toBeInTheDocument();
+    });
+
+    it('dispatches kitchen-reject when onRejectSupplies prop is omitted on RESERVED order', async () => {
+      const reservedOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-res-reject',
+        orderId: 'ord-res-reject',
+        status: OrderStatus.RESERVED,
+        items: [
+          {
+            ...mockOrder1.items[0],
+            id: 'item-res-reject',
+            itemId: 'item-res-reject',
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([reservedOrder]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-reject-ord-res-reject')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-reject-ord-res-reject'));
+      const confirmRejectBtn = await screen.findByTestId('confirm-reject-submit-btn');
+      fireEvent.click(confirmRejectBtn);
+
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith(
+          '/orders/ord-res-reject/items/item-res-reject/kitchen-reject',
+          { reason: 'Insumo físico insuficiente en cocina' },
+        );
+      });
+    });
+
+    it('allows cancelling ConfirmRejectDialog without dispatching kitchen-reject', async () => {
+      const reservedOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-res-cancel-reject',
+        orderId: 'ord-res-cancel-reject',
+        status: OrderStatus.RESERVED,
+        items: [
+          {
+            ...mockOrder1.items[0],
+            id: 'item-res-cancel-reject',
+            itemId: 'item-res-cancel-reject',
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([reservedOrder]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-reject-ord-res-cancel-reject')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('order-action-reject-ord-res-cancel-reject'));
+      const cancelRejectBtn = await screen.findByTestId('confirm-reject-cancel-btn');
+      fireEvent.click(cancelRejectBtn);
+
+      expect(screen.queryByTestId('confirm-reject-dialog')).not.toBeInTheDocument();
+      expect(mockClient.patch).not.toHaveBeenCalled();
+    });
+
+    it('cancels AdminVoidDialog and ChefVoidDialog without submitting', async () => {
+      const inPrepOrder: Order = {
+        ...mockOrder1,
+        id: 'ord-dialog-cancel',
+        orderId: 'ord-dialog-cancel',
+        status: OrderStatus.IN_PREPARATION,
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([inPrepOrder]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} userRole="admin" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-action-admin-void-ord-dialog-cancel')).toBeInTheDocument();
+      });
+
+      // Open AdminVoidDialog and cancel
+      fireEvent.click(screen.getByTestId('order-action-admin-void-ord-dialog-cancel'));
+      expect(screen.getByTestId('admin-void-dialog')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('admin-void-cancel'));
+      expect(screen.queryByTestId('admin-void-dialog')).not.toBeInTheDocument();
+
+      // Open ChefVoidDialog and cancel
+      fireEvent.click(screen.getByTestId('order-action-chef-void-ord-dialog-cancel'));
+      expect(screen.getByTestId('chef-void-dialog')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('chef-void-cancel'));
+      expect(screen.queryByTestId('chef-void-dialog')).not.toBeInTheDocument();
+
+      expect(mockClient.patch).not.toHaveBeenCalled();
+    });
+
+    it('allows keeping comanda in preparation when marking last item ready without dispatching ready (User Requirement 3)', async () => {
+      const orderWithTwoItems: Order = {
+        ...mockOrder1,
+        id: 'ord-confirm-prep',
+        orderId: 'ord-confirm-prep',
+        orderNumber: 42,
+        status: OrderStatus.IN_PREPARATION,
+        items: [
+          {
+            ...mockOrder1.items[0],
+            id: 'item-done',
+            itemId: 'item-done',
+            status: ItemStatus.READY,
+          },
+          {
+            ...mockOrder1.items[0],
+            id: 'item-last-pending',
+            itemId: 'item-last-pending',
+            name: 'Corte Ribeye',
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([orderWithTwoItems]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-item-action-item-last-pending')).toBeInTheDocument();
+      });
+
+      // Click last pending item -> opens confirmation dialog
+      fireEvent.click(screen.getByTestId('order-item-action-item-last-pending'));
+
+      const dialog = await screen.findByTestId('confirm-ready-dialog');
+      expect(dialog).toBeInTheDocument();
+      expect(within(dialog).getByText('¿Marcar comanda como lista?')).toBeInTheDocument();
+      expect(within(dialog).getByText('Corte Ribeye')).toBeInTheDocument();
+
+      // Click "Mantener en preparación"
+      fireEvent.click(screen.getByTestId('confirm-ready-keep-prep-btn'));
+
+      expect(screen.queryByTestId('confirm-ready-dialog')).not.toBeInTheDocument();
+      expect(mockClient.patch).not.toHaveBeenCalled();
+
+      // Feedback message confirms order stays in preparation
+      expect(await screen.findByTestId('kds-action-feedback')).toHaveTextContent(
+        'Comanda #42 se mantiene en preparación',
+      );
+    });
+
+    it('auto-dismisses action feedback after 5 seconds and action error after 15 seconds', async () => {
+      vi.useFakeTimers();
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(mockKdsQueue),
+        post: vi.fn(),
+        patch: vi.fn().mockRejectedValue(new Error('Fallo temporal')),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      // Wait for items to render
+      await vi.waitFor(() => {
+        expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
+      });
+
+      // Trigger error
+      fireEvent.click(screen.getByTestId('order-action-ready-ord-101'));
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId('kds-action-error')).toBeInTheDocument();
+      });
+
+      // Advance 15 seconds -> error auto-dismisses
+      vi.advanceTimersByTime(15000);
+
+      await vi.waitFor(() => {
+        expect(screen.queryByTestId('kds-action-error')).not.toBeInTheDocument();
+      });
+
+      vi.useRealTimers();
     });
   });
 });

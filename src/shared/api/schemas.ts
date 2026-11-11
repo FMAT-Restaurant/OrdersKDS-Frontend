@@ -48,12 +48,12 @@ export const OrderItemSchema = z.object({
   id: z.string().optional(),
   publicId: z.string().optional(),
   itemId: z.string().optional(),
-  dishId: z.string().optional(),
+  dishId: z.preprocess((val) => (val === null ? undefined : val), z.string().optional()),
   name: z.string().min(1),
   quantity: z.number().int().positive(),
   unitPrice: z.union([z.number(), z.string()]),
   status: ItemStatusSchema,
-  station: z.string().optional(),
+  station: z.preprocess((val) => (val === null ? undefined : val), z.string().optional()),
   notes: z.string().nullable().optional(),
   modifiers: z.array(z.string()).optional(),
   preparationTimeText: z.string().nullable().optional(),
@@ -72,6 +72,7 @@ export const OrderSchema = z.object({
   id: z.string().optional(),
   publicId: z.string().optional(),
   orderId: z.string().optional(),
+  orderNumber: z.number().int().positive().nullable().optional(),
   tableNumber: z.number().int().positive().nullable().optional(),
   isTakeaway: z.boolean().optional(),
   status: OrderStatusSchema,
@@ -97,5 +98,20 @@ export type Order = z.infer<typeof OrderSchema>;
 /**
  * Zod schema for KDS queue response.
  */
-export const KdsQueueResponseSchema = z.array(OrderSchema);
+export const KdsQueueResponseSchema = z.array(OrderSchema).transform((orders) =>
+  orders.map((order) => ({
+    ...order,
+    id:
+      order.id && /^\d+$/.test(order.id) && (order.orderId ?? order.publicId)
+        ? (order.orderId ?? order.publicId)
+        : order.id,
+    items: order.items.map((item) => ({
+      ...item,
+      id:
+        item.id && /^\d+$/.test(item.id) && (item.itemId ?? item.publicId)
+          ? (item.itemId ?? item.publicId)
+          : item.id,
+    })),
+  })),
+);
 export type KdsQueueResponse = z.infer<typeof KdsQueueResponseSchema>;

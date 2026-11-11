@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
@@ -16,6 +16,8 @@ import { type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 import { pointerAction } from './pointerAction.ts';
 import { AdminVoidDialog } from './dialogs/AdminVoidDialog.tsx';
 import { ChefVoidDialog } from './dialogs/ChefVoidDialog.tsx';
+import { ConfirmReadyDialog } from './dialogs/ConfirmReadyDialog.tsx';
+import { ConfirmRejectDialog } from './dialogs/ConfirmRejectDialog.tsx';
 
 export interface KdsBoardProps {
   readonly client?: ApiClientType;
@@ -50,7 +52,29 @@ function KdsBoardContent({
   const [page, setPage] = useState<number>(1);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<{
+    text: string;
+    type: 'success' | 'info';
+  } | null>(null);
   const queryClient = useQueryClient();
+
+  // Auto-dismiss action error after 15 seconds (User Requirement 3)
+  useEffect(() => {
+    if (!actionError) return;
+    const timer = setTimeout(() => {
+      setActionError(null);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [actionError]);
+
+  // Auto-dismiss action feedback after 5 seconds (User Requirement 5)
+  useEffect(() => {
+    if (!feedbackMessage) return;
+    const timer = setTimeout(() => {
+      setFeedbackMessage(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [feedbackMessage]);
 
   // Consume GET /kds/queue?view=active | delivered
   const { data, isLoading, isError, error } = useKdsQueue({
@@ -68,7 +92,12 @@ function KdsBoardContent({
   }, [client, tokenProvider]);
 
   const runAction = useCallback(
-    async (key: string, path: string, body?: unknown) => {
+    async (
+      key: string,
+      path: string,
+      body?: unknown,
+      successMsg?: { text: string; type: 'success' | 'info' },
+    ) => {
       if (!actionClient || pendingAction) return;
       setPendingAction(key);
       setActionError(null);
@@ -79,6 +108,9 @@ function KdsBoardContent({
           await actionClient.patch(path);
         }
         await queryClient.invalidateQueries({ queryKey: ['kds'] });
+        if (successMsg) {
+          setFeedbackMessage(successMsg);
+        }
       } catch (error_) {
         setActionError(
           error_ instanceof Error ? error_.message : 'No se pudo completar la acción.',
@@ -102,12 +134,15 @@ function KdsBoardContent({
 
   const handleAdminVoidConfirm = useCallback(
     async (order: Order) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
+      const orderId = order.orderId ?? order.publicId ?? order.id;
       if (orderId) {
         if (onAdminVoid) {
           onAdminVoid(order);
         } else {
-          await runAction('void-admin', `/orders/${orderId}/void`);
+          await runAction('void-admin', `/orders/${orderId}/void`, undefined, {
+            text: `Comanda #${order.orderNumber ?? orderId} anulada por administración.`,
+            type: 'info',
+          });
         }
         setVoidDialogOrder(null);
         setVoidDialogType(null);
@@ -118,12 +153,20 @@ function KdsBoardContent({
 
   const handleChefVoidConfirm = useCallback(
     async (order: Order, note: string) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
+      const orderId = order.orderId ?? order.publicId ?? order.id;
       if (orderId) {
         if (onChefVoid) {
           onChefVoid(order, note);
         } else {
-          await runAction('void-kitchen', `/orders/${orderId}/void-kitchen-error`, { note });
+          await runAction(
+            'void-kitchen',
+            `/orders/${orderId}/void-kitchen-error`,
+            { note },
+            {
+              text: `Comanda #${order.orderNumber ?? orderId} anulada por error de cocina.`,
+              type: 'info',
+            },
+          );
         }
         setVoidDialogOrder(null);
         setVoidDialogType(null);
@@ -134,27 +177,127 @@ function KdsBoardContent({
 
   const startPreparation = useCallback(
     (order: Order) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
-      if (orderId) void runAction('start', `/orders/${orderId}/start-preparation`);
+      const orderId = order.orderId ?? order.publicId ?? order.id;
+      if (orderId) {
+        void runAction('start', `/orders/${orderId}/start-preparation`, undefined, {
+          text: `Comanda #${order.orderNumber ?? orderId} en preparación.`,
+          type: 'info',
+        });
+      }
     },
     [runAction],
+  );
+
+  const [confirmRejectTarget, setConfirmRejectTarget] = useState<Order | null>(null);
+
+  const executeRejectSupplies = useCallback(
+    (order: Order) => {
+      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const firstItem = order.items[0];
+      const itemId = firstItem?.itemId ?? firstItem?.publicId ?? firstItem?.id;
+      if (orderId && itemId) {
+        void runAction(
+          'reject',
+          `/orders/${orderId}/items/${itemId}/kitchen-reject`,
+          {
+            reason: 'Insumo físico insuficiente en cocina',
+          },
+          {
+            text: `Comanda #${order.orderNumber ?? orderId} rechazada por falta de insumos.`,
+            type: 'info',
+          },
+        );
+      }
+    },
+    [runAction],
+  );
+
+  const handleRejectClick = useCallback(
+    (order: Order) => {
+      if (onRejectSupplies) {
+        onRejectSupplies(order);
+      } else {
+        setConfirmRejectTarget(order);
+      }
+    },
+    [onRejectSupplies],
+  );
+
+  const handleConfirmRejectDialog = useCallback(() => {
+    if (!confirmRejectTarget) return;
+    const order = confirmRejectTarget;
+    setConfirmRejectTarget(null);
+    executeRejectSupplies(order);
+  }, [confirmRejectTarget, executeRejectSupplies]);
+
+  const [confirmReadyTarget, setConfirmReadyTarget] = useState<{
+    order: Order;
+    item: Order['items'][number];
+  } | null>(null);
+
+  const executeMarkItemReady = useCallback(
+    async (order: Order, item: Order['items'][number]) => {
+      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const itemId = item.itemId ?? item.publicId ?? item.id;
+      if (!orderId || !itemId) return;
+      if (order.status === 'RESERVED' && actionClient) {
+        await actionClient.patch(`/orders/${orderId}/start-preparation`);
+      }
+      await runAction(`item:${itemId}`, `/orders/${orderId}/items/${itemId}/ready`, undefined, {
+        text: `${item.name} marcado como listo.`,
+        type: 'success',
+      });
+    },
+    [actionClient, runAction],
   );
 
   const markItemReady = useCallback(
-    (order: Order, item: Order['items'][number]) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
-      const itemId = item.id ?? item.itemId ?? item.publicId;
-      if (orderId && itemId) void runAction(`item:${itemId}`, `/orders/${orderId}/items/${itemId}/ready`);
+    async (order: Order, item: Order['items'][number]) => {
+      const targetItemId = item.itemId ?? item.publicId ?? item.id;
+      const remainingPending = order.items.filter((i) => {
+        const id = i.itemId ?? i.publicId ?? i.id;
+        return id !== targetItemId && i.status === 'PENDING';
+      });
+      if (remainingPending.length === 0) {
+        setConfirmReadyTarget({ order, item });
+        return;
+      }
+      await executeMarkItemReady(order, item);
     },
-    [runAction],
+    [executeMarkItemReady],
   );
 
+  const handleConfirmReadyDialog = useCallback(async () => {
+    if (!confirmReadyTarget) return;
+    const { order, item } = confirmReadyTarget;
+    setConfirmReadyTarget(null);
+    await executeMarkItemReady(order, item);
+  }, [confirmReadyTarget, executeMarkItemReady]);
+
+  const handleKeepInPrepDialog = useCallback(() => {
+    if (!confirmReadyTarget) return;
+    const orderNumberDisplay =
+      confirmReadyTarget.order.orderNumber ?? confirmReadyTarget.order.id;
+    setConfirmReadyTarget(null);
+    setFeedbackMessage({
+      text: `Comanda #${orderNumberDisplay} se mantiene en preparación. Podrás marcarla como lista cuando finalices el emplatado.`,
+      type: 'info',
+    });
+  }, [confirmReadyTarget]);
+
   const markOrderReady = useCallback(
-    (order: Order) => {
-      const orderId = order.id ?? order.orderId ?? order.publicId;
-      if (orderId) void runAction('order-ready', `/orders/${orderId}/ready`);
+    async (order: Order) => {
+      const orderId = order.orderId ?? order.publicId ?? order.id;
+      if (!orderId) return;
+      if (order.status === 'RESERVED' && actionClient) {
+        await actionClient.patch(`/orders/${orderId}/start-preparation`);
+      }
+      await runAction('order-ready', `/orders/${orderId}/ready`, undefined, {
+        text: `Comanda #${order.orderNumber ?? orderId} marcada como lista.`,
+        type: 'success',
+      });
     },
-    [runAction],
+    [actionClient, runAction],
   );
 
   // Dynamically derive available stations from current queue items, always including static "general"
@@ -293,16 +436,17 @@ function KdsBoardContent({
     gridContent = (
       <div
         data-testid="kds-empty"
-        className="flex items-center justify-center h-full text-2xl font-semibold text-gray-500"
+        className="flex items-center justify-center h-full text-2xl font-semibold text-muted"
       >
-        No hay órdenes en esta vista
+        <span>No hay comandas pendientes</span>
+        <span className="sr-only">No hay órdenes en esta vista</span>
       </div>
     );
   } else {
     gridContent = (
       <div
         data-testid="kds-grid"
-        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 h-full auto-rows-fr content-start"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 min-h-0 auto-rows-max lg:auto-rows-fr lg:h-full content-start overflow-y-auto"
       >
         {paginatedOrders.map((order) => (
           <OrderCard
@@ -310,7 +454,7 @@ function KdsBoardContent({
             order={order}
             onClick={onOrderSelect}
             onStartPreparation={onStartPreparation ?? startPreparation}
-            onRejectSupplies={onRejectSupplies}
+            onRejectSupplies={handleRejectClick}
             onMarkOrderReady={markOrderReady}
             onItemReady={markItemReady}
             onAdminVoid={handleOpenAdminVoid}
@@ -326,16 +470,16 @@ function KdsBoardContent({
   return (
     <div
       data-testid="kds-board-container"
-      className="orders-kds-root w-full h-full max-w-[1920px] max-h-[1080px] min-w-[1024px] min-h-[600px] flex flex-col bg-gray-900 text-white select-none overflow-hidden"
+      className="orders-kds-root w-full h-full max-w-[1920px] max-h-[1080px] min-w-0 min-h-0 flex flex-col bg-canvas text-ink select-none overflow-hidden"
       style={{ overflow: 'hidden' }}
     >
       {/* Top Header: Tabs and Station Selector */}
-      <header className="px-8 py-4 bg-gray-950 border-b border-gray-800 flex items-center justify-between gap-6 flex-wrap">
+      <header className="px-4 sm:px-6 md:px-8 py-3 sm:py-4 bg-surface border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 shadow-sm">
         {/* View Tabs (Touch target >= 64px, with min-h-[48px] baseline) */}
         <div
           role="tablist"
           aria-label="Vistas KDS"
-          className="flex items-center gap-3 bg-gray-950/90 p-1.5 rounded-lg border border-gray-800"
+          className="flex items-center gap-1.5 sm:gap-2 bg-gray-100 p-1.5 rounded-lg border border-border shrink-0 overflow-x-auto max-w-full"
         >
           <button
             type="button"
@@ -347,12 +491,13 @@ function KdsBoardContent({
             data-testid="tab-active-view"
             {...pointerAction(() => handleViewChange('active'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${view === 'active'
-                ? 'bg-fmat-primary text-white shadow-lg'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${
+              view === 'active'
+                ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
+                : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
+            }`}
           >
-            Vista activa
+            Comandas en Activas
           </button>
           <button
             type="button"
@@ -364,10 +509,11 @@ function KdsBoardContent({
             data-testid="tab-delivered"
             {...pointerAction(() => handleViewChange('delivered'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${view === 'delivered'
-                ? 'bg-fmat-primary text-white shadow-lg'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${
+              view === 'delivered'
+                ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
+                : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
+            }`}
           >
             Entregadas
           </button>
@@ -385,22 +531,66 @@ function KdsBoardContent({
       <section
         id="panel-kds-grid"
         aria-label="Cuadrícula de comandas KDS"
-        className="flex-1 p-6 overflow-hidden flex flex-col justify-center"
+        className="flex-1 min-h-0 p-4 sm:p-6 overflow-hidden flex flex-col justify-center bg-canvas"
       >
+        {feedbackMessage && (
+          <output
+            aria-live="polite"
+            data-testid="kds-action-feedback"
+            className={`mb-3 rounded-control border px-4 py-2.5 text-sm sm:text-base font-semibold flex items-center justify-between shadow-sm ${
+              feedbackMessage.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-blue-50 border-blue-200 text-blue-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
+                  feedbackMessage.type === 'success' ? 'bg-emerald-600' : 'bg-blue-600'
+                }`}
+              />
+              <span>{feedbackMessage.text}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFeedbackMessage(null)}
+              aria-label="Cerrar notificación"
+              className="text-body hover:text-ink font-bold px-2 py-0.5 rounded hover:bg-black/5"
+            >
+              ✕
+            </button>
+          </output>
+        )}
+
         {actionError && (
-          <div role="alert" className="mb-3 rounded-md bg-red-950 px-4 py-3 text-red-200">
-            {actionError}
+          <div
+            role="alert"
+            data-testid="kds-action-error"
+            className="mb-3 rounded-control bg-red-50 border border-red-300 px-4 py-2.5 text-red-800 font-medium flex items-center justify-between shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block shrink-0" />
+              <span>{actionError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              aria-label="Cerrar mensaje de error"
+              className="text-red-700 hover:text-red-900 font-bold px-2 py-0.5 rounded hover:bg-red-100/60"
+            >
+              ✕
+            </button>
           </div>
         )}
         {gridContent}
       </section>
 
       {/* Touch Pagination Footer */}
-      <footer className="h-20 px-8 py-3 bg-gray-950 border-t border-gray-800 flex items-center justify-between">
-        <div data-testid="kds-page-info" className="text-xl font-bold font-mono text-gray-200">
+      <footer className="min-h-[4rem] sm:min-h-[5rem] px-4 sm:px-8 py-2.5 sm:py-3 bg-surface border-t border-border flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div data-testid="kds-page-info" className="text-base sm:text-xl font-bold font-mono text-ink">
           Página {currentPage} de {totalPages}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           <button
             type="button"
             data-testid="pagination-prev"
@@ -408,7 +598,7 @@ function KdsBoardContent({
             disabled={currentPage <= 1}
             {...pointerAction(() => handlePageChange(currentPage - 1))}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-gray-800 text-white border border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150"
+            className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-fmat-primary border-2 border-fmat-primary disabled:opacity-40 disabled:border-border disabled:text-muted disabled:cursor-not-allowed hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm cursor-pointer"
           >
             Anterior
           </button>
@@ -419,12 +609,33 @@ function KdsBoardContent({
             disabled={currentPage >= totalPages}
             {...pointerAction(() => handlePageChange(currentPage + 1))}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-gray-800 text-white border border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150"
+            className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-fmat-primary text-white border-0 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm cursor-pointer"
           >
             Siguiente
           </button>
         </div>
       </footer>
+
+      {confirmReadyTarget && (
+        <ConfirmReadyDialog
+          order={confirmReadyTarget.order}
+          item={confirmReadyTarget.item}
+          isOpen={true}
+          isSubmitting={Boolean(pendingAction)}
+          onConfirm={handleConfirmReadyDialog}
+          onKeepInPrep={handleKeepInPrepDialog}
+        />
+      )}
+
+      {confirmRejectTarget && (
+        <ConfirmRejectDialog
+          order={confirmRejectTarget}
+          isOpen={true}
+          isSubmitting={pendingAction === 'reject'}
+          onConfirm={handleConfirmRejectDialog}
+          onCancel={() => setConfirmRejectTarget(null)}
+        />
+      )}
 
       {voidDialogType === 'admin' && voidDialogOrder && (
         <AdminVoidDialog

@@ -1,7 +1,15 @@
 @tailwind components;
 @tailwind utilities;
 
+.orders-kds-root,
+.orders-kds-root *,
+.orders-kds-root *::before,
+.orders-kds-root *::after {
+  box-sizing: border-box;
+}
+
 .orders-kds-root {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   --color-primary: #C2410C;
   --color-primary-hover: #9A3412;
   --color-primary-accent: #F97316;
@@ -13,11 +21,28 @@
   --color-canvas: #F8FAFC;
   --color-surface: #FFFFFF;
   --color-success: #16A34A;
-  --color-warning: #D97706;
-  --color-error: #DC2626;
+  --color-warning: #EAB308;
+  --color-error: #2563EB;
   --color-info: #2563EB;
   --radius-sm: 4px;
   --radius-control: 8px;
   --radius-card: 12px;
   --space-unit: 4px;
+}
+
+.orders-kds-root button {
+  font-family: inherit;
+  border: 0 solid transparent;
+  background-color: transparent;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.orders-kds-root input,
+.orders-kds-root select,
+.orders-kds-root textarea {
+  font-family: inherit;
 }

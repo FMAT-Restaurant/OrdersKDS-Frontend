@@ -74,8 +74,7 @@ describe('playReadyAlertChime', () => {
       throw new Error('NotAllowedError: play() failed because the user didn\'t interact');
     });
 
-    // @ts-expect-error test mock
-    window.AudioContext = FailingAudioContext;
+    window.AudioContext = FailingAudioContext as unknown as typeof AudioContext;
 
     expect(() => playReadyAlertChime()).not.toThrow();
   });

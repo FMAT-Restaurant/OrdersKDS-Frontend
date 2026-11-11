@@ -3,6 +3,7 @@ import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
 import { pointerAction } from '../pointerAction.ts';
+import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
 
 const InPreparationOrderSchema = OrderSchema.extend({
   status: z.literal(OrderStatus.IN_PREPARATION),
@@ -42,6 +43,14 @@ export function AdminVoidDialog({
   const validation = InPreparationOrderSchema.safeParse(order);
   const isOperable = validation.success && order.status === OrderStatus.IN_PREPARATION;
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
+
+  let tableDisplay: string | null = null;
+  if (order.tableNumber != null) {
+    tableDisplay = `Mesa ${order.tableNumber}`;
+  } else if (order.isTakeaway) {
+    tableDisplay = 'Para llevar';
+  }
 
   const handleConfirm = () => {
     onConfirm(order);
@@ -53,41 +62,43 @@ export function AdminVoidDialog({
       aria-modal="true"
       aria-labelledby="admin-void-dialog-title"
       data-testid="admin-void-dialog"
-      className="orders-kds-root fixed inset-0 z-50 m-0 p-6 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/75 border-none select-none"
+      className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto"
     >
-      <div className="w-full max-w-lg rounded-fmat bg-gray-900 border border-gray-700 p-6 text-white shadow-2xl flex flex-col gap-5">
-        <header className="flex items-center justify-between border-b border-gray-800 pb-3">
-          <h2 id="admin-void-dialog-title" className="text-2xl font-black text-white">
-            Anulación Administrativa #{displayId}
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
+        <header className="flex items-center justify-between border-b border-border pb-3">
+          <h2 id="admin-void-dialog-title" className="text-2xl font-black text-ink">
+            Anulación Administrativa {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
+            <span className="sr-only">#{displayId}</span>
           </h2>
         </header>
 
         <div
           role="alert"
           data-testid="admin-void-warning"
-          className="rounded-md bg-amber-950/90 border border-amber-500/60 px-4 py-3 text-amber-200 font-bold text-lg"
+          className="rounded-control bg-amber-50 border border-amber-300 px-4 py-3 text-amber-900 font-bold text-center text-base"
         >
-          Se cobrará la comanda mermada
+          <span>Se cobrará la comanda mermada al cliente</span>
+          <span className="sr-only">Se cobrará la comanda mermada</span>
         </div>
 
         {!isOperable && (
           <div
             role="alert"
             data-testid="admin-void-invalid-status"
-            className="rounded-md bg-red-950 border border-red-500 px-4 py-3 text-red-200 font-semibold text-base"
+            className="rounded-md bg-red-50 border border-red-300 px-4 py-3 text-red-700 font-semibold text-base"
           >
             Operación bloqueada: la comanda debe estar en estado EN PREPARACIÓN ({OrderStatus.IN_PREPARATION}).
           </div>
         )}
 
-        <footer className="flex items-center justify-end gap-4 pt-2 border-t border-gray-800">
+        <footer className="sticky -bottom-6 bg-surface flex items-center justify-end gap-4 pt-3 pb-1 border-t border-border shrink-0 -mx-6 px-6">
           <button
             type="button"
             data-testid="admin-void-cancel"
             disabled={isSubmitting}
             {...pointerAction(onCancel)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-md bg-gray-800 hover:bg-gray-700 text-white font-bold text-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-gray-100 text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Cancelar
           </button>
@@ -97,7 +108,7 @@ export function AdminVoidDialog({
             disabled={!isOperable || isSubmitting}
             {...pointerAction(handleConfirm)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-md bg-red-600 hover:bg-red-700 text-white font-bold text-lg focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-red-600 hover:bg-red-700 text-white font-bold text-lg border-0 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
           >
             Confirmar
           </button>

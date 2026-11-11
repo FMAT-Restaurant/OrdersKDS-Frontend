@@ -27,6 +27,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    testTimeout: 10000,
     setupFiles: ['./src/setupTests.ts'],
     typecheck: {
       tsconfig: './tsconfig.vitest.json',

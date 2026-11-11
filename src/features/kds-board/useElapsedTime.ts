@@ -19,6 +19,7 @@ export interface ElapsedTimeResult extends DelayInfo {
 export interface UseElapsedTimeOptions {
   readonly warningAfterSeconds?: number;
   readonly lateAfterSeconds?: number;
+  readonly endTime?: string | null;
 }
 
 /**
@@ -132,10 +133,17 @@ export function useElapsedTime(
 
   const effectiveStartTime = inPreparationAt || fallbackStockReservedAt || null;
 
-  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
+  const endTimeMs = effectiveOptions?.endTime
+    ? new Date(effectiveOptions.endTime).getTime()
+    : null;
+  const isStaticTime = endTimeMs !== null && Number.isFinite(endTimeMs);
+
+  const [currentTime, setCurrentTime] = useState<number>(() =>
+    isStaticTime ? (endTimeMs as number) : Date.now(),
+  );
 
   useEffect(() => {
-    if (!effectiveStartTime) {
+    if (!effectiveStartTime || isStaticTime) {
       return;
     }
 
@@ -146,14 +154,15 @@ export function useElapsedTime(
     return () => {
       clearInterval(timerId);
     };
-  }, [effectiveStartTime]);
+  }, [effectiveStartTime, isStaticTime]);
 
   const prepTimeMs = effectiveStartTime ? new Date(effectiveStartTime).getTime() : Number.NaN;
   const isInvalidPrep = !effectiveStartTime || Number.isNaN(prepTimeMs);
 
+  const targetTime = isStaticTime ? (endTimeMs as number) : currentTime;
   const elapsedSeconds = isInvalidPrep
     ? 0
-    : Math.max(0, Math.floor((currentTime - prepTimeMs) / 1000));
+    : Math.max(0, Math.floor((targetTime - prepTimeMs) / 1000));
 
   const formattedTime = formatElapsedTime(elapsedSeconds);
   const delayInfo = computeDelayInfo(elapsedSeconds, warningSeconds, lateSeconds);

@@ -37,53 +37,55 @@ export function VirtualKeyboard({
     <div
       data-testid="virtual-keyboard"
       aria-label="Teclado virtual en pantalla"
-      className="flex flex-col gap-2 bg-gray-950 p-3 rounded-lg border border-gray-800 select-none"
+      className="flex flex-col gap-2 bg-gray-50 p-3 rounded-lg border border-border select-none overflow-x-auto w-full"
     >
-      {KEYBOARD_ROWS.map((row, rowIndex) => (
-        <div
-          key={`kb-row-${rowIndex}`}
-          className="flex flex-wrap justify-center gap-2"
-        >
-          {row.map((letter) => (
-            <button
-              key={letter}
-              type="button"
-              disabled={disabled}
-              data-testid={`virtual-key-${letter}`}
-              aria-label={`Tecla ${letter}`}
-              {...pointerAction(() => handleKeyPress(letter))}
-              style={{ minHeight: 64, minWidth: 64 }}
-              className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-md bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-white font-bold text-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {letter}
-            </button>
-          ))}
-        </div>
-      ))}
+      <div className="flex flex-col gap-2 min-w-max mx-auto">
+        {KEYBOARD_ROWS.map((row, rowIndex) => (
+          <div
+            key={`kb-row-${rowIndex}`}
+            className="flex flex-nowrap justify-center gap-1.5 sm:gap-2 w-full"
+          >
+            {row.map((letter) => (
+              <button
+                key={letter}
+                type="button"
+                disabled={disabled}
+                data-testid={`virtual-key-${letter}`}
+                aria-label={`Tecla ${letter}`}
+                {...pointerAction(() => handleKeyPress(letter))}
+                style={{ minHeight: 64, minWidth: 64 }}
+                className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-control bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center select-none"
+              >
+                {letter}
+              </button>
+            ))}
+          </div>
+        ))}
 
-      <div className="flex flex-wrap justify-center gap-2 mt-1">
-        <button
-          type="button"
-          disabled={disabled}
-          data-testid="virtual-key-space"
-          aria-label="Espacio"
-          {...pointerAction(handleSpace)}
-          style={{ minHeight: 64, minWidth: 64 }}
-          className="min-h-[64px] min-w-[64px] flex-1 max-w-xs px-6 py-2 rounded-md bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-white font-bold text-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          Espacio
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          data-testid="virtual-key-backspace"
-          aria-label="Borrar"
-          {...pointerAction(handleBackspace)}
-          style={{ minHeight: 64, minWidth: 64 }}
-          className="min-h-[64px] min-w-[64px] px-6 py-2 rounded-md bg-red-900/80 hover:bg-red-800 active:bg-red-700 text-white font-bold text-lg border border-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          Borrar
-        </button>
+        <div className="flex flex-nowrap justify-center gap-2 mt-1 w-full">
+          <button
+            type="button"
+            disabled={disabled}
+            data-testid="virtual-key-space"
+            aria-label="Espacio"
+            {...pointerAction(handleSpace)}
+            style={{ minHeight: 64, minWidth: 64 }}
+            className="min-h-[64px] min-w-[64px] flex-1 max-w-sm px-6 py-2 rounded-control bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            Espacio
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            data-testid="virtual-key-backspace"
+            aria-label="Borrar"
+            {...pointerAction(handleBackspace)}
+            style={{ minHeight: 64, minWidth: 64 }}
+            className="min-h-[64px] min-w-[64px] px-6 py-2 rounded-control bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 font-bold text-lg border border-red-300 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            Borrar
+          </button>
+        </div>
       </div>
     </div>
   );

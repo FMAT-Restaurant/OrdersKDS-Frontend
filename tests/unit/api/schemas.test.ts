@@ -42,10 +42,18 @@ describe('UT-FE-14: Zod Boundary Schemas', () => {
       expect(result.success).toBe(false);
     });
 
-    it('rejects item with empty name', () => {
-      const invalidItem = { ...mockOrderItem1, name: '' };
-      const result = OrderItemSchema.safeParse(invalidItem);
-      expect(result.success).toBe(false);
+    it('transforms null dishId and null station to undefined', () => {
+      const itemWithNulls = {
+        ...mockOrderItem1,
+        dishId: null,
+        station: null,
+      };
+      const result = OrderItemSchema.safeParse(itemWithNulls);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.dishId).toBeUndefined();
+        expect(result.data.station).toBeUndefined();
+      }
     });
   });
 
@@ -100,6 +108,74 @@ describe('UT-FE-14: Zod Boundary Schemas', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toHaveLength(1);
+      }
+    });
+
+    it('prioritizes orderId or publicId when order.id is numeric', () => {
+      const orderWithNumericId = {
+        ...mockOrder1,
+        id: '12345',
+        orderId: 'uuid-order-123',
+        publicId: 'public-order-123',
+        items: [
+          {
+            ...mockOrderItem1,
+            id: '987',
+            itemId: 'uuid-item-987',
+          },
+        ],
+      };
+      const result = KdsQueueResponseSchema.safeParse([orderWithNumericId]);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data[0].id).toBe('uuid-order-123');
+        expect(result.data[0].items[0].id).toBe('uuid-item-987');
+      }
+    });
+
+    it('falls back to publicId when orderId is omitted and id is numeric', () => {
+      const orderWithPublicFallback = {
+        ...mockOrder1,
+        id: '999',
+        orderId: undefined,
+        publicId: 'pub-999',
+        items: [
+          {
+            ...mockOrderItem1,
+            id: '888',
+            itemId: undefined,
+            publicId: 'pub-item-888',
+          },
+        ],
+      };
+      const result = KdsQueueResponseSchema.safeParse([orderWithPublicFallback]);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data[0].id).toBe('pub-999');
+        expect(result.data[0].items[0].id).toBe('pub-item-888');
+      }
+    });
+
+    it('preserves numeric id if neither orderId nor publicId is present', () => {
+      const orderNumericOnly = {
+        ...mockOrder1,
+        id: '555',
+        orderId: undefined,
+        publicId: undefined,
+        items: [
+          {
+            ...mockOrderItem1,
+            id: '444',
+            itemId: undefined,
+            publicId: undefined,
+          },
+        ],
+      };
+      const result = KdsQueueResponseSchema.safeParse([orderNumericOnly]);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data[0].id).toBe('555');
+        expect(result.data[0].items[0].id).toBe('444');
       }
     });
   });

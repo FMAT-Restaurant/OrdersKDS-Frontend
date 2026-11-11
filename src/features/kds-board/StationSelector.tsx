@@ -27,7 +27,7 @@ export function StationSelector({
     <div
       role="radiogroup"
       aria-label="Selector de estaciones"
-      className="flex items-center gap-4 p-1.5 bg-gray-950/90 rounded-lg border border-gray-800"
+      className="flex items-center gap-1.5 sm:gap-2 p-1.5 bg-gray-100 rounded-lg border border-border overflow-x-auto max-w-full"
     >
       {stations.map((station) => {
         const isSelected = selectedStation.toLowerCase() === station.toLowerCase();
@@ -42,10 +42,10 @@ export function StationSelector({
             {...pointerAction(() => onSelectStation(station))}
             onKeyDown={(event) => handleKeyDown(event, station)}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-5 py-2.5 rounded-md font-bold text-base capitalize transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] ${
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-base capitalize whitespace-nowrap shrink-0 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] cursor-pointer ${
               isSelected
-                ? 'bg-fmat-primary text-white shadow-md'
-                : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
+                : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
             }`}
           >
             {station === 'general' ? 'Todas' : station}

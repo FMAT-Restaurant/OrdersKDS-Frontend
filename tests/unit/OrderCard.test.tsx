@@ -209,7 +209,7 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
   describe('UT-FE-06: StatusBadge y estados con tokens', () => {
     const expectedTokens: Record<OrderStatus, { label: string; token: string }> = {
       CREATED: { label: 'Created', token: 'var(--color-warning)' },
-      RESERVED: { label: 'Reservado / Por iniciar', token: 'var(--color-info)' },
+      RESERVED: { label: 'Por iniciar', token: 'var(--color-info)' },
       IN_PREPARATION: { label: 'In Preparation', token: 'var(--color-info)' },
       DELIVERED: { label: 'Delivered', token: 'var(--color-success)' },
       PAID: { label: 'Paid', token: 'var(--color-success)' },
@@ -239,7 +239,7 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(keys).toHaveLength(10);
       expect(STATUS_CONFIG.CREATED.token).toBe('var(--color-warning)');
       expect(STATUS_CONFIG.RESERVED.token).toBe('var(--color-info)');
-      expect(STATUS_CONFIG.RESERVED.label).toBe('Reservado / Por iniciar');
+      expect(STATUS_CONFIG.RESERVED.label).toBe('Por iniciar');
       expect(STATUS_CONFIG.IN_PREPARATION.token).toBe('var(--color-info)');
       expect(STATUS_CONFIG.DELIVERED.token).toBe('var(--color-success)');
       expect(STATUS_CONFIG.PAID.token).toBe('var(--color-success)');
@@ -416,6 +416,36 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(result.current.elapsedSeconds).toBe(120);
       expect(result.current.delayStatus).toBe('warning');
     });
+
+    it('calculates fixed elapsed time and skips live interval when endTime is passed', () => {
+      const startTime = new Date(baseTimestamp - 300 * 1000).toISOString();
+      const endTime = new Date(baseTimestamp - 60 * 1000).toISOString(); // 240s elapsed
+      const { result } = renderHook(() =>
+        useElapsedTime(startTime, { endTime }),
+      );
+
+      expect(result.current.elapsedSeconds).toBe(240);
+      expect(result.current.formattedTime).toBe('04:00');
+
+      // Advancing time should NOT change elapsedSeconds because timer is static
+      act(() => {
+        vi.advanceTimersByTime(10000);
+      });
+      expect(result.current.elapsedSeconds).toBe(240);
+    });
+
+    it('falls back to live time when endTime is an invalid date string', () => {
+      const startTime = new Date(baseTimestamp - 60 * 1000).toISOString();
+      const { result } = renderHook(() =>
+        useElapsedTime(startTime, { endTime: 'invalid-end-date' }),
+      );
+
+      expect(result.current.elapsedSeconds).toBe(60);
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(result.current.elapsedSeconds).toBe(65);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -447,11 +477,11 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
 
       expect(startBtn).toBeInTheDocument();
       expect(startBtn).toHaveTextContent('Iniciar preparación');
-      expect(startBtn).toHaveClass('min-h-[48px]');
+      expect(startBtn).toHaveClass('min-h-[64px]');
 
       expect(rejectBtn).toBeInTheDocument();
       expect(rejectBtn).toHaveTextContent('Rechazar insumo');
-      expect(rejectBtn).toHaveClass('min-h-[48px]');
+      expect(rejectBtn).toHaveClass('min-h-[64px]');
 
       // Click start preparation
       fireEvent.click(startBtn);
@@ -725,17 +755,23 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(screen.getByTestId('order-action-reject-ord-reserved-1')).toBeDisabled();
     });
 
-    it('handles "Orden lista" button click, keyboard, and disabled states', () => {
+    it('handles "Orden lista" button click, keyboard, and disabled states on IN_PREPARATION order', () => {
       const onReady = vi.fn();
+      const inPrepOrder: Order = {
+        ...reservedOrder,
+        id: 'ord-inprep-ready-1',
+        orderId: 'ord-inprep-ready-1',
+        status: OrderStatus.IN_PREPARATION,
+      };
       const { rerender } = render(
-        <OrderCard order={reservedOrder} onMarkOrderReady={onReady} />,
+        <OrderCard order={inPrepOrder} onMarkOrderReady={onReady} />,
       );
 
-      const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
+      const readyBtn = screen.getByTestId('order-action-ready-ord-inprep-ready-1');
       expect(readyBtn).toBeInTheDocument();
 
       fireEvent.click(readyBtn);
-      expect(onReady).toHaveBeenCalledWith(reservedOrder);
+      expect(onReady).toHaveBeenCalledWith(inPrepOrder);
 
       fireEvent.keyDown(readyBtn, { key: 'Enter' });
       expect(onReady).toHaveBeenCalledTimes(2);
@@ -744,8 +780,13 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       fireEvent.keyDown(readyBtn, { key: 'ArrowRight' });
       expect(onReady).toHaveBeenCalledTimes(3);
 
-      rerender(<OrderCard order={reservedOrder} pendingAction="order-ready" />);
-      expect(screen.getByTestId('order-action-ready-ord-reserved-1')).toBeDisabled();
+      rerender(<OrderCard order={inPrepOrder} pendingAction="order-ready" />);
+      expect(screen.getByTestId('order-action-ready-ord-inprep-ready-1')).toBeDisabled();
+    });
+
+    it('does not render "Comanda lista" button on RESERVED orders (anti-pattern prevention)', () => {
+      render(<OrderCard order={reservedOrder} onMarkOrderReady={vi.fn()} />);
+      expect(screen.queryByTestId('order-action-ready-ord-reserved-1')).not.toBeInTheDocument();
     });
 
     it('hides "Orden lista" button when order is DELIVERED, PAID, or CANCELLED', () => {
@@ -830,6 +871,23 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(onItemReady).toHaveBeenCalledTimes(3);
     });
 
+    it('does not trigger onItemReady when clicking on dish notes, modifiers or name (User Requirement 4)', () => {
+      const onItemReady = vi.fn();
+      render(<OrderCard order={reservedOrder} onItemReady={onItemReady} />);
+
+      const notesElement = screen.getByTestId('order-item-notes-dish-1');
+      fireEvent.click(notesElement);
+      expect(onItemReady).not.toHaveBeenCalled();
+
+      const nameElement = screen.getByTestId('order-item-name-dish-1');
+      fireEvent.click(nameElement);
+      expect(onItemReady).not.toHaveBeenCalled();
+
+      const modElement = screen.getByTestId('order-item-modifier-dish-1-0');
+      fireEvent.click(modElement);
+      expect(onItemReady).not.toHaveBeenCalled();
+    });
+
     it('renders item safely when optional fields are omitted or pendingAction matches', () => {
       const minimalOrder: Order = {
         ...reservedOrder,
@@ -861,10 +919,10 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
     });
 
     it('does not throw when action callbacks are undefined and buttons are triggered', () => {
-      render(<OrderCard order={reservedOrder} />);
+      const inPrepOrder: Order = { ...reservedOrder, status: OrderStatus.IN_PREPARATION };
+      const { rerender } = render(<OrderCard order={reservedOrder} />);
       const startBtn = screen.getByTestId('order-action-start-ord-reserved-1');
       const rejectBtn = screen.getByTestId('order-action-reject-ord-reserved-1');
-      const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
       const itemBtn = screen.getByTestId('order-item-action-dish-1');
 
       expect(() => {
@@ -872,11 +930,175 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
         fireEvent.keyDown(startBtn, { key: 'Enter' });
         fireEvent.click(rejectBtn);
         fireEvent.keyDown(rejectBtn, { key: 'Enter' });
-        fireEvent.click(readyBtn);
-        fireEvent.keyDown(readyBtn, { key: 'Enter' });
         fireEvent.click(itemBtn);
         fireEvent.keyDown(itemBtn, { key: 'Enter' });
       }).not.toThrow();
+
+      rerender(<OrderCard order={inPrepOrder} />);
+      const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
+      expect(() => {
+        fireEvent.click(readyBtn);
+        fireEvent.keyDown(readyBtn, { key: 'Enter' });
+      }).not.toThrow();
+    });
+
+    it('renders orders with 10+ dishes compactly and toggles compact/expanded details per dish', () => {
+      const manyItems = Array.from({ length: 10 }, (_, i) => ({
+        id: `dish-id-${i}`,
+        itemId: `dish-id-${i}`,
+        name: `Platillo ${i + 1}`,
+        quantity: 1,
+        unitPrice: 100,
+        status: ItemStatus.PENDING,
+        modifiers: [`Extra ${i}`],
+        notes: `Nota ${i}`,
+        station: 'parrilla',
+        version: 1,
+      }));
+
+      const largeOrder: Order = {
+        ...reservedOrder,
+        id: 'ord-large-10',
+        orderId: 'ord-large-10',
+        items: manyItems,
+      };
+
+      render(<OrderCard order={largeOrder} />);
+
+      // On >= 5 dishes, dish notes are collapsed by default with per-dish toggle button
+      const dish0Toggle = screen.getByTestId('order-item-toggle-details-dish-id-0');
+      expect(dish0Toggle).toBeInTheDocument();
+      expect(dish0Toggle).toHaveTextContent('Ver detalles');
+      expect(screen.queryByTestId('order-item-notes-dish-id-0')).not.toBeInTheDocument();
+
+      // Toggle to expanded view for dish 0
+      fireEvent.click(dish0Toggle);
+      expect(dish0Toggle).toHaveTextContent('Ocultar detalles');
+      expect(screen.getByTestId('order-item-notes-dish-id-0')).toBeInTheDocument();
+
+      // Toggle back to collapsed view
+      fireEvent.click(dish0Toggle);
+      expect(dish0Toggle).toHaveTextContent('Ver detalles');
+      expect(screen.queryByTestId('order-item-notes-dish-id-0')).not.toBeInTheDocument();
+
+      // All 10 items are rendered and reachable
+      for (let i = 0; i < 10; i++) {
+        expect(screen.getByTestId(`order-item-dish-id-${i}`)).toBeInTheDocument();
+      }
+    });
+
+    it('handles admin and chef void button clicks and keyboard navigation (Enter/Space)', () => {
+      const onAdminVoid = vi.fn();
+      const onChefVoid = vi.fn();
+      const inPrepOrder: Order = { ...reservedOrder, status: OrderStatus.IN_PREPARATION };
+
+      const { rerender } = render(
+        <OrderCard
+          order={inPrepOrder}
+          userRole="admin"
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+
+      const adminBtn = screen.getByTestId('order-action-admin-void-ord-reserved-1');
+      const chefBtn = screen.getByTestId('order-action-chef-void-ord-reserved-1');
+
+      fireEvent.click(adminBtn);
+      expect(onAdminVoid).toHaveBeenCalledWith(inPrepOrder);
+
+      fireEvent.keyDown(adminBtn, { key: 'Enter' });
+      expect(onAdminVoid).toHaveBeenCalledTimes(2);
+
+      fireEvent.keyDown(adminBtn, { key: ' ' });
+      expect(onAdminVoid).toHaveBeenCalledTimes(3);
+
+      fireEvent.click(chefBtn);
+      expect(onChefVoid).toHaveBeenCalledWith(inPrepOrder);
+
+      fireEvent.keyDown(chefBtn, { key: 'Enter' });
+      expect(onChefVoid).toHaveBeenCalledTimes(2);
+
+      fireEvent.keyDown(chefBtn, { key: ' ' });
+      expect(onChefVoid).toHaveBeenCalledTimes(3);
+
+      // Verify disabled state with pendingAction
+      rerender(
+        <OrderCard
+          order={inPrepOrder}
+          userRole="admin"
+          pendingAction="void-admin"
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+      expect(screen.getByTestId('order-action-admin-void-ord-reserved-1')).toBeDisabled();
+    });
+
+    it('controls void button visibility by userRole', () => {
+      const inPrepOrder: Order = { ...reservedOrder, status: OrderStatus.IN_PREPARATION };
+      const onAdminVoid = vi.fn();
+      const onChefVoid = vi.fn();
+
+      // Chef role: sees chef void, not admin void
+      const { rerender } = render(
+        <OrderCard
+          order={inPrepOrder}
+          userRole="chef"
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+      expect(screen.queryByTestId('order-action-admin-void-ord-reserved-1')).not.toBeInTheDocument();
+      expect(screen.getByTestId('order-action-chef-void-ord-reserved-1')).toBeInTheDocument();
+
+      // Waiter role: sees neither
+      rerender(
+        <OrderCard
+          order={inPrepOrder}
+          userRole="waiter"
+          onAdminVoid={onAdminVoid}
+          onChefVoid={onChefVoid}
+        />,
+      );
+      expect(screen.queryByTestId('order-action-admin-void-ord-reserved-1')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('order-action-chef-void-ord-reserved-1')).not.toBeInTheDocument();
+    });
+
+    it('triggers onStartPreparation when pressing Enter on header of a RESERVED order', () => {
+      const onStartPrep = vi.fn();
+      const onClick = vi.fn();
+
+      render(
+        <OrderCard
+          order={reservedOrder}
+          onStartPreparation={onStartPrep}
+          onClick={onClick}
+        />,
+      );
+
+      const headerStub = screen.getByTestId('order-card-stub-ord-reserved-1');
+      fireEvent.keyDown(headerStub, { key: 'Enter' });
+      expect(onStartPrep).toHaveBeenCalledWith(reservedOrder);
+      expect(onClick).not.toHaveBeenCalled();
+
+      // Non-reserved order triggers onClick
+      fireEvent.click(headerStub);
+      expect(onClick).toHaveBeenCalledWith(reservedOrder);
+    });
+
+    it('renders delivered order with frozen time when order.updatedAt is provided', () => {
+      const deliveredWithTime: Order = {
+        ...reservedOrder,
+        status: OrderStatus.DELIVERED,
+        items: reservedOrder.items.map((item) => ({ ...item, status: ItemStatus.READY })),
+        updatedAt: new Date(Date.now() - 120 * 1000).toISOString(),
+      };
+
+      render(<OrderCard order={deliveredWithTime} />);
+      const stopwatch = screen.getByTestId('order-stopwatch-ord-reserved-1');
+      expect(stopwatch).toHaveAttribute('data-delay-status', 'on_time');
+      expect(screen.getByTestId('order-delay-label-ord-reserved-1')).toHaveTextContent('Entregada');
     });
   });
 });

@@ -317,6 +317,24 @@ pnpm run preview
 
 To run manual end-to-end functional tests (viewing real orders on the KDS board, starting preparation, marking items ready, voiding orders with the virtual keyboard, etc.), **this frontend must run alongside `orders-backend`**.
 
+#### Step 0 — Packaging & Running the Frontend Docker Container (for Docker Desktop)
+If you want to package the frontend using its multi-stage `Dockerfile` (Node 20 build + Nginx with CORS headers) and run it as a container in **Docker Desktop**:
+
+```powershell
+# 1. Navigate to the frontend repository root
+cd C:\path\to\orders-frontend
+
+# 2. Build (package) the Docker image
+docker build -t orders-frontend:latest .
+
+# 3. Remove any previous container with the same name and start the new container on port 3000
+docker rm -f orders-frontend 2>$null
+docker run -d --name orders-frontend -p 3000:80 orders-frontend:latest
+
+# 4. In Docker Desktop -> Containers, verify "orders-frontend" is Running (green dot) on 3000:80.
+#    Open http://localhost:3000 in your browser (it connects automatically to http://localhost:8000).
+```
+
 #### Step 1 — Start the Backend & Seed Data First (Terminal 1 + Docker Desktop)
 Before starting the frontend, follow **§8 of the Backend `QUICKSTART.md`** in a first PowerShell window (**Terminal 1**):
 
@@ -671,6 +689,24 @@ pnpm run preview
 ### §7 — Inicio de entorno rápido para pruebas manuales (en conjunto con el Backend, Terminal y Docker Desktop)
 
 Para realizar pruebas manuales de funcionamiento de punta a punta en el Frontend (visualizar comandas reales en el tablero KDS, iniciar preparación, marcar platillos como listos, anular comandas con el teclado virtual, etc.), **es indispensable levantar primero en conjunto el repositorio `orders-backend`**.
+
+#### Paso 0 — Cómo empaquetar y levantar el contenedor Docker del Frontend (para Docker Desktop)
+Si deseas empaquetar el frontend usando su `Dockerfile` multi-etapa (compilación con Node 20 + servidor Nginx con CORS habilitado) y ejecutarlo desde **Docker Desktop**:
+
+```powershell
+# 1. Entrar a la carpeta raíz del repositorio frontend
+cd C:\ruta\a\orders-frontend
+
+# 2. Empaquetar (construir) la imagen Docker del frontend
+docker build -t orders-frontend:latest .
+
+# 3. Eliminar cualquier contenedor previo con el mismo nombre y levantarlo en el puerto 3000
+docker rm -f orders-frontend 2>$null
+docker run -d --name orders-frontend -p 3000:80 orders-frontend:latest
+
+# 4. En Docker Desktop -> Containers verás "orders-frontend" en estado Running (3000:80).
+#    Abre http://localhost:3000 en tu navegador (se conecta automáticamente a http://localhost:8000).
+```
 
 #### Paso 1 — Levantar primero el Backend y sus datos de prueba (Terminal 1 + Docker Desktop)
 Antes de iniciar el frontend, sigue la sección **§8 del `QUICKSTART.md` del repositorio `orders-backend`** en una primera ventana de PowerShell (**Terminal 1**):
