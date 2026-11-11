@@ -1,179 +1,145 @@
-# Guía de uso de Docker — Orders & KDS Backend
+# Guía de uso de Docker — Orders & KDS Frontend
 
-Documentación básica para el equipo. Explica cómo funciona Docker **en tu máquina local** dentro de este proyecto y qué parte se resolverá en la nube (TASK-38, Sprint 5).
+Documentación oficial para el equipo de desarrollo. Explica el empaquetamiento, ejecución y distribución de la aplicación frontend (**Orders & KDS**) mediante contenedores Docker, tanto en entornos locales como en el pipeline de CI/CD (GitHub Actions y GitHub Container Registry).
 
-> Documentos relacionados: [QUICKSTART.md](../QUICKSTART.md) (§5–§7: requerimientos, arranque y cliente de BD) · [README.md](../README.md) (instalación completa).
-
----
-
-## 1. ¿Para qué usamos Docker?
-
-El microservicio necesita tres servicios externos que **no se instalan en tu computadora**; corren dentro de contenedores:
-
-| Servicio | Imagen | Contenedor | Puerto en tu máquina | Para qué sirve |
-|---|---|---|---|---|
-| PostgreSQL 16 | `postgres:16-alpine` | `ordenes-postgres` | `5432` | Base de datos principal y tabla *outbox* |
-| Redis 7 | `redis:7-alpine` | `ordenes-redis` | `6379` | Vista local de catálogo y mesas |
-| RabbitMQ 3 | `rabbitmq:3-management-alpine` | `ordenes-rabbitmq` | `5672` (AMQP) y `15672` (panel web) | Broker de eventos |
-
-Ventajas: todos usamos **las mismas versiones**, no se "ensucia" el sistema operativo, no hay choque con otros programas y todo se puede borrar y recrear en segundos.
-
-> **No instales PostgreSQL, Redis ni RabbitMQ directamente en tu sistema.** Solo necesitas Docker Desktop (y, opcionalmente, un cliente visual como pgAdmin o DBeaver).
-
-La API (`uvicorn`) y los *workers* **no** corren en Docker durante el desarrollo: se ejecutan directamente en tu máquina para tener recarga automática (`--reload`).
+> **Documentos relacionados:**
+> - [QUICKSTART.md](../QUICKSTART.md) — Requerimientos locales, variables de entorno y arranque con `pnpm dev`.
+> - [README.md](../README.md) — Visión general de la arquitectura frontend y microfrontends (Module Federation).
+> - [.github/workflows/ci.yml](../.github/workflows/ci.yml) — Pipeline de integración y despliegue continuo.
 
 ---
 
-## 2. Conceptos básicos
+## 1. ¿Para qué usamos Docker en el Frontend?
 
-| Concepto | Qué es | Analogía |
-|---|---|---|
-| **Imagen** | Paquete de solo lectura con el software ya instalado (ej. `postgres:16-alpine`) | La receta/instalador |
-| **Contenedor** | Una imagen en ejecución | El plato ya preparado |
-| **Volumen** | Carpeta persistente donde el contenedor guarda sus datos | El disco duro del contenedor |
-| **Puerto (`5432:5432`)** | `puerto-en-tu-máquina:puerto-del-contenedor` | Un túnel hacia el contenedor |
-| **`docker-compose.yml`** | Archivo que describe todos los contenedores del proyecto | La lista completa de recetas |
+A diferencia del backend (que orquesta bases de datos PostgreSQL, Redis y RabbitMQ para desarrollo local), en el frontend el flujo es el siguiente:
 
-Gracias al mapeo de puertos, desde tu máquina todo se ve como si estuviera instalado normalmente: te conectas a `localhost:5432`.
-
-Los volúmenes (`postgres_data`, `redis_data`, `rabbitmq_data`) hacen que **los datos sobrevivan** aunque apagues o elimines los contenedores. Solo se borran con `docker compose down -v`.
+1. **Durante el desarrollo diario:** No necesitas Docker. Ejecutas directamente `pnpm dev` en tu máquina para aprovechar el servidor de desarrollo de Vite con Hot Module Replacement (HMR) instantáneo.
+2. **Para pruebas de producción y distribución:** Usamos Docker para empaquetar los artefactos estáticos compilados (`dist/`) dentro de un servidor web ultra-ligero de grado de producción (**Nginx Alpine**).
+3. **Module Federation (Microfrontends):** La imagen de Nginx expone los encabezados CORS indispensables para que el host (o shell de la aplicación general del restaurante) pueda consumir remotamente `remoteEntry.js` y los componentes federados sin bloqueos del navegador.
+4. **CI/CD automatizado:** En cada merge a la rama `main`, GitHub Actions compila la imagen Docker optimizada con multi-stage build y la publica en **GitHub Container Registry (GHCR)**.
 
 ---
 
-## 3. Antes de empezar
+## 2. Arquitectura de la Imagen (`Dockerfile`)
 
-1. Instala **Docker Desktop** (en Windows requiere WSL 2). Ver [QUICKSTART §5](../QUICKSTART.md).
-2. Abre Docker Desktop y espera a que indique **Engine running**. Sin esto, cualquier comando `docker` fallará.
-3. Verifica la instalación:
+El proyecto utiliza una estrategia de compilación multi-etapa (**Multi-Stage Build**) definida en el [`Dockerfile`](../Dockerfile), garantizando imágenes de producción mínimas, seguras y sin código fuente ni dependencias de desarrollo:
+
+```
+┌────────────────────────────────────────────────────────┐
+│  Stage 1: builder (node:20-alpine)                     │
+│  - Instala pnpm de forma global                        │
+│  - Copia package.json y pnpm-lock.yaml                 │
+│  - pnpm install --frozen-lockfile                      │
+│  - Compila la aplicación con Vite (pnpm run build)     │
+└──────────────────────────┬─────────────────────────────┘
+                           │ Extrae únicamente /app/dist
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│  Stage 2: producción (nginx:alpine)                    │
+│  - Copia /app/dist a /usr/share/nginx/html             │
+│  - Inyecta configuración de Nginx con SPA routing      │
+│  - Inyecta cabeceras CORS para Module Federation       │
+│  - Expone el puerto 80                                 │
+└────────────────────────────────────────────────────────┘
+```
+
+### Configuración de Nginx y Cabeceras CORS
+La etapa de producción inyecta una configuración específica en `/etc/nginx/conf.d/default.conf` que resuelve dos necesidades críticas:
+- **Enrutamiento SPA:** `try_files $uri $uri/ /index.html;` permite que las rutas del cliente (react-router) se resuelvan adecuadamente sin responder 404 al recargar el navegador.
+- **Acceso Remoto CORS:** Permite que el host del microfrontend consuma los chunks JS y manifiestos desde cualquier origen:
+  ```nginx
+  add_header Access-Control-Allow-Origin * always;
+  add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS" always;
+  add_header Access-Control-Allow-Headers "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization" always;
+  ```
+- **Preflights OPTIONS:** Responde de inmediato con status `204 No Content` para solicitudes preliminares CORS del navegador.
+
+---
+
+## 3. Comandos para Uso Local
+
+Si deseas probar el comportamiento exacto de producción en tu máquina local mediante Docker:
+
+### 3.1 Construir la Imagen Localmente
+Desde la raíz del repositorio `orders-frontend`:
 
 ```powershell
-docker --version
-docker compose version
-docker run --rm hello-world
+docker build -t orders-frontend:local .
+```
+
+> **Nota:** El archivo [`.dockerignore`](../.dockerignore) filtra automáticamente carpetas como `node_modules`, `dist`, reportes de cobertura, suites de pruebas (`tests/`, `e2e/`) y variables locales (`.env.local`), acelerando la compilación y manteniendo la imagen limpia.
+
+### 3.2 Ejecutar el Contenedor
+Arranca el contenedor mapeando el puerto 80 del contenedor al puerto `8080` (o el de tu preferencia) en tu máquina:
+
+```powershell
+docker run -d --name orders-front-preview -p 8080:80 orders-frontend:local
+```
+
+### 3.3 Verificar el Funcionamiento
+- Abre tu navegador en: [http://localhost:8080](http://localhost:8080)
+- Comprueba que los activos de Module Federation estén disponibles:
+  ```powershell
+  curl -I http://localhost:8080/assets/remoteEntry.js
+  ```
+  Deberás observar las cabeceras `Access-Control-Allow-Origin: *` y HTTP `200 OK`.
+
+### 3.4 Detener y Limpiar el Contenedor
+```powershell
+docker stop orders-front-preview
+docker rm orders-front-preview
 ```
 
 ---
 
-## 4. Uso diario
+## 4. Empaquetamiento y Publicación en CI/CD (GitHub Actions)
 
-**Todos los comandos se ejecutan en la raíz del repositorio `orders-backend`** (donde está `docker-compose.yml`).
+El repositorio cuenta con automatización completa en [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) bajo el trabajo `build-and-push`:
 
-| Objetivo | Comando |
-|---|---|
-| Encender la infraestructura (en segundo plano) | `docker compose up -d postgres redis rabbitmq` |
-| Ver el estado y la salud de los contenedores | `docker compose ps` |
-| Ver logs en vivo de un servicio | `docker compose logs -f rabbitmq` |
-| Apagar conservando los datos | `docker compose stop` |
-| Eliminar contenedores conservando los datos | `docker compose down` |
-| **Reiniciar desde cero** (borra BD, caché y colas) | `docker compose down -v` y luego `docker compose up -d` + `alembic upgrade head` |
-| Aplicar migraciones tras un `git pull` | `alembic upgrade head` |
+### Requisitos previos en el pipeline
+La imagen **únicamente se compila y publica** si se cumplen las siguientes condiciones:
+1. El evento es un `push` directo a la rama `main`.
+2. Todos los quality gates previos han sido aprobados exitosamente:
+   - `sonarcloud` (calidad de código, 0 vulnerabilidades, cobertura requerida)
+   - `build-federation` (compilación libre de errores de TypeScript y Vite)
+   - `e2e` (pruebas funcionales end-to-end con Playwright)
+   - `a11y` (auditoría de accesibilidad WCAG con axe-core)
+   - `zap-baseline` (escaneo de seguridad dinámica OWASP ZAP)
 
-### ¿Debo encenderlo cada vez que abro la terminal?
+### Registro de Contenedores y Versionado
+- **Registro:** GitHub Container Registry (`ghcr.io`).
+- **Ruta de la Imagen:** `ghcr.io/fmat-restaurant/orderskds-frontend`
+- **Etiquetado automático:**
+  - `ghcr.io/fmat-restaurant/orderskds-frontend:main`
+  - `ghcr.io/fmat-restaurant/orderskds-frontend:sha-<commit>`
+  - Etiquetas SemVer (ej. `v1.2.0`) al crear releases oficiales.
+- **Caché:** Utiliza GitHub Actions Cache (`type=gha`) para reutilizar capas de Node y dependencias entre ejecuciones, minimizando los tiempos de compilación a menos de 2 minutos.
+- **Notificaciones:** Envía automáticamente un reporte a Discord informando el resultado del empaquetamiento.
 
-**No.** La opción `-d` (*detached*) deja los contenedores corriendo en segundo plano aunque cierres la terminal o el editor. Solo necesitas volver a ejecutar `docker compose up -d ...` si:
+---
 
-- los apagaste tú con `stop` o `down`, o
-- Docker Desktop se cerró o reiniciaste el equipo y los contenedores no se levantaron solos.
+## 5. Variables de Entorno y Configuración
 
-Ejecutar `up -d` cuando ya están corriendo es seguro: Docker no hace cambios.
+Al tratarse de una Single Page Application (SPA) compilada en el cliente, las variables que inician con `VITE_` (como `VITE_API_URL` o `VITE_WS_URL`) son inyectadas durante la fase de empaquetamiento (`pnpm run build`).
 
-### Verificar que todo está sano
+Para despliegues en diferentes entornos (staging, producción):
+- Se pueden configurar argumentos de compilación (`--build-arg`) en el Dockerfile si se requiere fijar endpoints estáticos.
+- O preferiblemente, la arquitectura de microfrontends del restaurante permite que el host shell inyecte las configuraciones y tokens dinámicamente en tiempo de ejecución.
 
+---
+
+## 6. Preguntas Frecuentes y Diagnóstico
+
+### ¿Por qué la guía anterior mencionaba PostgreSQL, Redis y RabbitMQ?
+La documentación inicial contenía una plantilla heredada del backend. En la arquitectura del restaurante:
+- **Backend:** Requiere contenedores para servicios de base de datos, caché y colas de mensajes.
+- **Frontend:** Es una aplicación cliente en React 19 / TypeScript / Vite que se sirve como contenido estático a través de Nginx.
+
+### El contenedor arranca pero no puedo conectarme a la API local
+Si tu backend está corriendo en tu máquina fuera de Docker (en `localhost:8000`), recuerda que desde el navegador de tu computadora `localhost:8000` sigue siendo accesible directamente. Asegúrate de que las políticas de CORS del backend permitan peticiones desde el puerto donde corre tu contenedor frontend (ej. `http://localhost:8080`).
+
+### Ver logs del contenedor Nginx
 ```powershell
-docker compose ps
-# postgres, redis y rabbitmq deben mostrar "Up ... (healthy)"
-
-docker exec ordenes-redis redis-cli ping    # responde PONG
+docker logs -f orders-front-preview
 ```
-
-RabbitMQ puede tardar hasta ~30 s en estar *healthy* la primera vez.
-
----
-
-## 5. Monitorear y administrar los contenedores
-
-### Con Docker Desktop (visual)
-
-En la pestaña **Containers** aparecen `ordenes-postgres`, `ordenes-redis` y `ordenes-rabbitmq`. Desde ahí puedes iniciar, pausar o eliminar cada uno, y abrir sus **logs** con un clic.
-
-### Con la terminal
-
-`docker compose ps`, `docker compose logs -f <servicio>` y `docker stats` (consumo de CPU y memoria).
-
-### Paneles de cada servicio
-
-| Servicio | Cómo inspeccionarlo |
-|---|---|
-| PostgreSQL | Cliente visual (pgAdmin o DBeaver) en `localhost:5432`, usuario/contraseña/base `ordenes`. Detalle en [QUICKSTART §7](../QUICKSTART.md) |
-| RabbitMQ | Panel web `http://localhost:15672` (usuario `ordenes`, contraseña `ordenes`): exchanges, colas y mensajes |
-| Redis | `docker exec -it ordenes-redis redis-cli` |
-
-### Conectar pgAdmin al PostgreSQL de Docker
-
-*Servers → Register → Server…* y en **Connection** usa: Host `localhost`, Port `5432`, Maintenance database `ordenes`, Username `ordenes`, Password `ordenes`. El contenedor debe estar encendido.
-
----
-
-## 6. Problemas frecuentes
-
-| Síntoma | Causa probable | Solución |
-|---|---|---|
-| `cannot connect to the Docker daemon` | Docker Desktop no está abierto | Abrirlo y esperar *Engine running* |
-| `port is already allocated` | Otro programa usa 5432, 6379, 5672 o 15672 | Cerrar ese programa o cambiar el lado **izquierdo** del puerto en `docker-compose.yml` y ajustar `.env` |
-| `connection refused` en `localhost:5432` | El contenedor aún no está *healthy* | `docker compose ps` y esperar |
-| `password authentication failed for user "ordenes"` | `.env` distinto al compose o volumen creado con otras credenciales | Alinear `.env` o ejecutar `docker compose down -v` |
-| Las pruebas de integración no arrancan | Testcontainers necesita Docker activo | Abrir Docker Desktop |
-
----
-
-## 7. Alcance: local vs. nube
-
-### 7.1 Entorno local (esta guía)
-
-- **Cada integrante tiene sus propios contenedores**, con su propia base de datos. Es intencional: puedes borrar datos o probar migraciones sin afectar a nadie.
-- Las credenciales de `docker-compose.yml` son débiles y **solo para desarrollo local**. Nunca se usan en otro ambiente.
-- Las pruebas automáticas usan contenedores efímeros (Testcontainers) que se crean y destruyen solos; no comparten datos con tu base local.
-
-### 7.2 Imagen en la nube (CI/CD, TASK-01)
-
-El workflow `.github/workflows/ci.yml` incluye el job `build-and-push`, que construye la imagen de la API y la publica en **GitHub Container Registry** (`ghcr.io`) con las etiquetas `latest` y el SHA del commit. Se ejecuta **solo** cuando hay un *push* a `main`, es decir, al promover una versión `develop → main`. No se hace a mano.
-
-### 7.3 Ambiente compartido en la nube — TASK-38 (Sprint 5)
-
-Lo que no se puede resolver con contenedores locales (que todos usemos **la misma** base de datos, y que otros equipos alcancen nuestra API) está cubierto por la **TASK-38 — Ambiente compartido de integración y staging**, planificada en el **Sprint 5** (27 oct – 2 nov). Incluye:
-
-- Definir y documentar el **hospedaje** y cómo se despliega la imagen `ghcr.io/<org>/ordenes-kds-backend`.
-- **PostgreSQL compartido de staging** (`ordenes_staging`), con usuario de la app de permisos mínimos y usuario de solo lectura para clientes visuales, separado de la base de la versión final.
-- Conexión al **RabbitMQ y Redis** del ambiente con los parámetros acordados en OP-10, y un `docker-compose.staging.yml` (o equivalente) con variables por ambiente.
-- Secretos por ambiente en *GitHub Environments* (`staging`, `production`), nunca en el repositorio.
-- Prueba de conectividad (*smoke*): `/health`, un evento publicado y consumido, y conexión de un integrante con su cliente visual.
-
-Mientras esa tarea no esté lista, **trabaja siempre con tus contenedores locales**. Cuando exista, la guía se ampliará con los datos de conexión del ambiente compartido.
-
-| Ambiente | Dónde corre | Quién lo usa |
-|---|---|---|
-| Local | Tus contenedores (`docker compose`) | Solo tú |
-| Pruebas automáticas | Testcontainers efímeros / CI | El código de pruebas |
-| Staging compartido | Nube, definido en TASK-38 (S5) | Todo el equipo y otros microservicios |
-| Versión final | Imagen publicada desde `main` | El sistema liberado |
-
-### 7.4 Usar contenedores de otros equipos
-
-Cuando exista su imagen publicada en un registro, se puede agregar a un compose local con una línea `image: ghcr.io/<org>/<servicio>:latest`; `docker compose up -d` la descargará. Hasta entonces, las pruebas se hacen contra los *stubs* de contrato (TASK-33).
-
----
-
-## 8. Resumen rápido
-
-```powershell
-# Primera vez / cada día que lo necesites (desde orders-backend)
-docker compose up -d postgres redis rabbitmq
-docker compose ps
-alembic upgrade head
-
-# Apagar al terminar (conserva datos)
-docker compose stop
-
-# Empezar de cero (BORRA datos locales)
-docker compose down -v
-```
+Esto mostrará cada petición HTTP recibida por Nginx, permitiendo verificar respuestas 200, 304 o posibles 404 de archivos estáticos.

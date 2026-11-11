@@ -6,6 +6,12 @@ import { useElapsedTime } from './useElapsedTime.ts';
 import { pointerAction } from './pointerAction.ts';
 import { getOrderNumberDisplay } from './orderNumberDisplay.ts';
 
+export interface PendingUndoItem {
+  readonly orderId: string;
+  readonly itemId: string;
+  readonly secondsLeft: number;
+}
+
 export interface OrderCardProps {
   readonly order: Order;
   readonly onClick?: (order: Order) => void;
@@ -18,6 +24,163 @@ export interface OrderCardProps {
   readonly userRole?: UserRole;
   readonly pendingAction?: string;
   readonly isFocused?: boolean;
+  readonly pendingUndoItem?: PendingUndoItem | null;
+  readonly onUndoReady?: (order: Order, item: OrderItem) => void;
+}
+
+interface OrderItemUndoBannerProps {
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly undoSecondsLeft: number;
+  readonly isManyItems: boolean;
+  readonly onUndo?: () => void;
+}
+
+function OrderItemUndoBanner({
+  itemId,
+  itemName,
+  undoSecondsLeft,
+  isManyItems,
+  onUndo,
+}: Readonly<OrderItemUndoBannerProps>) {
+  return (
+    <div
+      className="mt-1.5 w-full flex flex-wrap items-center justify-between gap-2 p-2 rounded-md bg-amber-50 border border-amber-300 shadow-xs"
+    >
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+        <span
+          data-testid={`order-item-undo-countdown-${itemId}`}
+          className="text-xs sm:text-sm font-bold text-amber-900 leading-tight"
+        >
+          Listo — pendiente de enviar ({undoSecondsLeft}s)
+        </span>
+      </div>
+      <button
+        type="button"
+        data-testid={`order-item-undo-${itemId}`}
+        aria-label={`Deshacer listo para ${itemName}`}
+        {...pointerAction(() => onUndo?.())}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onUndo?.();
+          }
+        }}
+        style={{ minWidth: 64, minHeight: isManyItems ? 40 : 44 }}
+        className="min-w-[64px] min-h-[40px] px-3.5 py-1.5 rounded-control text-xs sm:text-sm font-extrabold bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto"
+      >
+        Deshacer
+      </button>
+    </div>
+  );
+}
+
+interface OrderItemReadyButtonProps {
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly isFinished: boolean;
+  readonly isPending: boolean;
+  readonly onReady?: () => void;
+}
+
+function OrderItemReadyButton({
+  itemId,
+  itemName,
+  isFinished,
+  isPending,
+  onReady,
+}: Readonly<OrderItemReadyButtonProps>) {
+  return (
+    <button
+      type="button"
+      data-testid={`order-item-action-${itemId}`}
+      disabled={isFinished || isPending}
+      aria-label={`Marcar ${itemName} como listo`}
+      {...pointerAction(() => {
+        if (!isFinished) onReady?.();
+      })}
+      onKeyDown={(event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && !isFinished) {
+          event.preventDefault();
+          onReady?.();
+        }
+      }}
+      className={`min-h-[36px] px-2.5 py-1 rounded-control text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+        isFinished
+          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-80'
+          : 'bg-surface hover:bg-emerald-50 active:bg-emerald-100 text-body hover:text-emerald-700 border border-border hover:border-emerald-300 cursor-pointer shadow-sm'
+      }`}
+    >
+      {isFinished ? (
+        <>
+          <svg
+            aria-hidden="true"
+            className="w-3.5 h-3.5 text-emerald-600"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Listo</span>
+        </>
+      ) : (
+        <>
+          <span className="w-3.5 h-3.5 rounded-full border border-gray-400 inline-block shrink-0" />
+          <span>Listo</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+function OrderItemModifiers({
+  itemId,
+  modifiers,
+  isManyItems,
+}: Readonly<{
+  itemId: string;
+  modifiers: string[];
+  isManyItems: boolean;
+}>) {
+  return (
+    <div
+      className="pl-8 flex flex-wrap gap-1.5 mt-0.5"
+      data-testid={`order-item-modifiers-${itemId}`}
+    >
+      {modifiers.map((modifier, modIdx) => (
+        <span
+          key={`${itemId}-mod-${modIdx}`}
+          className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-100 text-body border border-border ${
+            isManyItems ? 'text-[11px]' : 'text-xs'
+          }`}
+          data-testid={`order-item-modifier-${itemId}-${modIdx}`}
+        >
+          + {modifier}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function OrderItemNotes({
+  itemId,
+  notes,
+}: Readonly<{
+  itemId: string;
+  notes: string;
+}>) {
+  return (
+    <div
+      className="pl-8 text-sm text-body italic flex items-start gap-1"
+      data-testid={`order-item-notes-${itemId}`}
+    >
+      <span className="font-bold not-italic shrink-0 text-ink">Nota:</span>
+      <span className="sr-only">Note:</span>
+      <span className="break-words">{notes}</span>
+    </div>
+  );
 }
 
 /**
@@ -29,15 +192,21 @@ function OrderCardItem({
   item,
   index,
   onReady,
+  onUndo,
   isPending,
   isRedoPending,
+  isPendingUndo = false,
+  undoSecondsLeft = 15,
   isManyItems = false,
 }: Readonly<{
   item: OrderItem;
   index: number;
   onReady?: () => void;
+  onUndo?: () => void;
   isPending: boolean;
   isRedoPending: boolean;
+  isPendingUndo?: boolean;
+  undoSecondsLeft?: number;
   isManyItems?: boolean;
 }>) {
   const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
@@ -52,10 +221,13 @@ function OrderCardItem({
       data-testid={`order-item-${itemId}`}
       style={{ minHeight: isManyItems ? 40 : 64 }}
       data-redo-pending={isRedoPending ? 'true' : undefined}
+      data-undo-pending={isPendingUndo ? 'true' : undefined}
       className={`border-b border-border last:border-b-0 flex flex-col justify-center py-2 gap-1 ${
         isManyItems ? 'min-h-[40px] py-1' : 'min-h-[64px] py-2'
       } ${
         isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-50 px-2' : ''
+      } ${
+        isPendingUndo ? 'rounded-md border border-amber-300 bg-amber-50/70 px-2' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-2 w-full">
@@ -101,78 +273,38 @@ function OrderCardItem({
             </span>
           )}
 
-          {/* Dedicated Checkmark Ready Action Button (RF-09, RF-10) */}
-          <button
-            type="button"
-            data-testid={`order-item-action-${itemId}`}
-            disabled={isFinished || isPending}
-            aria-label={`Marcar ${item.name} como listo`}
-            {...pointerAction(() => {
-              if (!isFinished) onReady?.();
-            })}
-            onKeyDown={(event) => {
-              if ((event.key === 'Enter' || event.key === ' ') && !isFinished) {
-                event.preventDefault();
-                onReady?.();
-              }
-            }}
-            className={`min-h-[36px] px-2.5 py-1 rounded-control text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
-              isFinished
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-80'
-                : 'bg-surface hover:bg-emerald-50 active:bg-emerald-100 text-body hover:text-emerald-700 border border-border hover:border-emerald-300 cursor-pointer shadow-sm'
-            }`}
-          >
-            {isFinished ? (
-              <>
-                <svg
-                  aria-hidden="true"
-                  className="w-3.5 h-3.5 text-emerald-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Listo</span>
-              </>
-            ) : (
-              <>
-                <span className="w-3.5 h-3.5 rounded-full border border-gray-400 inline-block shrink-0" />
-                <span>Listo</span>
-              </>
-            )}
-          </button>
+          {!isPendingUndo && (
+            <OrderItemReadyButton
+              itemId={itemId}
+              itemName={item.name}
+              isFinished={isFinished}
+              isPending={isPending}
+              onReady={onReady}
+            />
+          )}
         </div>
       </div>
 
+      {isPendingUndo && (
+        <OrderItemUndoBanner
+          itemId={itemId}
+          itemName={item.name}
+          undoSecondsLeft={undoSecondsLeft}
+          isManyItems={isManyItems}
+          onUndo={onUndo}
+        />
+      )}
+
       {showDetails && item.modifiers && item.modifiers.length > 0 && (
-        <div
-          className="pl-8 flex flex-wrap gap-1.5 mt-0.5"
-          data-testid={`order-item-modifiers-${itemId}`}
-        >
-          {item.modifiers.map((modifier, modIdx) => (
-            <span
-              key={`${itemId}-mod-${modIdx}`}
-              className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-100 text-body border border-border ${
-                isManyItems ? 'text-[11px]' : 'text-xs'
-              }`}
-              data-testid={`order-item-modifier-${itemId}-${modIdx}`}
-            >
-              + {modifier}
-            </span>
-          ))}
-        </div>
+        <OrderItemModifiers
+          itemId={itemId}
+          modifiers={item.modifiers}
+          isManyItems={isManyItems}
+        />
       )}
 
       {showDetails && item.notes && (
-        <div
-          className="pl-8 text-sm text-body italic flex items-start gap-1"
-          data-testid={`order-item-notes-${itemId}`}
-        >
-          <span className="font-bold not-italic shrink-0 text-ink">Nota:</span>
-          <span className="sr-only">Note:</span>
-          <span className="break-words">{item.notes}</span>
-        </div>
+        <OrderItemNotes itemId={itemId} notes={item.notes} />
       )}
 
       {isRedoPending && (
@@ -379,6 +511,8 @@ export function OrderCard({
   userRole,
   pendingAction,
   isFocused = false,
+  pendingUndoItem,
+  onUndoReady,
 }: Readonly<OrderCardProps>) {
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
@@ -510,16 +644,20 @@ export function OrderCard({
         {order.items.map((item, index) => {
           const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;
           const isRedoPending = order.status === 'DELIVERED' && item.status === 'PENDING';
+          const isPendingUndo = pendingUndoItem?.itemId === itemId;
           return (
             <OrderCardItem
               key={itemId}
               item={item}
               index={index}
               onReady={() => onItemReady?.(order, item)}
+              onUndo={() => onUndoReady?.(order, item)}
               isPending={
                 pendingAction === `item:${item.id ?? item.itemId ?? item.publicId ?? index}`
               }
               isRedoPending={isRedoPending}
+              isPendingUndo={isPendingUndo}
+              undoSecondsLeft={pendingUndoItem?.secondsLeft}
               isManyItems={isManyItems}
             />
           );

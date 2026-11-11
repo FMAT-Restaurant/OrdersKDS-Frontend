@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
@@ -10,7 +10,7 @@ import {
 import { queryClient as defaultQueryClient } from '../../shared/api/queryClient.ts';
 import type { Order } from '../../shared/api/schemas.ts';
 import type { TokenProvider, UserRole } from '../../shared/types/auth.ts';
-import { OrderCard } from './OrderCard.tsx';
+import { OrderCard, type PendingUndoItem } from './OrderCard.tsx';
 import { StationSelector } from './StationSelector.tsx';
 import { type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 import { pointerAction } from './pointerAction.ts';
@@ -32,6 +32,7 @@ export interface KdsBoardProps {
   readonly onRejectSupplies?: (order: Order) => void;
   readonly onAdminVoid?: (order: Order) => void;
   readonly onChefVoid?: (order: Order, note: string) => void;
+  readonly undoGracePeriodMs?: number;
 }
 
 function KdsBoardContent({
@@ -46,6 +47,7 @@ function KdsBoardContent({
   onRejectSupplies,
   onAdminVoid,
   onChefVoid,
+  undoGracePeriodMs = 15000,
 }: Readonly<Omit<KdsBoardProps, 'queryClient'>>) {
   const [view, setView] = useState<KdsViewType>(initialView);
   const [selectedStation, setSelectedStation] = useState<string>(initialStation);
@@ -235,6 +237,41 @@ function KdsBoardContent({
     item: Order['items'][number];
   } | null>(null);
 
+  // Pending undo grace period state (TASK-40b)
+  const [pendingUndo, setPendingUndo] = useState<PendingUndoItem | null>(null);
+
+  const pendingUndoRef = useRef<{
+    timerId: ReturnType<typeof setTimeout> | null;
+    intervalId: ReturnType<typeof setInterval> | null;
+    order: Order;
+    item: Order['items'][number];
+    execute: () => Promise<void>;
+  } | null>(null);
+
+  const flushPendingUndo = useCallback(async () => {
+    if (!pendingUndoRef.current) return;
+    const current = pendingUndoRef.current;
+    if (current.timerId) clearTimeout(current.timerId);
+    if (current.intervalId) clearInterval(current.intervalId);
+    pendingUndoRef.current = null;
+    setPendingUndo(null);
+    await current.execute();
+  }, []);
+
+  const handleUndoReady = useCallback(() => {
+    if (!pendingUndoRef.current) return;
+    const current = pendingUndoRef.current;
+    if (current.timerId) clearTimeout(current.timerId);
+    if (current.intervalId) clearInterval(current.intervalId);
+    const itemName = current.item.name;
+    pendingUndoRef.current = null;
+    setPendingUndo(null);
+    setFeedbackMessage({
+      text: `Envío cancelado. ${itemName} se mantiene pendiente.`,
+      type: 'info',
+    });
+  }, []);
+
   const executeMarkItemReady = useCallback(
     async (order: Order, item: Order['items'][number]) => {
       const orderId = order.orderId ?? order.publicId ?? order.id;
@@ -251,8 +288,66 @@ function KdsBoardContent({
     [actionClient, runAction],
   );
 
+  const startItemReadyGracePeriod = useCallback(
+    (order: Order, item: Order['items'][number]) => {
+      if (pendingUndoRef.current) {
+        void flushPendingUndo();
+      }
+
+      const orderId = order.orderId ?? order.publicId ?? order.id;
+      const itemId = item.itemId ?? item.publicId ?? item.id;
+      if (!orderId || !itemId) return;
+
+      const graceMs = undoGracePeriodMs ?? 15000;
+      if (graceMs <= 0) {
+        void executeMarkItemReady(order, item);
+        return;
+      }
+
+      const totalSeconds = Math.max(1, Math.ceil(graceMs / 1000));
+      setPendingUndo({
+        orderId,
+        itemId,
+        secondsLeft: totalSeconds,
+      });
+
+      const execute = async () => {
+        await executeMarkItemReady(order, item);
+      };
+
+      const intervalId = setInterval(() => {
+        setPendingUndo((prev) => {
+          if (prev?.itemId !== itemId) return prev;
+          const nextSeconds = prev.secondsLeft - 1;
+          return {
+            ...prev,
+            secondsLeft: Math.max(0, nextSeconds),
+          };
+        });
+      }, 1000);
+
+      const timerId = setTimeout(async () => {
+        if (pendingUndoRef.current?.item === item) {
+          clearInterval(intervalId);
+          pendingUndoRef.current = null;
+          setPendingUndo(null);
+          await execute();
+        }
+      }, graceMs);
+
+      pendingUndoRef.current = {
+        timerId,
+        intervalId,
+        order,
+        item,
+        execute,
+      };
+    },
+    [flushPendingUndo, executeMarkItemReady, undoGracePeriodMs],
+  );
+
   const markItemReady = useCallback(
-    async (order: Order, item: Order['items'][number]) => {
+    (order: Order, item: Order['items'][number]) => {
       const targetItemId = item.itemId ?? item.publicId ?? item.id;
       const remainingPending = order.items.filter((i) => {
         const id = i.itemId ?? i.publicId ?? i.id;
@@ -262,10 +357,32 @@ function KdsBoardContent({
         setConfirmReadyTarget({ order, item });
         return;
       }
-      await executeMarkItemReady(order, item);
+      startItemReadyGracePeriod(order, item);
     },
-    [executeMarkItemReady],
+    [startItemReadyGracePeriod],
   );
+
+  // Dispatch pending item ready on window unload/reload (TASK-40b)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (pendingUndoRef.current) {
+        const { execute, timerId, intervalId } = pendingUndoRef.current;
+        if (timerId) clearTimeout(timerId);
+        if (intervalId) clearInterval(intervalId);
+        pendingUndoRef.current = null;
+        void execute();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (pendingUndoRef.current) {
+        if (pendingUndoRef.current.timerId) clearTimeout(pendingUndoRef.current.timerId);
+        if (pendingUndoRef.current.intervalId) clearInterval(pendingUndoRef.current.intervalId);
+      }
+    };
+  }, []);
 
   const handleConfirmReadyDialog = useCallback(async () => {
     if (!confirmReadyTarget) return;
@@ -369,11 +486,15 @@ function KdsBoardContent({
     [totalPages],
   );
 
-  // Bump bar keyboard actions (OP-06)
+  // Bump bar keyboard actions (OP-06, TASK-40b)
   useBumpBar(
     useCallback(
       (action: string) => {
         switch (action) {
+          case 'UNDO_LAST_READY': {
+            handleUndoReady();
+            break;
+          }
           case 'PREVIOUS_STATION': {
             const currentIndex = availableStations.indexOf(effectiveStation.toLowerCase());
             if (currentIndex > 0) {
@@ -406,7 +527,7 @@ function KdsBoardContent({
             break;
         }
       },
-      [availableStations, effectiveStation, currentPage, totalPages],
+      [availableStations, effectiveStation, currentPage, totalPages, handleUndoReady],
     ),
   );
 
@@ -448,21 +569,28 @@ function KdsBoardContent({
         data-testid="kds-grid"
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 min-h-0 auto-rows-max lg:auto-rows-fr lg:h-full content-start overflow-y-auto"
       >
-        {paginatedOrders.map((order) => (
-          <OrderCard
-            key={order.id ?? order.orderId ?? order.publicId}
-            order={order}
-            onClick={onOrderSelect}
-            onStartPreparation={onStartPreparation ?? startPreparation}
-            onRejectSupplies={handleRejectClick}
-            onMarkOrderReady={markOrderReady}
-            onItemReady={markItemReady}
-            onAdminVoid={handleOpenAdminVoid}
-            onChefVoid={handleOpenChefVoid}
-            userRole={userRole}
-            pendingAction={pendingAction ?? undefined}
-          />
-        ))}
+        {paginatedOrders.map((order) => {
+          const orderId = order.id ?? order.orderId ?? order.publicId;
+          const activePendingUndo =
+            pendingUndo && pendingUndo.orderId === orderId ? pendingUndo : null;
+          return (
+            <OrderCard
+              key={orderId}
+              order={order}
+              onClick={onOrderSelect}
+              onStartPreparation={onStartPreparation ?? startPreparation}
+              onRejectSupplies={handleRejectClick}
+              onMarkOrderReady={markOrderReady}
+              onItemReady={markItemReady}
+              onUndoReady={handleUndoReady}
+              pendingUndoItem={activePendingUndo}
+              onAdminVoid={handleOpenAdminVoid}
+              onChefVoid={handleOpenChefVoid}
+              userRole={userRole}
+              pendingAction={pendingAction ?? undefined}
+            />
+          );
+        })}
       </div>
     );
   }
