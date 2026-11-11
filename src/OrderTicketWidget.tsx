@@ -24,6 +24,7 @@ import {
   OrderStatus,
   type OrderStatus as OrderStatusValue,
 } from './shared/types/order.ts';
+import { getOrderNumberDisplay } from './features/kds-board/orderNumberDisplay.ts';
 import './features/order-ticket/OrderTicketWidget.css';
 
 export interface OrderTicketWidgetProps {
@@ -43,7 +44,7 @@ interface EditableOrderItem {
   readonly itemId?: string;
   readonly dishId?: string;
   readonly name: string;
-  readonly quantity: number;
+  quantity: number | string;
   readonly modifiers: string[];
   readonly notes: string;
 }
@@ -128,6 +129,20 @@ function getDisplayError(error: unknown): string {
   return getErrorMessage(undefined);
 }
 
+function formatIngredientName(name: string): string {
+  return name.replace(/[_-]+/g, ' ').trim();
+}
+
+function formatSessionDisplay(sessionId: string): string {
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId);
+  if (isUuid) {
+    return `#${sessionId.slice(-4).toUpperCase()}`;
+  }
+  const cleaned = sessionId.replace(/^(ses-|session-)/, '');
+  return `#${cleaned || sessionId}`;
+}
+
 function parseRejectionDetails(details: unknown): ParsedRejectionDetails | null {
   if (!details || typeof details !== 'object') {
     return null;
@@ -169,48 +184,10 @@ function resolveDishName(
   return found?.name ?? dishIdOrOfferId;
 }
 
-function formatRejectionAlert(
-  parsed: ParsedRejectionDetails,
-  orderItems: readonly OrderItem[],
-): string {
-  const parts: string[] = [];
-  if (parsed.rejectedItems.length > 0) {
-    const itemsSummary = parsed.rejectedItems
-      .map((item) => {
-        const name = item.name ?? resolveDishName(item.dishId ?? item.offerId, orderItems);
-        if (item.availableQuantity !== undefined && item.requestedQuantity !== undefined) {
-          return `${name} (solicitados: ${item.requestedQuantity}, disponibles: ${item.availableQuantity})`;
-        }
-        if (item.reason) {
-          return `${name} (${item.reason})`;
-        }
-        return name;
-      })
-      .join(', ');
-    parts.push(`Insumos no disponibles: ${itemsSummary}.`);
-  }
-  if (parsed.missingIngredients && parsed.missingIngredients.length > 0) {
-    parts.push(`Ingredientes faltantes: ${parsed.missingIngredients.join(', ')}.`);
-  }
-  if (parts.length > 0) {
-    return `Comanda rechazada. ${parts.join(' ')} Modifica la comanda para ajustar cantidades o cancela.`;
-  }
-  return 'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.';
-}
-
-function getOrderAlert(
-  status: OrderStatusValue,
-  rejectionDetails?: unknown,
-  orderItems: readonly OrderItem[] = [],
-): string {
+function getOrderAlert(status: OrderStatusValue): string {
   switch (status) {
-    case OrderStatus.REJECTED: {
-      const parsed = parseRejectionDetails(rejectionDetails);
-      if (parsed) {
-        return formatRejectionAlert(parsed, orderItems);
-      }
-      return 'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.';
-    }
+    case OrderStatus.REJECTED:
+      return 'Motivo de rechazo: Inventario insuficiente. Modifica la comanda para ajustar cantidades o cancela.';
     case OrderStatus.EXPIRED:
       return 'La comanda expiró. Crea una nueva comanda.';
     case OrderStatus.DELIVERED:
@@ -267,10 +244,11 @@ interface RejectionBreakdownProps {
 function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdownProps>) {
   return (
     <div className="order-ticket__rejection-breakdown">
-      <h3>Detalle de rechazo de stock</h3>
+      <h3>Detalle de rechazo de inventario</h3>
       {details.missingIngredients && details.missingIngredients.length > 0 && (
         <p className="order-ticket__missing-ingredients">
-          <strong>Ingredientes faltantes:</strong> {details.missingIngredients.join(', ')}
+          <strong>Ingredientes faltantes:</strong>{' '}
+          {details.missingIngredients.map(formatIngredientName).join(', ')}
         </p>
       )}
       {details.rejectedItems.length > 0 && (
@@ -280,6 +258,9 @@ function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdown
             {details.rejectedItems.map((item, idx) => {
               const dishName =
                 item.name ?? resolveDishName(item.dishId ?? item.offerId, orderItems);
+              const formattedReason = item.reason
+                ? item.reason.replace(/stock/gi, 'inventario')
+                : undefined;
               return (
                 <li key={`rejected-${item.offerId ?? item.itemId ?? idx}`}>
                   <strong>{dishName}</strong>
@@ -290,7 +271,7 @@ function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdown
                         {item.availableQuantity}
                       </span>
                     )}
-                  {item.reason && <span> — {item.reason}</span>}
+                  {formattedReason && <span> — {formattedReason}</span>}
                 </li>
               );
             })}
@@ -299,7 +280,7 @@ function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdown
       )}
       {details.reservedItems.length > 0 && (
         <div className="order-ticket__reserved-list">
-          <h4>Platillos pre-apartados (con stock)</h4>
+          <h4>Platillos pre-apartados (con inventario)</h4>
           <ul>
             {details.reservedItems.map((item, idx) => {
               const dishName =
@@ -357,24 +338,65 @@ function OrderItemsList({
           const draft = draftItems[index];
 
           if (isEditing && draft) {
+            const numericQuantity =
+              typeof draft.quantity === 'number'
+                ? draft.quantity
+                : parseInt(String(draft.quantity), 10) || 0;
+
             return (
               <li className="order-ticket__item" key={key}>
                 <div className="order-ticket__item-editor">
                   <strong>{draft.name}</strong>
-                  <label>
+                  <label htmlFor={`item-qty-${index}`}>
                     Cantidad de {draft.name}
+                  </label>
+                  <div className="order-ticket__stepper">
+                    <button
+                      type="button"
+                      className="order-ticket__stepper-button"
+                      aria-label={`Disminuir cantidad de ${draft.name}`}
+                      disabled={numericQuantity <= 1 || isMutating}
+                      onClick={() => {
+                        if (numericQuantity > 1) {
+                          onUpdateDraftItem(index, { quantity: numericQuantity - 1 });
+                        }
+                      }}
+                    >
+                      −
+                    </button>
                     <input
+                      id={`item-qty-${index}`}
                       type="number"
                       min="1"
                       step="1"
+                      className="order-ticket__stepper-input"
                       value={draft.quantity}
-                      onChange={(event) =>
-                        onUpdateDraftItem(index, { quantity: Number(event.target.value) })
-                      }
+                      onChange={(event) => {
+                        const val = event.target.value;
+                        if (val === '') {
+                          onUpdateDraftItem(index, { quantity: '' });
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          onUpdateDraftItem(index, {
+                            quantity: Number.isNaN(parsed) ? '' : parsed,
+                          });
+                        }
+                      }}
                     />
-                  </label>
+                    <button
+                      type="button"
+                      className="order-ticket__stepper-button"
+                      aria-label={`Aumentar cantidad de ${draft.name}`}
+                      disabled={isMutating}
+                      onClick={() => {
+                        onUpdateDraftItem(index, { quantity: numericQuantity + 1 });
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
                   <label>
-                    Modificadores de {draft.name}
+                    <span>Modificadores de {draft.name}</span>
                     <input
                       type="text"
                       value={draft.modifiers.join(', ')}
@@ -389,7 +411,7 @@ function OrderItemsList({
                     />
                   </label>
                   <label>
-                    Notas de {draft.name}
+                    <span>Notas de {draft.name}</span>
                     <textarea
                       value={draft.notes}
                       onChange={(event) =>
@@ -610,7 +632,7 @@ function OrderTicket({
             itemId: item.itemId,
             dishId: item.dishId ?? undefined,
             name: item.name,
-            quantity: item.quantity,
+            quantity: typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 1,
             modifiers: item.modifiers,
             notes: item.notes,
           })),
@@ -710,13 +732,17 @@ function OrderTicket({
   const canConfirm = isCreated && !order.confirmedAt;
 
   const rejectionDetailsParsed = parseRejectionDetails(order.rejectionDetails);
-  const alertMessage = getOrderAlert(order.status, order.rejectionDetails, order.items);
+  const alertMessage = getOrderAlert(order.status);
   const connectionMessage = getRealtimeStatusMessage(
     WEBSOCKET_STATUS_TRANSLATIONS[connectionStatus],
   );
 
   const effectiveDiningSessionId = order.diningSessionId || propDiningSessionId;
   const tableOrTakeawayLabel = getTableOrTakeawayLabel(order);
+  const orderNumberDisplay = getOrderNumberDisplay(
+    order.orderNumber,
+    order.publicId ?? order.id ?? order.orderId ?? orderId,
+  );
 
   const updateDraftItem = (
     index: number,
@@ -738,11 +764,17 @@ function OrderTicket({
     setIsEditing(true);
   };
 
+  const hasInvalidQuantities =
+    draftItems.length === 0 ||
+    draftItems.some(
+      (item) =>
+        typeof item.quantity !== 'number' ||
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1,
+    );
+
   const submitEdits = () => {
-    if (
-      draftItems.length === 0 ||
-      draftItems.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1)
-    ) {
+    if (hasInvalidQuantities) {
       return;
     }
     runMutation(() => editMutation.mutate());
@@ -764,14 +796,12 @@ function OrderTicket({
     <section className="order-ticket" aria-labelledby="order-ticket-title">
       <header className="order-ticket__header">
         <div>
-          <h2 id="order-ticket-title">
-            Comanda {order.publicId ?? order.id ?? order.orderId ?? orderId}
-          </h2>
+          <h2 id="order-ticket-title">Comanda #{orderNumberDisplay}</h2>
           <p>
             {tableOrTakeawayLabel}
             {effectiveDiningSessionId && (
               <span className="order-ticket__session">
-                {' '}· Sesión {effectiveDiningSessionId.slice(0, 8)}
+                {' '}· Sesión {formatSessionDisplay(effectiveDiningSessionId)}
               </span>
             )}
           </p>
@@ -783,7 +813,7 @@ function OrderTicket({
 
       {order.awaitingStockConfirmation && (
         <output className="order-ticket__stock-status">
-          Pendiente de confirmación de stock
+          Pendiente de confirmación de inventario
         </output>
       )}
 
@@ -832,13 +862,11 @@ function OrderTicket({
           {getDisplayError(editMutation.error)}
         </p>
       )}
-      {isEditing &&
-        (draftItems.length === 0 ||
-          draftItems.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1)) && (
-          <p className="order-ticket__error" role="alert">
-            La cantidad de cada platillo debe ser un entero mayor que cero y debe haber al menos un platillo.
-          </p>
-        )}
+      {isEditing && hasInvalidQuantities && (
+        <p className="order-ticket__error" role="alert">
+          La cantidad de cada platillo debe ser un entero mayor que cero y debe haber al menos un platillo.
+        </p>
+      )}
 
       <OrderTicketActions
         isEditing={isEditing}

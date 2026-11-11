@@ -57,7 +57,7 @@ describe('OrderTicketWidget', () => {
   it('renders the order, item details, and waiter realtime channels', async () => {
     renderTicket();
 
-    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
     expect(screen.getByText('1 × Ensalada César')).toBeInTheDocument();
     expect(screen.getByText('Modificadores: Extra queso')).toBeInTheDocument();
     expect(screen.getByText('Nota: Sin tomate')).toBeInTheDocument();
@@ -93,7 +93,7 @@ describe('OrderTicketWidget', () => {
     renderTicket();
 
     expect(await screen.findByText(/Mesa 12/)).toBeInTheDocument();
-    expect(screen.getByText(/Sesión session-/)).toBeInTheDocument();
+    expect(screen.getByText(/Sesión #12345678/)).toBeInTheDocument();
     expect(screen.getByText('Listo')).toBeInTheDocument();
     expect(screen.queryByText(/Modificadores:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Nota:/)).not.toBeInTheDocument();
@@ -120,7 +120,7 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket();
 
-    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
     expect(screen.getByText('Mesa sin asignar')).toBeInTheDocument();
     expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
     expect(screen.getByText('En preparación')).toBeInTheDocument();
@@ -221,7 +221,7 @@ describe('OrderTicketWidget', () => {
     fireEvent.click(confirmButton);
     fireEvent.click(confirmButton);
 
-    expect(await screen.findByText('Pendiente de confirmación de stock')).toBeInTheDocument();
+    expect(await screen.findByText('Pendiente de confirmación de inventario')).toBeInTheDocument();
     expect(confirmRequests).toBe(1);
     expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
   });
@@ -241,7 +241,7 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket();
 
-    expect(await screen.findByText('Pendiente de confirmación de stock')).toBeInTheDocument();
+    expect(await screen.findByText('Pendiente de confirmación de inventario')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeEnabled();
@@ -405,16 +405,15 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket();
 
-    expect(await screen.findByText('Detalle de rechazo de stock')).toBeInTheDocument();
-    expect(screen.getAllByText(/Queso Parmesano, Crutones/)).toHaveLength(2);
-    expect(screen.getAllByText(/solicitados: 3, disponibles: 1/i)).toHaveLength(2);
+    expect(await screen.findByText('Detalle de rechazo de inventario')).toBeInTheDocument();
+    expect(screen.getByText(/Queso Parmesano, Crutones/)).toBeInTheDocument();
+    expect(screen.getByText(/solicitados: 3, disponibles: 1/i)).toBeInTheDocument();
     expect(screen.getByText('Sopa de Tomate')).toBeInTheDocument();
     expect(screen.getByText(/: 2 apartados temporalmente/)).toBeInTheDocument();
 
     const alertLive = document.querySelector('.order-ticket__alert[aria-live="assertive"]');
     expect(alertLive).toBeInTheDocument();
-    expect(alertLive).toHaveTextContent('Ensalada César (solicitados: 3, disponibles: 1)');
-    expect(alertLive).toHaveTextContent('Queso Parmesano, Crutones');
+    expect(alertLive).toHaveTextContent('Motivo de rechazo: Inventario insuficiente.');
   });
 
   it('renders badge Reservado en cocina for RESERVED status (DoD)', async () => {
@@ -525,7 +524,7 @@ describe('OrderTicketWidget', () => {
   it('applies a newer waiter status event to the displayed order', async () => {
     renderTicket();
 
-    await screen.findByRole('heading', { name: 'Comanda ord-102' });
+    await screen.findByRole('heading', { name: 'Comanda #102' });
     const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
     options.onOrderStatusChanged?.({
       type: 'order.status_changed',
@@ -564,7 +563,7 @@ describe('OrderTicketWidget', () => {
     expect(screen.queryByText('Sensitive backend detail')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
 
-    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
   });
 
   it('discards edits and reverts to view mode when user clicks Descartar', async () => {
@@ -646,12 +645,12 @@ describe('OrderTicketWidget', () => {
       'Su sesión ha expirado o no es válida. Por favor inicie sesión nuevamente.',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
-    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
   });
 
   it('ignores WebSocket events for a different orderId or older/equal version', async () => {
     renderTicket();
-    await screen.findByRole('heading', { name: 'Comanda ord-102' });
+    await screen.findByRole('heading', { name: 'Comanda #102' });
     const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
 
     // Different orderId -> ignored
@@ -692,7 +691,7 @@ describe('OrderTicketWidget', () => {
       ),
     );
     renderTicket();
-    await screen.findByText('Pendiente de confirmación de stock');
+    await screen.findByText('Pendiente de confirmación de inventario');
     const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
 
     // Event updating version while still in CREATED preserves awaitingStockConfirmation
@@ -702,7 +701,7 @@ describe('OrderTicketWidget', () => {
       status: OrderStatus.CREATED,
       version: order.version + 1,
     });
-    expect(await screen.findByText('Pendiente de confirmación de stock')).toBeInTheDocument();
+    expect(await screen.findByText('Pendiente de confirmación de inventario')).toBeInTheDocument();
 
     // Then transition to REJECTED with rejectionDetails
     options.onOrderStatusChanged?.({
@@ -719,7 +718,7 @@ describe('OrderTicketWidget', () => {
     });
     expect(await screen.findByText('Lechuga')).toBeInTheDocument();
     expect(screen.getByText('Torta')).toBeInTheDocument();
-    expect(screen.queryByText('Pendiente de confirmación de stock')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pendiente de confirmación de inventario')).not.toBeInTheDocument();
   });
 
   it('renders connection status messages for various websocket states', async () => {
@@ -756,7 +755,7 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket(vi.fn(), 'prop-session-abc');
     expect(await screen.findByText(/Para llevar/)).toBeInTheDocument();
-    expect(screen.getByText(/Sesión prop-ses/)).toBeInTheDocument();
+    expect(screen.getByText(/Sesión #prop-session-abc/)).toBeInTheDocument();
   });
 
   it('handles rejectionDetails with source only and without items or missing ingredients', async () => {
@@ -774,7 +773,7 @@ describe('OrderTicketWidget', () => {
     renderTicket();
     expect(
       await screen.findByText(
-        'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.',
+        'Motivo de rechazo: Inventario insuficiente. Modifica la comanda para ajustar cantidades o cancela.',
       ),
     ).toBeInTheDocument();
   });
@@ -792,10 +791,10 @@ describe('OrderTicketWidget', () => {
     renderTicket();
     expect(
       await screen.findByText(
-        'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.',
+        'Motivo de rechazo: Inventario insuficiente. Modifica la comanda para ajustar cantidades o cancela.',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText('Detalle de rechazo de stock')).not.toBeInTheDocument();
+    expect(screen.queryByText('Detalle de rechazo de inventario')).not.toBeInTheDocument();
   });
 
   it('handles order with status PAID, WASTED, and VOIDED with correct labels and no alert', async () => {
@@ -809,7 +808,7 @@ describe('OrderTicketWidget', () => {
         ),
       );
       const { unmount } = renderTicket();
-      expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
       expect(document.querySelector('.order-ticket__alert')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
@@ -846,5 +845,72 @@ describe('OrderTicketWidget', () => {
     });
     expect(screen.getByLabelText('Modificadores de Ensalada César')).toHaveValue('');
     expect(screen.getByLabelText('Notas de Ensalada César')).toHaveValue('Nueva nota');
+  });
+
+  it('supports tablet touch stepper (+/- buttons) and prevents zero-lock when clearing quantity', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          items: [{ ...order.items[0], quantity: 2 }],
+        }),
+      ),
+    );
+    renderTicket();
+    fireEvent.click(await screen.findByRole('button', { name: 'Modificar' }));
+
+    const decreaseBtn = screen.getByRole('button', {
+      name: 'Disminuir cantidad de Ensalada César',
+    });
+    const increaseBtn = screen.getByRole('button', {
+      name: 'Aumentar cantidad de Ensalada César',
+    });
+    const input = screen.getByLabelText('Cantidad de Ensalada César');
+
+    expect(input).toHaveValue(2);
+    expect(decreaseBtn).toBeEnabled();
+
+    // Click decrease: 2 -> 1
+    fireEvent.click(decreaseBtn);
+    expect(input).toHaveValue(1);
+    expect(decreaseBtn).toBeDisabled();
+
+    // Click increase: 1 -> 2
+    fireEvent.click(increaseBtn);
+    expect(input).toHaveValue(2);
+    expect(decreaseBtn).toBeEnabled();
+
+    // Clearing input allows empty string without forcing 0
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input).toHaveValue(null);
+  });
+
+  it('formats ingredient names with underscores into readable spaces in rejection details', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.REJECTED,
+          rejectionDetails: {
+            missingIngredients: ['pan_brioche', 'queso_cheddar'],
+            rejectedItems: [
+              {
+                dishId: 'dish-burger-1',
+                name: 'Hamburguesa Doble Queso',
+                requestedQuantity: 3,
+                availableQuantity: 1,
+                reason: 'Stock insuficiente en almacén',
+              },
+            ],
+            reservedItems: [],
+          },
+        }),
+      ),
+    );
+    renderTicket();
+
+    expect(await screen.findByText('Detalle de rechazo de inventario')).toBeInTheDocument();
+    expect(screen.getByText(/pan brioche, queso cheddar/)).toBeInTheDocument();
+    expect(screen.getByText(/inventario insuficiente en almacén/i)).toBeInTheDocument();
   });
 });

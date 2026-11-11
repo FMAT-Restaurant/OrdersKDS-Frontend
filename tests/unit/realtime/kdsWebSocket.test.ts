@@ -250,6 +250,12 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
       expect(client.getSubscribedChannels()).toEqual(['kds:station:plancha']);
       expect(MockWebSocket.instances).toHaveLength(1); // No reconnection
 
+      // Raw backend error envelope without discriminator {"error": "FORBIDDEN_CHANNEL"}
+      ws.simulateMessage({
+        error: 'FORBIDDEN_CHANNEL',
+      });
+      expect(onForbiddenChannel).toHaveBeenCalledWith('', 'FORBIDDEN_CHANNEL');
+
       client.disconnect();
     });
   });
