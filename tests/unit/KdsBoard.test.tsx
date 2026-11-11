@@ -1475,5 +1475,88 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       // With 2 orders (<= 4), normal spacious layout padding is retained (p-3 instead of p-2)
       expect(screen.getByTestId('order-card-stub-ord-101')).toHaveClass('p-3');
     });
+
+    it('opens ConfirmReadyDialog over OrderDetailsDialog when the last pending item is clicked from inside the dialog', async () => {
+      const orderWithOnePending: Order = {
+        id: 'ord-last-pending',
+        orderId: 'ord-last-pending',
+        orderNumber: 55,
+        tableNumber: 7,
+        isTakeaway: false,
+        status: OrderStatus.IN_PREPARATION,
+        version: 1,
+        totalAmount: 120,
+        createdAt: '2026-11-11T12:00:00Z',
+        items: [
+          {
+            id: 'item-done',
+            itemId: 'item-done',
+            dishId: 'dish-done',
+            name: 'Guacamole',
+            quantity: 1,
+            unitPrice: 50,
+            status: ItemStatus.READY,
+            station: 'frio',
+            version: 1,
+          },
+          {
+            id: 'item-last',
+            itemId: 'item-last',
+            dishId: 'dish-last',
+            name: 'Hamburguesa',
+            quantity: 1,
+            unitPrice: 70,
+            status: ItemStatus.PENDING,
+            station: 'parrilla',
+            version: 1,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([orderWithOnePending]),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({}),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={createTestQueryClient()}
+          undoGracePeriodMs={0}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-last-pending')).toBeInTheDocument();
+      });
+
+      // 1. Open individual order details dialog
+      fireEvent.click(screen.getByTestId('order-card-stub-ord-last-pending'));
+      expect(await screen.findByTestId('order-details-dialog')).toBeInTheDocument();
+
+      // 2. Click the ready button for the last pending item inside OrderDetailsDialog
+      const readyBtn = screen.getByTestId('order-details-item-action-item-last');
+      expect(readyBtn).toBeInTheDocument();
+      fireEvent.click(readyBtn);
+
+      // 3. ConfirmReadyDialog must open AND be rendered on top
+      expect(await screen.findByTestId('confirm-ready-dialog')).toBeInTheDocument();
+
+      // Both dialogs exist in DOM, with ConfirmReadyDialog styled with z-[60] over OrderDetailsDialog z-50
+      const detailsDialog = screen.getByTestId('order-details-dialog');
+      const confirmDialog = screen.getByTestId('confirm-ready-dialog');
+      expect(detailsDialog).toHaveClass('z-50');
+      expect(confirmDialog).toHaveClass('z-[60]');
+
+      // 4. Confirming via ConfirmReadyDialog dispatches order ready and leaves OrderDetailsDialog intact
+      fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('confirm-ready-dialog')).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId('order-details-dialog')).toBeInTheDocument();
+    });
   });
 });

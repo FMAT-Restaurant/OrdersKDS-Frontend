@@ -41,6 +41,7 @@ export function ConfirmReadyDialog({
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
+      event.stopPropagation();
       onKeepInPrep();
     }
   };
@@ -53,7 +54,7 @@ export function ConfirmReadyDialog({
       aria-describedby="confirm-ready-dialog-desc"
       data-testid="confirm-ready-dialog"
       onKeyDown={handleKeyDown}
-      className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-xs border-none select-none"
+      className="orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-xs border-none select-none"
     >
       <div className="w-full max-w-lg rounded-card bg-surface border border-border shadow-2xl p-6 flex flex-col gap-4 text-ink">
         <div className="flex items-center gap-3">

@@ -20,6 +20,10 @@ import { ChefVoidDialog } from './dialogs/ChefVoidDialog.tsx';
 import { ConfirmReadyDialog } from './dialogs/ConfirmReadyDialog.tsx';
 import { ConfirmRejectDialog } from './dialogs/ConfirmRejectDialog.tsx';
 import { OrderDetailsDialog } from './dialogs/OrderDetailsDialog.tsx';
+import {
+  type PendingUndoRefEntry,
+  registerGracePeriodCountdown,
+} from './kdsGracePeriod.ts';
 
 export interface KdsBoardProps {
   readonly client?: ApiClientType;
@@ -260,19 +264,7 @@ function KdsBoardContent({
     () => new Set(),
   );
 
-  const pendingUndoRefs = useRef<
-    Map<
-      string,
-      {
-        timerId: ReturnType<typeof setTimeout> | null;
-        intervalId: ReturnType<typeof setInterval> | null;
-        type: 'item' | 'order';
-        order: Order;
-        item?: Order['items'][number];
-        execute: () => Promise<void>;
-      }
-    >
-  >(new Map());
+  const pendingUndoRefs = useRef<Map<string, PendingUndoRefEntry>>(new Map());
 
   const flushPendingItemUndos = useCallback(async () => {
     const itemEntries: {
@@ -383,59 +375,19 @@ function KdsBoardContent({
         return;
       }
 
-      const totalSeconds = Math.max(1, Math.ceil(graceMs / 1000));
       optimisticReadyItemIdsRef.current.add(itemId);
       setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
 
-      setPendingUndoMap((prev) => ({
-        ...prev,
-        [orderId]: {
-          orderId,
-          itemId,
-          type: 'item',
-          secondsLeft: totalSeconds,
-        },
-      }));
-
-      const execute = async () => {
-        await executeMarkItemReady(order, item);
-      };
-
-      const intervalId = setInterval(() => {
-        setPendingUndoMap((prev) => {
-          const current = prev[orderId];
-          if (current?.itemId !== itemId || current?.type !== 'item') return prev;
-          return {
-            ...prev,
-            [orderId]: {
-              ...current,
-              secondsLeft: Math.max(0, current.secondsLeft - 1),
-            },
-          };
-        });
-      }, 1000);
-
-      const timerId = setTimeout(async () => {
-        const currentRef = pendingUndoRefs.current.get(orderId);
-        if (currentRef?.type === 'item') {
-          clearInterval(intervalId);
-          pendingUndoRefs.current.delete(orderId);
-          setPendingUndoMap((prev) => {
-            const next = { ...prev };
-            delete next[orderId];
-            return next;
-          });
-          await execute();
-        }
-      }, graceMs);
-
-      pendingUndoRefs.current.set(orderId, {
-        timerId,
-        intervalId,
+      registerGracePeriodCountdown({
+        orderId,
+        itemId,
         type: 'item',
         order,
         item,
-        execute,
+        graceMs,
+        execute: () => executeMarkItemReady(order, item),
+        pendingUndoRefs,
+        setPendingUndoMap,
       });
     },
     [undoGracePeriodMs, flushPendingItemUndos, executeMarkItemReady],
@@ -535,62 +487,24 @@ function KdsBoardContent({
         return;
       }
 
-      const totalSeconds = Math.max(1, Math.ceil(graceMs / 1000));
       const triggeringItemId = triggeringItem ? getItemKey(triggeringItem) : undefined;
 
-      setPendingUndoMap((prev) => ({
-        ...prev,
-        [orderId]: {
-          orderId,
-          itemId: triggeringItemId,
-          type: 'order',
-          secondsLeft: totalSeconds,
-        },
-      }));
-
-      const execute = async () => {
-        if (triggeringItem) {
-          await executeMarkItemReady(order, triggeringItem);
-        } else {
-          await executeMarkOrderReady(order);
-        }
-      };
-
-      const intervalId = setInterval(() => {
-        setPendingUndoMap((prev) => {
-          const current = prev[orderId];
-          if (current?.orderId !== orderId || current?.type !== 'order') return prev;
-          return {
-            ...prev,
-            [orderId]: {
-              ...current,
-              secondsLeft: Math.max(0, current.secondsLeft - 1),
-            },
-          };
-        });
-      }, 1000);
-
-      const timerId = setTimeout(async () => {
-        const currentRef = pendingUndoRefs.current.get(orderId);
-        if (currentRef?.type === 'order') {
-          clearInterval(intervalId);
-          pendingUndoRefs.current.delete(orderId);
-          setPendingUndoMap((prev) => {
-            const next = { ...prev };
-            delete next[orderId];
-            return next;
-          });
-          await execute();
-        }
-      }, graceMs);
-
-      pendingUndoRefs.current.set(orderId, {
-        timerId,
-        intervalId,
+      registerGracePeriodCountdown({
+        orderId,
+        itemId: triggeringItemId,
         type: 'order',
         order,
         item: triggeringItem,
-        execute,
+        graceMs,
+        execute: async () => {
+          if (triggeringItem) {
+            await executeMarkItemReady(order, triggeringItem);
+          } else {
+            await executeMarkOrderReady(order);
+          }
+        },
+        pendingUndoRefs,
+        setPendingUndoMap,
       });
     },
     [undoGracePeriodMs, executeMarkOrderReady, executeMarkItemReady],
@@ -958,6 +872,43 @@ function KdsBoardContent({
         </div>
       </footer>
 
+      {selectedModalOrder && (
+        <OrderDetailsDialog
+          order={selectedModalOrder}
+          isOpen={Boolean(selectedModalOrder)}
+          onClose={() => setSelectedModalOrderId(null)}
+          onItemReady={markItemReady}
+          onUndoItemReady={handleUndoReady}
+          onStartPreparation={onStartPreparation ?? startPreparation}
+          onRejectSupplies={handleRejectClick}
+          onMarkOrderReady={startOrderReadyGracePeriod}
+          onUndoOrderReady={handleUndoReady}
+          onAdminVoid={handleOpenAdminVoid}
+          onChefVoid={handleOpenChefVoid}
+          userRole={userRole}
+          pendingAction={pendingAction ?? undefined}
+          pendingUndoItem={
+            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'item'
+              ? pendingUndoMap[getOrderKey(selectedModalOrder)]
+              : null
+          }
+          isPendingUndoOrder={
+            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
+          }
+          undoOrderSecondsLeft={
+            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
+              ? pendingUndoMap[getOrderKey(selectedModalOrder)]?.secondsLeft
+              : undefined
+          }
+          pendingOrderTriggeringItemId={
+            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
+              ? pendingUndoMap[getOrderKey(selectedModalOrder)]?.itemId
+              : undefined
+          }
+          optimisticReadyItemIds={optimisticReadyItemIds}
+        />
+      )}
+
       {confirmReadyTarget && (
         <ConfirmReadyDialog
           order={confirmReadyTarget.order}
@@ -1004,43 +955,6 @@ function KdsBoardContent({
             setVoidDialogOrder(null);
             setVoidDialogType(null);
           }}
-        />
-      )}
-
-      {selectedModalOrder && (
-        <OrderDetailsDialog
-          order={selectedModalOrder}
-          isOpen={Boolean(selectedModalOrder)}
-          onClose={() => setSelectedModalOrderId(null)}
-          onItemReady={markItemReady}
-          onUndoItemReady={handleUndoReady}
-          onStartPreparation={onStartPreparation ?? startPreparation}
-          onRejectSupplies={handleRejectClick}
-          onMarkOrderReady={startOrderReadyGracePeriod}
-          onUndoOrderReady={handleUndoReady}
-          onAdminVoid={handleOpenAdminVoid}
-          onChefVoid={handleOpenChefVoid}
-          userRole={userRole}
-          pendingAction={pendingAction ?? undefined}
-          pendingUndoItem={
-            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'item'
-              ? pendingUndoMap[getOrderKey(selectedModalOrder)]
-              : null
-          }
-          isPendingUndoOrder={
-            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
-          }
-          undoOrderSecondsLeft={
-            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
-              ? pendingUndoMap[getOrderKey(selectedModalOrder)]?.secondsLeft
-              : undefined
-          }
-          pendingOrderTriggeringItemId={
-            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
-              ? pendingUndoMap[getOrderKey(selectedModalOrder)]?.itemId
-              : undefined
-          }
-          optimisticReadyItemIds={optimisticReadyItemIds}
         />
       )}
     </div>
