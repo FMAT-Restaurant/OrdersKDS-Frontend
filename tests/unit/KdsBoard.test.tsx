@@ -218,6 +218,104 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 1');
       });
     });
+
+    it('renders and switches between all 4 KDS tabs (Pendientes, En Preparación, Rehechuras, Entregadas) with priority contrast', async () => {
+      const mixedOrders: Order[] = [
+        {
+          ...mockOrder1,
+          id: 'ord-pending-1',
+          orderId: 'ord-pending-1',
+          status: OrderStatus.RESERVED,
+        },
+        {
+          ...mockOrder1,
+          id: 'ord-in-prep-1',
+          orderId: 'ord-in-prep-1',
+          status: OrderStatus.IN_PREPARATION,
+        },
+        {
+          ...mockDeliveredOrder,
+          id: 'ord-redo-1',
+          orderId: 'ord-redo-1',
+          status: OrderStatus.DELIVERED,
+          items: [
+            {
+              ...mockDeliveredOrder.items[0],
+              id: 'redo-item-1',
+              itemId: 'redo-item-1',
+              status: ItemStatus.PENDING,
+            },
+          ],
+        },
+      ];
+
+      server.use(
+        http.get('*/kds/queue', ({ request }) => {
+          const url = new URL(request.url);
+          const viewParam = url.searchParams.get('view');
+          if (viewParam === 'delivered') {
+            return HttpResponse.json([mockDeliveredOrder]);
+          }
+          return HttpResponse.json(mixedOrders);
+        }),
+      );
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard tokenProvider={validTokenProvider} queryClient={queryClient} />);
+
+      const pendingTab = screen.getByTestId('tab-pending');
+      const inPrepTab = screen.getByTestId('tab-active-view');
+      const redoTab = screen.getByTestId('tab-redo-view');
+      const deliveredTab = screen.getByTestId('tab-delivered');
+
+      // Verify touch targets >= 48px on all tabs
+      expect(pendingTab).toHaveClass('min-h-[48px]');
+      expect(inPrepTab).toHaveClass('min-h-[48px]');
+      expect(redoTab).toHaveClass('min-h-[48px]');
+      expect(deliveredTab).toHaveClass('min-h-[48px]');
+
+      // High-contrast alert on redo tab when redoCount > 0
+      await waitFor(() => {
+        expect(screen.getByTestId('redo-badge')).toHaveTextContent('1');
+        expect(redoTab).toHaveClass('bg-red-600');
+        expect(redoTab).toHaveClass('animate-pulse');
+      });
+
+      // Switch to Pendientes
+      fireEvent.click(pendingTab);
+      expect(pendingTab).toHaveAttribute('aria-selected', 'true');
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-pending-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('order-card-stub-ord-in-prep-1')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('order-card-stub-ord-redo-1')).not.toBeInTheDocument();
+      });
+
+      // Switch to En Preparación
+      fireEvent.click(inPrepTab);
+      expect(inPrepTab).toHaveAttribute('aria-selected', 'true');
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-in-prep-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('order-card-stub-ord-pending-1')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('order-card-stub-ord-redo-1')).not.toBeInTheDocument();
+      });
+
+      // Switch to Rehechuras (devueltas)
+      fireEvent.click(redoTab);
+      expect(redoTab).toHaveAttribute('aria-selected', 'true');
+      expect(redoTab).toHaveClass('bg-red-700');
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-redo-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('order-card-stub-ord-in-prep-1')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('order-card-stub-ord-pending-1')).not.toBeInTheDocument();
+      });
+
+      // Switch to Entregadas
+      fireEvent.click(deliveredTab);
+      expect(deliveredTab).toHaveAttribute('aria-selected', 'true');
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-stub-ord-103')).toBeInTheDocument();
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1557,6 +1655,82 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         expect(screen.queryByTestId('confirm-ready-dialog')).not.toBeInTheDocument();
       });
       expect(screen.getByTestId('order-details-dialog')).toBeInTheDocument();
+    });
+
+    it('rejects a returned redo item via ConfirmRejectDialog with accurate target item URL', async () => {
+      const redoOrder: Order = {
+        id: 'ord-redo-test',
+        orderNumber: 88,
+        tableNumber: 4,
+        isTakeaway: false,
+        status: OrderStatus.DELIVERED,
+        version: 2,
+        items: [
+          {
+            id: 'item-delivered-prev',
+            itemId: 'item-delivered-prev',
+            dishId: 'dish-prev',
+            name: 'Papas',
+            quantity: 1,
+            unitPrice: 50,
+            status: ItemStatus.DELIVERED,
+            station: 'freidora',
+            version: 1,
+          },
+          {
+            id: 'item-redo-pending',
+            itemId: 'item-redo-pending',
+            dishId: 'dish-redo',
+            name: 'Hamburguesa Especial',
+            quantity: 1,
+            unitPrice: 150,
+            status: ItemStatus.PENDING,
+            station: 'parrilla',
+            version: 1,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([redoOrder]),
+        post: vi.fn(),
+        patch: vi.fn().mockResolvedValue({}),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(
+        <KdsBoard
+          client={mockClient}
+          queryClient={createTestQueryClient()}
+          initialView="redo"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-card-ord-redo-test')).toBeInTheDocument();
+      });
+
+      // 1. Click "Rechazar rehechura (Sin insumos)"
+      const rejectBtn = screen.getByTestId('order-action-reject-redo-ord-redo-test');
+      expect(rejectBtn).toBeInTheDocument();
+      fireEvent.click(rejectBtn);
+
+      // 2. ConfirmRejectDialog opens showing item name
+      const confirmDialog = await screen.findByTestId('confirm-reject-dialog');
+      expect(confirmDialog).toBeInTheDocument();
+      expect(within(confirmDialog).getByText(/¿Rechazar platillo por falta de insumos\?/)).toBeInTheDocument();
+      expect(within(confirmDialog).getAllByText(/Hamburguesa Especial/).length).toBeGreaterThanOrEqual(1);
+
+      // 3. Confirm rejection
+      fireEvent.click(screen.getByTestId('confirm-reject-submit-btn'));
+
+      await waitFor(() => {
+        expect(mockClient.patch).toHaveBeenCalledWith(
+          '/orders/ord-redo-test/items/item-redo-pending/kitchen-reject',
+          { reason: 'Insumo físico insuficiente en cocina' },
+        );
+      });
     });
   });
 });

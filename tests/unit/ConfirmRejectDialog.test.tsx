@@ -133,5 +133,29 @@ describe('ConfirmRejectDialog', () => {
     fireEvent.keyDown(screen.getByTestId('confirm-reject-dialog'), { key: 'Enter' });
     expect(onCancel).not.toHaveBeenCalled();
   });
+
+  it('renders item-specific copy when an individual item is provided for redo rejection', () => {
+    const onConfirm = vi.fn();
+    const itemToReject = mockOrder.items[0];
+
+    render(
+      <ConfirmRejectDialog
+        order={mockOrder}
+        item={itemToReject}
+        isOpen={true}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('¿Rechazar platillo por falta de insumos?')).toBeInTheDocument();
+    expect(screen.getByText('Mesa 12 · Comanda #45 · Ribeye 400g')).toBeInTheDocument();
+    expect(
+      screen.getByText(/¿Estás seguro de que deseas rechazar "Ribeye 400g" por falta de insumos físicos en cocina\?/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('confirm-reject-submit-btn'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
 });
 

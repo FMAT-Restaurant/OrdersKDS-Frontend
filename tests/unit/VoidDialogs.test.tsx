@@ -367,7 +367,10 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       expect(cancelBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
 
       fireEvent.click(confirmBtn);
-      expect(onConfirm).toHaveBeenCalledWith(inPreparationOrder);
+      expect(onConfirm).toHaveBeenCalledWith(
+        inPreparationOrder,
+        expect.objectContaining({ chargeCustomer: true }),
+      );
     });
 
     it('enforces >= 64x64px minimum touch area on every button, quick reason, and virtual keyboard key in ChefVoidDialog', () => {
@@ -427,7 +430,10 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
         'Se cobrará la comanda mermada',
       );
       fireEvent.click(screen.getByTestId('admin-void-confirm'));
-      expect(onAdminConfirm).toHaveBeenCalledWith(inPreparationOrder);
+      expect(onAdminConfirm).toHaveBeenCalledWith(
+        inPreparationOrder,
+        expect.objectContaining({ chargeCustomer: true }),
+      );
       unmountAdmin();
 
       // Chef executes kitchen-error void
@@ -598,6 +604,59 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       );
 
       expect(screen.getByText(/Anulación por Error de Cocina · #88/)).toBeInTheDocument();
+    });
+
+    it('supports quick administrative reasons, virtual keyboard notes, and charge customer toggle (Punto 3)', () => {
+      const onConfirm = vi.fn();
+      const onCancel = vi.fn();
+      render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.ADMIN}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />,
+      );
+
+      // Initially charge is true
+      const warning = screen.getByTestId('admin-void-warning');
+      expect(warning).toHaveTextContent('Se cobrará la comanda mermada al cliente');
+
+      // Click quick reason "Error de captura del mesero" which defaults charge to false
+      const waiterErrorBtn = screen.getByTestId('admin-void-reason-error-de-captura-del-mesero');
+      fireEvent.click(waiterErrorBtn);
+      expect(waiterErrorBtn).toHaveAttribute('aria-pressed', 'true');
+      expect(warning).toHaveTextContent('Merma pura asumida por el restaurante (sin cobro al cliente)');
+
+      // Toggle charge switch manually
+      const chargeToggle = screen.getByTestId('admin-void-charge-toggle');
+      expect(chargeToggle).toHaveAttribute('aria-checked', 'false');
+      fireEvent.click(chargeToggle);
+      expect(chargeToggle).toHaveAttribute('aria-checked', 'true');
+      expect(warning).toHaveTextContent('Se cobrará la comanda mermada al cliente');
+
+      // Toggle switch back to false
+      fireEvent.click(chargeToggle);
+      expect(chargeToggle).toHaveAttribute('aria-checked', 'false');
+
+      // Toggle virtual keyboard
+      const toggleKeyboardBtn = screen.getByTestId('admin-void-toggle-keyboard');
+      fireEvent.click(toggleKeyboardBtn);
+      expect(screen.getByTestId('virtual-keyboard')).toBeInTheDocument();
+
+      // Enter text via note input
+      const noteInput = screen.getByTestId('admin-void-note-input');
+      fireEvent.change(noteInput, { target: { value: 'Comanda duplicada' } });
+
+      // Confirm void
+      fireEvent.click(screen.getByTestId('admin-void-confirm'));
+      expect(onConfirm).toHaveBeenCalledWith(
+        inPreparationOrder,
+        expect.objectContaining({
+          reason: 'Error de captura del mesero - Comanda duplicada',
+          chargeCustomer: false,
+        }),
+      );
     });
   });
 });

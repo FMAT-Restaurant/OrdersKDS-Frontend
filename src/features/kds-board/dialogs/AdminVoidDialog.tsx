@@ -1,26 +1,63 @@
+import { useState } from 'react';
 import { z } from 'zod';
 import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
 import { pointerAction } from '../pointerAction.ts';
 import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
+import { VirtualKeyboard } from './VirtualKeyboard.tsx';
 
 const InPreparationOrderSchema = OrderSchema.extend({
   status: z.literal(OrderStatus.IN_PREPARATION),
 });
+
+export interface AdminVoidOptions {
+  readonly reason?: string;
+  readonly chargeCustomer: boolean;
+}
 
 export interface AdminVoidDialogProps {
   readonly order: Order;
   readonly isOpen?: boolean;
   readonly userRole?: UserRole;
   readonly isSubmitting?: boolean;
-  readonly onConfirm: (order: Order) => void;
+  readonly onConfirm: (order: Order, options?: AdminVoidOptions) => void;
   readonly onCancel: () => void;
 }
 
+export interface QuickReason {
+  readonly label: string;
+  readonly description: string;
+  readonly defaultCharge: boolean;
+}
+
+const ADMIN_QUICK_REASONS: readonly QuickReason[] = [
+  {
+    label: 'Deserción del comensal',
+    description: 'Comensal abandonó el restaurante sin esperar o pagar',
+    defaultCharge: true,
+  },
+  {
+    label: 'Cancelación tardía',
+    description: 'Comensal canceló cuando la preparación ya estaba avanzada',
+    defaultCharge: true,
+  },
+  {
+    label: 'Error de captura del mesero',
+    description: 'Comanda ingresada por error en mesa o platillo equivocado',
+    defaultCharge: false,
+  },
+  {
+    label: 'Cortesía gerencial',
+    description: 'Compensación por demora excesiva o disputa de servicio',
+    defaultCharge: false,
+  },
+];
+
 /**
  * Administrative void dialog for orders in IN_PREPARATION (TASK-36, RF-26, RF-27, ADR-0012).
- * Warns that the wasted order will still be charged to the customer.
+ * Enables Administrator to select quick administrative reasons, input notes,
+ * and define whether the wasted order should be charged to the customer or registered as pure waste.
  * Hidden for non-admin roles according to RF-26 and UT-FE-23.
  */
 export function AdminVoidDialog({
@@ -31,6 +68,11 @@ export function AdminVoidDialog({
   onConfirm,
   onCancel,
 }: Readonly<AdminVoidDialogProps>) {
+  const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
+  const [customNote, setCustomNote] = useState<string>('');
+  const [chargeCustomer, setChargeCustomer] = useState<boolean>(true);
+  const [showKeyboard, setShowKeyboard] = useState<boolean>(false);
+
   if (!isOpen) {
     return null;
   }
@@ -52,8 +94,25 @@ export function AdminVoidDialog({
     tableDisplay = 'Para llevar';
   }
 
+  const toggleReason = (reason: QuickReason) => {
+    setSelectedReasons((prev) => {
+      const exists = prev.includes(reason.label);
+      if (exists) {
+        return prev.filter((item) => item !== reason.label);
+      }
+      setChargeCustomer(reason.defaultCharge);
+      return [...prev, reason.label];
+    });
+  };
+
   const handleConfirm = () => {
-    onConfirm(order);
+    const trimmedNote = customNote.trim();
+    const parts = [...selectedReasons];
+    if (trimmedNote.length > 0) {
+      parts.push(trimmedNote);
+    }
+    const finalReason = parts.length > 0 ? parts.join(' - ') : undefined;
+    onConfirm(order, { reason: finalReason, chargeCustomer });
   };
 
   return (
@@ -72,14 +131,130 @@ export function AdminVoidDialog({
           </h2>
         </header>
 
+        {/* Charge Customer Toggle Switch */}
+        <div className="flex items-center justify-between p-3.5 bg-gray-50 border border-border rounded-control">
+          <div className="flex flex-col">
+            <span id="admin-charge-label" className="font-bold text-ink text-base">
+              ¿Cobrar comanda mermada al comensal?
+            </span>
+            <span className="text-sm text-body">
+              {chargeCustomer
+                ? 'Se enviará el cargo a la cuenta de la mesa.'
+                : 'Se registrará como merma absorbida por el restaurante.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            id="admin-void-charge-toggle"
+            aria-checked={chargeCustomer}
+            aria-labelledby="admin-charge-label"
+            data-testid="admin-void-charge-toggle"
+            disabled={!isOperable || isSubmitting}
+            {...pointerAction(() => setChargeCustomer((prev) => !prev))}
+            style={{ minHeight: 48, minWidth: 48 }}
+            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-fmat-primary items-center p-1 ${
+              chargeCustomer ? 'bg-fmat-primary' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                chargeCustomer ? 'translate-x-6' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
         <div
           role="alert"
           data-testid="admin-void-warning"
-          className="rounded-control bg-amber-50 border border-amber-300 px-4 py-3 text-amber-900 font-bold text-center text-base"
+          className={`rounded-control border px-4 py-3 font-bold text-center text-base ${
+            chargeCustomer
+              ? 'bg-amber-50 border-amber-300 text-amber-900'
+              : 'bg-blue-50 border-blue-300 text-blue-900'
+          }`}
         >
-          <span>Se cobrará la comanda mermada al cliente</span>
-          <span className="sr-only">Se cobrará la comanda mermada</span>
+          {chargeCustomer ? (
+            <>
+              <span>Se cobrará la comanda mermada al cliente</span>
+              <span className="sr-only">Se cobrará la comanda mermada</span>
+            </>
+          ) : (
+            <>
+              <span>Merma pura asumida por el restaurante (sin cobro al cliente)</span>
+              <span className="sr-only">Merma pura sin cobro</span>
+            </>
+          )}
         </div>
+
+        {/* Quick Reasons Selection */}
+        <section aria-label="Motivos administrativos rápidos" className="flex flex-col gap-2">
+          <span className="text-sm font-semibold uppercase tracking-wider text-body">
+            Motivo administrativo:
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {ADMIN_QUICK_REASONS.map((item) => {
+              const isSelected = selectedReasons.includes(item.label);
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  data-testid={`admin-void-reason-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  aria-pressed={isSelected}
+                  disabled={!isOperable || isSubmitting}
+                  {...pointerAction(() => toggleReason(item))}
+                  style={{ minHeight: 48 }}
+                  className={`min-h-[48px] px-3 py-2 rounded-control text-left border transition-all text-sm font-semibold flex flex-col justify-center cursor-pointer ${
+                    isSelected
+                      ? 'bg-fmat-primary text-white border-fmat-primary shadow-sm'
+                      : 'bg-surface text-ink border-border hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="font-bold">{item.label}</span>
+                  <span className={`text-xs ${isSelected ? 'text-white/80' : 'text-muted'}`}>
+                    {item.description}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Custom note & virtual keyboard */}
+        <section aria-label="Nota adicional" className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <label htmlFor="admin-void-note-input" className="text-sm font-semibold uppercase tracking-wider text-body">
+              Nota personalizada (opcional):
+            </label>
+            <button
+              type="button"
+              data-testid="admin-void-toggle-keyboard"
+              disabled={!isOperable || isSubmitting}
+              {...pointerAction(() => setShowKeyboard((prev) => !prev))}
+              className="text-xs font-bold text-fmat-primary hover:underline px-2 py-1 cursor-pointer"
+            >
+              {showKeyboard ? 'Ocultar teclado' : 'Teclado en pantalla'}
+            </button>
+          </div>
+          <input
+            id="admin-void-note-input"
+            type="text"
+            value={customNote}
+            disabled={!isOperable || isSubmitting}
+            onChange={(event) => setCustomNote(event.target.value)}
+            placeholder="Observaciones adicionales..."
+            data-testid="admin-void-note-input"
+            className="w-full min-h-[48px] px-4 py-2 rounded-md bg-surface border border-border text-ink placeholder:text-muted text-base font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
+          />
+          {showKeyboard && (
+            <VirtualKeyboard
+              value={customNote}
+              onChange={setCustomNote}
+              disabled={!isOperable || isSubmitting}
+            />
+          )}
+        </section>
 
         {!isOperable && (
           <div
@@ -119,4 +294,3 @@ export function AdminVoidDialog({
 }
 
 export default AdminVoidDialog;
-
