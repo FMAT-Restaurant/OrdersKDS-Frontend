@@ -111,7 +111,7 @@ function toEditableItems(items: readonly OrderItem[]): EditableOrderItem[] {
   return items.map((item) => ({
     id: item.id,
     itemId: item.itemId,
-    dishId: item.dishId,
+    dishId: item.dishId ?? undefined,
     name: item.name,
     quantity: item.quantity,
     modifiers: item.modifiers ?? [],
@@ -604,7 +604,7 @@ function OrderTicket({
           items: draftItems.map((item) => ({
             id: item.id,
             itemId: item.itemId,
-            dishId: item.dishId,
+            dishId: item.dishId ?? undefined,
             name: item.name,
             quantity: item.quantity,
             modifiers: item.modifiers,

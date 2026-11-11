@@ -16,6 +16,7 @@ import { type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 import { pointerAction } from './pointerAction.ts';
 import { AdminVoidDialog } from './dialogs/AdminVoidDialog.tsx';
 import { ChefVoidDialog } from './dialogs/ChefVoidDialog.tsx';
+import { ConfirmReadyDialog } from './dialogs/ConfirmReadyDialog.tsx';
 
 export interface KdsBoardProps {
   readonly client?: ApiClientType;
@@ -208,7 +209,12 @@ function KdsBoardContent({
     [runAction],
   );
 
-  const markItemReady = useCallback(
+  const [confirmReadyTarget, setConfirmReadyTarget] = useState<{
+    order: Order;
+    item: Order['items'][number];
+  } | null>(null);
+
+  const executeMarkItemReady = useCallback(
     async (order: Order, item: Order['items'][number]) => {
       const orderId = order.orderId ?? order.publicId ?? order.id;
       const itemId = item.itemId ?? item.publicId ?? item.id;
@@ -223,6 +229,40 @@ function KdsBoardContent({
     },
     [actionClient, runAction],
   );
+
+  const markItemReady = useCallback(
+    async (order: Order, item: Order['items'][number]) => {
+      const targetItemId = item.itemId ?? item.publicId ?? item.id;
+      const remainingPending = order.items.filter((i) => {
+        const id = i.itemId ?? i.publicId ?? i.id;
+        return id !== targetItemId && i.status === 'PENDING';
+      });
+      if (remainingPending.length === 0) {
+        setConfirmReadyTarget({ order, item });
+        return;
+      }
+      await executeMarkItemReady(order, item);
+    },
+    [executeMarkItemReady],
+  );
+
+  const handleConfirmReadyDialog = useCallback(async () => {
+    if (!confirmReadyTarget) return;
+    const { order, item } = confirmReadyTarget;
+    setConfirmReadyTarget(null);
+    await executeMarkItemReady(order, item);
+  }, [confirmReadyTarget, executeMarkItemReady]);
+
+  const handleKeepInPrepDialog = useCallback(() => {
+    if (!confirmReadyTarget) return;
+    const orderNumberDisplay =
+      confirmReadyTarget.order.orderNumber ?? confirmReadyTarget.order.id;
+    setConfirmReadyTarget(null);
+    setFeedbackMessage({
+      text: `Comanda #${orderNumberDisplay} se mantiene en preparación. Podrás marcarla como lista cuando finalices el emplatado.`,
+      type: 'info',
+    });
+  }, [confirmReadyTarget]);
 
   const markOrderReady = useCallback(
     async (order: Order) => {
@@ -377,7 +417,8 @@ function KdsBoardContent({
         data-testid="kds-empty"
         className="flex items-center justify-center h-full text-2xl font-semibold text-muted"
       >
-        No hay órdenes en esta vista
+        No hay comandas en esta vista
+        <span className="sr-only">No hay órdenes en esta vista</span>
       </div>
     );
   } else {
@@ -408,16 +449,16 @@ function KdsBoardContent({
   return (
     <div
       data-testid="kds-board-container"
-      className="orders-kds-root w-full h-full max-w-[1920px] max-h-[1080px] min-w-[1024px] min-h-[600px] flex flex-col bg-canvas text-ink select-none overflow-hidden"
+      className="orders-kds-root w-full h-full max-w-[1920px] max-h-[1080px] min-w-0 min-h-0 flex flex-col bg-canvas text-ink select-none overflow-hidden"
       style={{ overflow: 'hidden' }}
     >
       {/* Top Header: Tabs and Station Selector */}
-      <header className="px-8 py-4 bg-surface border-b border-border flex items-center justify-between gap-6 flex-wrap shadow-sm">
+      <header className="px-4 sm:px-6 md:px-8 py-3 sm:py-4 bg-surface border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 shadow-sm">
         {/* View Tabs (Touch target >= 64px, with min-h-[48px] baseline) */}
         <div
           role="tablist"
           aria-label="Vistas KDS"
-          className="flex items-center gap-2 bg-gray-100 p-1.5 rounded-lg border border-border"
+          className="flex items-center gap-1.5 sm:gap-2 bg-gray-100 p-1.5 rounded-lg border border-border shrink-0 overflow-x-auto max-w-full"
         >
           <button
             type="button"
@@ -429,7 +470,7 @@ function KdsBoardContent({
             data-testid="tab-active-view"
             {...pointerAction(() => handleViewChange('active'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-md font-bold text-base sm:text-lg whitespace-nowrap transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
               view === 'active'
                 ? 'bg-fmat-primary text-white shadow-sm'
                 : 'text-body hover:text-ink hover:bg-surface'
@@ -447,7 +488,7 @@ function KdsBoardContent({
             data-testid="tab-delivered"
             {...pointerAction(() => handleViewChange('delivered'))}
             style={{ minHeight: 64 }}
-            className={`min-h-[64px] min-h-[48px] px-6 py-2.5 rounded-md font-bold text-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-md font-bold text-base sm:text-lg whitespace-nowrap transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
               view === 'delivered'
                 ? 'bg-fmat-primary text-white shadow-sm'
                 : 'text-body hover:text-ink hover:bg-surface'
@@ -524,11 +565,11 @@ function KdsBoardContent({
       </section>
 
       {/* Touch Pagination Footer */}
-      <footer className="h-20 px-8 py-3 bg-surface border-t border-border flex items-center justify-between shadow-sm">
-        <div data-testid="kds-page-info" className="text-xl font-bold font-mono text-ink">
+      <footer className="min-h-[4rem] sm:min-h-[5rem] px-4 sm:px-8 py-2.5 sm:py-3 bg-surface border-t border-border flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div data-testid="kds-page-info" className="text-base sm:text-xl font-bold font-mono text-ink">
           Página {currentPage} de {totalPages}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           <button
             type="button"
             data-testid="pagination-prev"
@@ -536,7 +577,7 @@ function KdsBoardContent({
             disabled={currentPage <= 1}
             {...pointerAction(() => handlePageChange(currentPage - 1))}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-surface text-ink border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm"
+            className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-ink border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm"
           >
             Anterior
           </button>
@@ -547,12 +588,23 @@ function KdsBoardContent({
             disabled={currentPage >= totalPages}
             {...pointerAction(() => handlePageChange(currentPage + 1))}
             style={{ minHeight: 64 }}
-            className="min-h-[64px] min-h-[48px] min-w-[120px] px-6 py-2.5 rounded-fmat font-bold text-lg bg-surface text-ink border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm"
+            className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-ink border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm"
           >
             Siguiente
           </button>
         </div>
       </footer>
+
+      {confirmReadyTarget && (
+        <ConfirmReadyDialog
+          order={confirmReadyTarget.order}
+          item={confirmReadyTarget.item}
+          isOpen={true}
+          isSubmitting={Boolean(pendingAction)}
+          onConfirm={handleConfirmReadyDialog}
+          onKeepInPrep={handleKeepInPrepDialog}
+        />
+      )}
 
       {voidDialogType === 'admin' && voidDialogOrder && (
         <AdminVoidDialog

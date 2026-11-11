@@ -1,4 +1,4 @@
-import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -818,9 +818,11 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/ready');
       });
 
-      // 2. Mark item ready
+      // 2. Mark item ready (opens confirmation dialog for the last pending dish)
       const item1Btn = screen.getByTestId('order-item-action-item-1');
       fireEvent.click(item1Btn);
+      const confirmBtn = await screen.findByTestId('confirm-ready-submit-btn');
+      fireEvent.click(confirmBtn);
 
       await waitFor(() => {
         expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-101/items/item-1/ready');
@@ -1145,8 +1147,10 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-1/ready');
       });
 
-      // Mark item ready: auto patches start-preparation then item ready
+      // Mark item ready: auto patches start-preparation then item ready after dialog confirmation
       fireEvent.click(screen.getByTestId('order-item-action-item-res-1'));
+      const confirmItemBtn = await screen.findByTestId('confirm-ready-submit-btn');
+      fireEvent.click(confirmItemBtn);
       await waitFor(() => {
         expect(mockClient.patch).toHaveBeenCalledWith('/orders/ord-res-1/items/item-res-1/ready');
       });
@@ -1222,6 +1226,62 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       expect(screen.queryByTestId('chef-void-dialog')).not.toBeInTheDocument();
 
       expect(mockClient.patch).not.toHaveBeenCalled();
+    });
+
+    it('allows keeping comanda in preparation when marking last item ready without dispatching ready (User Requirement 3)', async () => {
+      const orderWithTwoItems: Order = {
+        ...mockOrder1,
+        id: 'ord-confirm-prep',
+        orderId: 'ord-confirm-prep',
+        orderNumber: 42,
+        status: OrderStatus.IN_PREPARATION,
+        items: [
+          {
+            ...mockOrder1.items[0],
+            id: 'item-done',
+            itemId: 'item-done',
+            status: ItemStatus.READY,
+          },
+          {
+            ...mockOrder1.items[0],
+            id: 'item-last-pending',
+            itemId: 'item-last-pending',
+            name: 'Corte Ribeye',
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      const mockClient = {
+        get: vi.fn().mockResolvedValue([orderWithTwoItems]),
+        patch: vi.fn().mockResolvedValue({ success: true }),
+      } as unknown as ApiClient;
+
+      const queryClient = createTestQueryClient();
+      render(<KdsBoard client={mockClient} queryClient={queryClient} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('order-item-action-item-last-pending')).toBeInTheDocument();
+      });
+
+      // Click last pending item -> opens confirmation dialog
+      fireEvent.click(screen.getByTestId('order-item-action-item-last-pending'));
+
+      const dialog = await screen.findByTestId('confirm-ready-dialog');
+      expect(dialog).toBeInTheDocument();
+      expect(within(dialog).getByText('¿Marcar comanda como lista?')).toBeInTheDocument();
+      expect(within(dialog).getByText('Corte Ribeye')).toBeInTheDocument();
+
+      // Click "Mantener en preparación"
+      fireEvent.click(screen.getByTestId('confirm-ready-keep-prep-btn'));
+
+      expect(screen.queryByTestId('confirm-ready-dialog')).not.toBeInTheDocument();
+      expect(mockClient.patch).not.toHaveBeenCalled();
+
+      // Feedback message confirms order stays in preparation
+      expect(await screen.findByTestId('kds-action-feedback')).toHaveTextContent(
+        'Comanda #42 se mantiene en preparación',
+      );
     });
   });
 });

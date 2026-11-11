@@ -102,7 +102,13 @@ function OrderCardItem({
           >
             {isFinished ? (
               <>
-                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  aria-hidden="true"
+                  className="w-3.5 h-3.5 text-emerald-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                 </svg>
                 <span>Listo</span>
@@ -248,7 +254,7 @@ function OrderCardActions({
           <button
             type="button"
             data-testid={`order-action-start-${displayId}`}
-            aria-label={`Iniciar preparación para la orden ${displayId}`}
+            aria-label={`Iniciar preparación para la comanda ${displayId}`}
             disabled={pendingAction === 'start'}
             {...pointerAction(() => onStartPreparation?.(order))}
             onKeyDown={(e) => handleButtonKey(e, () => onStartPreparation?.(order))}
@@ -260,7 +266,7 @@ function OrderCardActions({
           <button
             type="button"
             data-testid={`order-action-reject-${displayId}`}
-            aria-label={`Rechazar insumo para la orden ${displayId}`}
+            aria-label={`Rechazar insumo para la comanda ${displayId}`}
             disabled={pendingAction === 'reject'}
             {...pointerAction(() => onRejectSupplies?.(order))}
             onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
@@ -281,7 +287,7 @@ function OrderCardActions({
             <button
               type="button"
               data-testid={`order-action-admin-void-${displayId}`}
-              aria-label={`Anulación administrativa para la orden ${displayId}`}
+              aria-label={`Anulación administrativa para la comanda ${displayId}`}
               disabled={pendingAction === 'void-admin'}
               {...pointerAction(() => onAdminVoid?.(order))}
               onKeyDown={(e) => handleButtonKey(e, () => onAdminVoid?.(order))}
@@ -295,7 +301,7 @@ function OrderCardActions({
             <button
               type="button"
               data-testid={`order-action-chef-void-${displayId}`}
-              aria-label={`Anulación por error de cocina para la orden ${displayId}`}
+              aria-label={`Anulación por error de cocina para la comanda ${displayId}`}
               disabled={pendingAction === 'void-kitchen'}
               {...pointerAction(() => onChefVoid?.(order))}
               onKeyDown={(e) => handleButtonKey(e, () => onChefVoid?.(order))}
@@ -312,14 +318,14 @@ function OrderCardActions({
         <button
           type="button"
           data-testid={`order-action-ready-${displayId}`}
-          aria-label={`Orden lista para la orden ${displayId}`}
+          aria-label={`Comanda lista para la comanda ${displayId}`}
           disabled={pendingAction === 'order-ready'}
           {...pointerAction(() => onMarkOrderReady?.(order))}
           onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
           style={{ minHeight: 64 }}
           className="shrink-0 mx-4 mb-3 min-h-[64px] min-h-[48px] rounded-md bg-fmat-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary active:scale-[.98] disabled:opacity-50"
         >
-          Orden lista
+          Comanda lista
         </button>
       )}
     </>
@@ -342,6 +348,21 @@ function getStopwatchState(order: Order) {
  * Displays large table number, order ID, live delay stopwatch (OP-11), StatusBadge,
  * high-contrast kitchen items list, touch-friendly 64px actions, and keyboard parity.
  */
+function getOrderNumberDisplay(
+  orderNumber: number | null | undefined,
+  displayId: string,
+): string {
+  if (orderNumber != null) {
+    return String(orderNumber);
+  }
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(displayId);
+  if (isUuid) {
+    return displayId.slice(-4).toUpperCase();
+  }
+  return displayId.replace(/^ord-/, '');
+}
+
 export function OrderCard({
   order,
   onClick,
@@ -356,14 +377,7 @@ export function OrderCard({
   isFocused = false,
 }: Readonly<OrderCardProps>) {
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
-  const isUuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(displayId);
-  const orderNumberDisplay =
-    order.orderNumber != null
-      ? String(order.orderNumber)
-      : isUuid
-      ? displayId.slice(-4).toUpperCase()
-      : displayId.replace(/^ord-/, '');
+  const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
   const hasTableHeader =
     (order.tableNumber !== null && order.tableNumber !== undefined) || order.isTakeaway;
 
@@ -452,7 +466,9 @@ export function OrderCard({
           <div
             data-testid={`order-stopwatch-${displayId}`}
             data-delay-status={delayStatus}
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-md font-mono text-sm font-bold text-white shadow-sm"
+            className={`inline-flex items-center gap-2 px-3 py-1 rounded-md font-mono text-sm font-bold shadow-sm ${
+              delayStatus === 'warning' ? 'text-gray-950 font-black' : 'text-white'
+            }`}
             style={{ backgroundColor: delayColorToken }}
             aria-label={`Tiempo transcurrido: ${formattedTime}, estado: ${delayLabel}`}
           >
@@ -504,7 +520,7 @@ export function OrderCard({
       <ul
         data-testid={`order-items-list-${displayId}`}
         className="flex-1 min-h-0 list-none m-0 px-4 my-1 overflow-y-auto divide-y divide-border bg-surface scrollbar-thin scrollbar-thumb-gray-300"
-        aria-label={`Platillos para la orden ${displayId}`}
+        aria-label={`Platillos para la comanda ${displayId}`}
       >
         {order.items.map((item, index) => {
           const itemId = item.id ?? item.itemId ?? item.publicId ?? `item-${index}`;

@@ -7,6 +7,21 @@ export interface OrderCardStubProps {
   readonly isFocused?: boolean;
 }
 
+function getOrderNumberDisplay(
+  orderNumber: number | null | undefined,
+  displayId: string,
+): string {
+  if (orderNumber != null) {
+    return String(orderNumber);
+  }
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(displayId);
+  if (isUuid) {
+    return displayId.slice(-4).toUpperCase();
+  }
+  return displayId.replace(/^ord-/, '');
+}
+
 /**
  * Temporary stub component representing an order in the KDS visual grid.
  *
@@ -19,14 +34,7 @@ export function OrderCardStub({
   isFocused = false,
 }: Readonly<OrderCardStubProps>) {
   const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
-  const isUuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(displayId);
-  const orderNumberDisplay =
-    order.orderNumber != null
-      ? String(order.orderNumber)
-      : isUuid
-      ? displayId.slice(-4).toUpperCase()
-      : displayId.replace(/^ord-/, '');
+  const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
