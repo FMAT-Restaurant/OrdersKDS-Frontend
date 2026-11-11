@@ -19,6 +19,7 @@ import { AdminVoidDialog } from './dialogs/AdminVoidDialog.tsx';
 import { ChefVoidDialog } from './dialogs/ChefVoidDialog.tsx';
 import { ConfirmReadyDialog } from './dialogs/ConfirmReadyDialog.tsx';
 import { ConfirmRejectDialog } from './dialogs/ConfirmRejectDialog.tsx';
+import { OrderDetailsDialog } from './dialogs/OrderDetailsDialog.tsx';
 
 export interface KdsBoardProps {
   readonly client?: ApiClientType;
@@ -88,6 +89,20 @@ function KdsBoardContent({
 
   const [voidDialogOrder, setVoidDialogOrder] = useState<Order | null>(null);
   const [voidDialogType, setVoidDialogType] = useState<'admin' | 'chef' | null>(null);
+  const [selectedModalOrderId, setSelectedModalOrderId] = useState<string | null>(null);
+
+  const selectedModalOrder = useMemo(() => {
+    if (!selectedModalOrderId) return null;
+    return (data ?? []).find((o) => getOrderKey(o) === selectedModalOrderId) ?? null;
+  }, [data, selectedModalOrderId]);
+
+  const handleOrderCardSelect = useCallback(
+    (order: Order) => {
+      setSelectedModalOrderId(getOrderKey(order));
+      onOrderSelect?.(order);
+    },
+    [onOrderSelect],
+  );
 
   const actionClient = useMemo(() => {
     if (client) return client;
@@ -746,6 +761,7 @@ function KdsBoardContent({
       </div>
     );
   } else {
+    const isCompactLayout = paginatedOrders.length > 4;
     gridContent = (
       <div
         data-testid="kds-grid"
@@ -764,7 +780,8 @@ function KdsBoardContent({
             <OrderCard
               key={orderKey}
               order={order}
-              onClick={onOrderSelect}
+              onClick={handleOrderCardSelect}
+              isCompact={isCompactLayout}
               onStartPreparation={onStartPreparation ?? startPreparation}
               onRejectSupplies={handleRejectClick}
               onMarkOrderReady={startOrderReadyGracePeriod}
@@ -987,6 +1004,43 @@ function KdsBoardContent({
             setVoidDialogOrder(null);
             setVoidDialogType(null);
           }}
+        />
+      )}
+
+      {selectedModalOrder && (
+        <OrderDetailsDialog
+          order={selectedModalOrder}
+          isOpen={Boolean(selectedModalOrder)}
+          onClose={() => setSelectedModalOrderId(null)}
+          onItemReady={markItemReady}
+          onUndoItemReady={handleUndoReady}
+          onStartPreparation={onStartPreparation ?? startPreparation}
+          onRejectSupplies={handleRejectClick}
+          onMarkOrderReady={startOrderReadyGracePeriod}
+          onUndoOrderReady={handleUndoReady}
+          onAdminVoid={handleOpenAdminVoid}
+          onChefVoid={handleOpenChefVoid}
+          userRole={userRole}
+          pendingAction={pendingAction ?? undefined}
+          pendingUndoItem={
+            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'item'
+              ? pendingUndoMap[getOrderKey(selectedModalOrder)]
+              : null
+          }
+          isPendingUndoOrder={
+            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
+          }
+          undoOrderSecondsLeft={
+            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
+              ? pendingUndoMap[getOrderKey(selectedModalOrder)]?.secondsLeft
+              : undefined
+          }
+          pendingOrderTriggeringItemId={
+            pendingUndoMap[getOrderKey(selectedModalOrder)]?.type === 'order'
+              ? pendingUndoMap[getOrderKey(selectedModalOrder)]?.itemId
+              : undefined
+          }
+          optimisticReadyItemIds={optimisticReadyItemIds}
         />
       )}
     </div>
