@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import KdsApp from './KdsApp.tsx';
 import OrderTicketWidget from './OrderTicketWidget.tsx';
 import { ReadyOrdersAlert } from './ReadyOrdersAlert.tsx';
@@ -14,6 +14,33 @@ type ViewMode = 'kds' | 'ticket' | 'alerts';
  */
 const DEV_WAITER_JWT =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VyX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwicm9sZSI6IndhaXRlciIsImV4cCI6MjUzMzcwNzY0ODAwfQ.signature';
+
+/**
+ * Mock WebSocket for visual preset simulation mode.
+ * Connects immediately and suppresses console connection errors when running offline without backend.
+ */
+class MockWebSocket {
+  readyState = 1;
+  onopen: ((ev: Event) => void) | null = null;
+  onclose: ((ev: CloseEvent) => void) | null = null;
+  onmessage: ((ev: MessageEvent) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
+
+  constructor() {
+    setTimeout(() => {
+      this.onopen?.(new Event('open'));
+    }, 50);
+  }
+
+  send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+    void _data;
+  }
+
+  close(): void {
+    this.readyState = 3;
+    this.onclose?.(new CloseEvent('close', { code: 1000, reason: 'Mock closed', wasClean: true }));
+  }
+}
 
 const MOCK_ORDER_CREATED: Order = {
   id: 'ord-mesa-4',
@@ -185,6 +212,7 @@ function App() {
   const [selectedOrderId, setSelectedOrderId] = useState<string>('ord-mesa-4');
   const [customOrderId, setCustomOrderId] = useState<string>('');
   const [isBackendMode, setIsBackendMode] = useState<boolean>(false);
+  const presetsRef = useRef<Record<string, Order>>({ ...PRESETS });
 
   useEffect(() => {
     Object.values(PRESETS).forEach((order) => {
@@ -195,10 +223,8 @@ function App() {
   const handleSelectPreset = (orderId: string) => {
     setIsBackendMode(false);
     setSelectedOrderId(orderId);
-    const preset = PRESETS[orderId];
-    if (preset) {
-      queryClient.setQueryData(['order', orderId], preset);
-    }
+    presetsRef.current[orderId] = { ...PRESETS[orderId] };
+    queryClient.setQueryData(['order', orderId], presetsRef.current[orderId]);
   };
 
   const handleSelectSeedOrder = (orderUuid: string) => {
@@ -214,6 +240,118 @@ function App() {
       setSelectedOrderId(trimmed);
       queryClient.invalidateQueries({ queryKey: ['order', trimmed] });
     }
+  };
+
+  const mockFetch: typeof fetch = async (input, init) => {
+    const rawUrl =
+      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+    const method = (init?.method ?? 'GET').toUpperCase();
+
+    const orderIdMatch = url.match(/\/orders\/([^/]+)/);
+    const targetOrderId = orderIdMatch ? decodeURIComponent(orderIdMatch[1]) : selectedOrderId;
+    const currentOrder = presetsRef.current[targetOrderId] ?? PRESETS[targetOrderId];
+
+    if (!currentOrder) {
+      return new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'Order not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (method === 'GET') {
+      return new Response(JSON.stringify(currentOrder), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (method === 'POST' && url.endsWith('/confirm')) {
+      const updated: Order = {
+        ...currentOrder,
+        status: OrderStatus.RESERVED,
+        version: currentOrder.version + 1,
+      };
+      presetsRef.current[targetOrderId] = updated;
+      return new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (method === 'PATCH' && url.endsWith('/cancel')) {
+      const updated: Order = {
+        ...currentOrder,
+        status: OrderStatus.CANCELLED,
+        version: currentOrder.version + 1,
+      };
+      presetsRef.current[targetOrderId] = updated;
+      return new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const redoMatch = url.match(/\/orders\/[^/]+\/items\/([^/]+)\/redo/);
+    if (method === 'PATCH' && redoMatch) {
+      const targetItemId = decodeURIComponent(redoMatch[1]);
+      let note = 'Platillo solicitado para rehacer';
+      if (init?.body && typeof init.body === 'string') {
+        try {
+          const parsed = JSON.parse(init.body);
+          if (parsed.note) note = parsed.note;
+        } catch {
+          // ignore
+        }
+      }
+      const updated: Order = {
+        ...currentOrder,
+        version: currentOrder.version + 1,
+        items: currentOrder.items.map((item) => {
+          const match = (item.id ?? item.itemId) === targetItemId;
+          return match
+            ? { ...item, status: ItemStatus.PENDING, notes: note, version: (item.version ?? 1) + 1 }
+            : item;
+        }),
+      };
+      presetsRef.current[targetOrderId] = updated;
+      return new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (method === 'PATCH' && url.endsWith('/items')) {
+      let updatedItems = currentOrder.items;
+      if (init?.body && typeof init.body === 'string') {
+        try {
+          const parsed = JSON.parse(init.body);
+          if (Array.isArray(parsed.items)) {
+            updatedItems = parsed.items.map((it: Partial<Order['items'][number]>, idx: number) => ({
+              ...currentOrder.items[idx],
+              ...it,
+            }));
+          }
+        } catch {
+          // ignore
+        }
+      }
+      const updated: Order = {
+        ...currentOrder,
+        items: updatedItems,
+        version: currentOrder.version + 1,
+      };
+      presetsRef.current[targetOrderId] = updated;
+      return new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify(currentOrder), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   };
 
   return (
@@ -330,6 +468,28 @@ function App() {
             >
               Seed Reservada
             </button>
+            <button
+              type="button"
+              onClick={() => handleSelectSeedOrder('22222222-2222-2222-2222-222222222222')}
+              className={`px-2 py-1 rounded text-xs border ${
+                isBackendMode && selectedOrderId === '22222222-2222-2222-2222-222222222222'
+                  ? 'bg-teal-600 text-white border-teal-500'
+                  : 'bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+            >
+              Seed En Prep
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectSeedOrder('33333333-3333-3333-3333-333333333333')}
+              className={`px-2 py-1 rounded text-xs border ${
+                isBackendMode && selectedOrderId === '33333333-3333-3333-3333-333333333333'
+                  ? 'bg-teal-600 text-white border-teal-500'
+                  : 'bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+            >
+              Seed Entregada (Rehacer Real)
+            </button>
 
             <div className="flex items-center gap-1 pl-2 border-l border-slate-700">
               <input
@@ -376,8 +536,12 @@ function App() {
                 orderId={selectedOrderId}
                 userId="00000000-0000-0000-0000-000000000001"
                 tokenProvider={async () => DEV_WAITER_JWT}
-                apiBaseUrl={isBackendMode ? 'http://localhost:8000' : undefined}
+                apiBaseUrl={isBackendMode ? 'http://localhost:8000' : ''}
                 webSocketBaseUrl={isBackendMode ? 'ws://localhost:8000' : undefined}
+                fetchFn={isBackendMode ? undefined : mockFetch}
+                WebSocketClass={
+                  isBackendMode ? undefined : (MockWebSocket as unknown as typeof WebSocket)
+                }
                 diningSessionId="00000000-0000-0000-0000-000000000099"
                 onCreateNewOrder={() => handleSelectPreset('ord-mesa-4')}
               />

@@ -39,7 +39,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'cobertura'],
-      exclude: ['src/main.tsx', 'src/vite-env.d.ts', '.eslintrc.cjs'],
+      exclude: ['src/main.tsx', 'src/vite-env.d.ts', '.eslintrc.cjs', 'src/setupTests.ts'],
     },
   },
   build: {
@@ -59,6 +59,16 @@ export default defineConfig({
       'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
       'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     },
+    proxy: {
+      '/orders': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://127.0.0.1:8000',
+        ws: true,
+      },
+    },
   },
   preview: {
     cors: true,
@@ -72,6 +82,16 @@ export default defineConfig({
       'Cross-Origin-Resource-Policy': 'same-site',
       'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
       'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    },
+    proxy: {
+      '/orders': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://127.0.0.1:8000',
+        ws: true,
+      },
     },
   },
 });
