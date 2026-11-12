@@ -59,6 +59,11 @@
   background: #dcfce7;
 }
 
+.orders-kds-root .order-ticket__status[data-status='DRAFT'] {
+  color: #334155;
+  background: #e2e8f0;
+}
+
 .orders-kds-root .order-ticket__status[data-status='REJECTED'] {
   color: #991b1b;
   background: #fee2e2;
@@ -278,13 +283,107 @@
   min-width: 7rem;
   min-height: 3rem;
   color: #fff;
-  background: #d97706;
+  background: #92400e;
   border: 1px solid transparent;
   border-radius: 0.375rem;
 }
 
 .orders-kds-root .order-ticket dialog button.order-ticket__redo-submit:hover:not(:disabled) {
-  background: #b45309;
+  background: #78350f;
+}
+
+.orders-kds-root .order-ticket__draft-table-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.25rem;
+  font-size: 0.9375rem;
+}
+
+.orders-kds-root .order-ticket__draft-table-controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+}
+
+.orders-kds-root .order-ticket__table-input {
+  width: 4.5rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  font-size: 0.9375rem;
+}
+
+.orders-kds-root .order-ticket .order-ticket__add-item-container {
+  display: flex;
+  margin-top: 0.75rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__add-item-btn {
+  width: 100%;
+  min-height: 3rem;
+  font-weight: 700;
+  border: 2px dashed #94a3b8;
+  color: #1e40af;
+  background: #f8fafc;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__add-item-btn:hover:not(:disabled) {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.orders-kds-root .order-ticket .order-ticket__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__chip {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  cursor: pointer;
+  min-height: 2rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__chip:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.orders-kds-root .order-ticket input.order-ticket__dish-name-readonly {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  font-weight: 700;
+  cursor: default;
+}
+
+.orders-kds-root .order-ticket dialog button.order-ticket__add-submit {
+  min-width: 7rem;
+  min-height: 3rem;
+  color: #fff;
+  background: #15803d;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  font-weight: 700;
+}
+
+.orders-kds-root .order-ticket dialog button.order-ticket__add-submit:hover:not(:disabled) {
+  background: #14532d;
 }
 
 .orders-kds-root .order-ticket button:disabled {

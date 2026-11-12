@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   QueryClientProvider,
   useMutation,
@@ -13,6 +13,17 @@ import {
   getRealtimeStatusMessage,
 } from './shared/i18n/translate.ts';
 import { RedoItemDialog } from './features/order-ticket/RedoItemDialog.tsx';
+import {
+  AddDishDialog,
+  type NewDishData,
+  type SelectedDishInfo,
+} from './features/order-ticket/AddDishDialog.tsx';
+import {
+  mergeDraftItem,
+  toEditableItems,
+  type AddItemEventDetail,
+  type EditableOrderItem,
+} from './features/order-ticket/draftItemsHelper.ts';
 import { useOrderEvents } from './shared/realtime/useOrderEvents.ts';
 import {
   type OrderStatusChangedEvent,
@@ -27,26 +38,24 @@ import {
 import { getOrderNumberDisplay } from './features/kds-board/orderNumberDisplay.ts';
 import './features/order-ticket/OrderTicketWidget.css';
 
+export type { AddItemEventDetail, EditableOrderItem };
+
 export interface OrderTicketWidgetProps {
-  readonly orderId: string;
-  readonly userId: string;
+  readonly orderId?: string;
+  readonly tableNumber?: number | string;
+  readonly isTakeaway?: boolean;
+  readonly userId?: string;
+  readonly waiterId?: string;
   readonly tokenProvider: TokenProvider;
-  readonly onCreateNewOrder: () => void;
+  readonly onCreateNewOrder?: () => void;
+  readonly onOrderCreated?: (order: Order) => void;
+  readonly onOrderSubmitted?: (orderId: string) => void;
+  readonly onOrderCancelled?: () => void;
   readonly apiBaseUrl?: string;
   readonly webSocketBaseUrl?: string;
   readonly diningSessionId?: string;
   readonly fetchFn?: typeof fetch;
   readonly WebSocketClass?: typeof WebSocket;
-}
-
-interface EditableOrderItem {
-  readonly id?: string;
-  readonly itemId?: string;
-  readonly dishId?: string;
-  readonly name: string;
-  quantity: number | string;
-  readonly modifiers: string[];
-  readonly notes: string;
 }
 
 interface RejectedItemDetail {
@@ -109,18 +118,6 @@ const WEBSOCKET_STATUS_TRANSLATIONS: Record<
   [WebSocketStatus.DISCONNECTED]: 'disconnected',
   [WebSocketStatus.TERMINATED]: 'disconnected',
 };
-
-function toEditableItems(items: readonly OrderItem[]): EditableOrderItem[] {
-  return items.map((item) => ({
-    id: item.id,
-    itemId: item.itemId,
-    dishId: item.dishId ?? undefined,
-    name: item.name,
-    quantity: item.quantity,
-    modifiers: item.modifiers ?? [],
-    notes: item.notes ?? '',
-  }));
-}
 
 function getDisplayError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -205,6 +202,16 @@ function getTableOrTakeawayLabel(order: Order): string {
     return `Mesa ${order.tableNumber}`;
   }
   return 'Mesa sin asignar';
+}
+
+function parseTableNumber(isTakeaway: boolean, table: number | string): number | undefined {
+  if (isTakeaway) {
+    return undefined;
+  }
+  if (typeof table === 'number') {
+    return table;
+  }
+  return Number.parseInt(String(table), 10) || 1;
 }
 
 function updateKdsQueueWithRedoItem(
@@ -299,6 +306,257 @@ function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdown
   );
 }
 
+interface OrderDraftHeaderProps {
+  readonly draftTableNumber: number | string;
+  readonly draftIsTakeaway: boolean;
+  readonly isMutating: boolean;
+  readonly diningSessionId?: string;
+  readonly onTableNumberChange: (table: number | string) => void;
+  readonly onTakeawayChange: (takeaway: boolean) => void;
+}
+
+function OrderDraftHeader({
+  draftTableNumber,
+  draftIsTakeaway,
+  isMutating,
+  diningSessionId,
+  onTableNumberChange,
+  onTakeawayChange,
+}: Readonly<OrderDraftHeaderProps>) {
+  return (
+    <header className="order-ticket__header">
+      <div>
+        <h2 id="order-ticket-title">Nueva Comanda</h2>
+        <div className="order-ticket__draft-table-controls">
+          <label>
+            <input
+              type="checkbox"
+              data-testid="draft-takeaway-checkbox"
+              checked={draftIsTakeaway}
+              disabled={isMutating}
+              onChange={(e) => onTakeawayChange(e.target.checked)}
+            />
+            <span>Para llevar</span>
+          </label>
+          {!draftIsTakeaway && (
+            <label>
+              <span>Mesa: </span>
+              <input
+                type="number"
+                min="1"
+                data-testid="draft-table-input"
+                className="order-ticket__table-input"
+                value={draftTableNumber}
+                disabled={isMutating}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onTableNumberChange(val === '' ? '' : Number.parseInt(val, 10) || 1);
+                }}
+              />
+            </label>
+          )}
+          {diningSessionId && (
+            <span className="order-ticket__session">
+              {' '}· Sesión {formatSessionDisplay(diningSessionId)}
+            </span>
+          )}
+        </div>
+      </div>
+      <span className="order-ticket__status" data-status="DRAFT">
+        Borrador
+      </span>
+    </header>
+  );
+}
+
+interface OrderExistingHeaderProps {
+  readonly order: Order;
+  readonly orderId: string;
+  readonly diningSessionId?: string;
+}
+
+function OrderExistingHeader({
+  order,
+  orderId,
+  diningSessionId,
+}: Readonly<OrderExistingHeaderProps>) {
+  const effectiveSession = order.diningSessionId || diningSessionId;
+  const tableOrTakeaway = getTableOrTakeawayLabel(order);
+  const orderNumber = getOrderNumberDisplay(
+    order.orderNumber,
+    order.publicId ?? order.id ?? order.orderId ?? orderId,
+  );
+
+  return (
+    <header className="order-ticket__header">
+      <div>
+        <h2 id="order-ticket-title">Comanda #{orderNumber}</h2>
+        <p>
+          {tableOrTakeaway}
+          {effectiveSession && (
+            <span className="order-ticket__session">
+              {' '}· Sesión {formatSessionDisplay(effectiveSession)}
+            </span>
+          )}
+        </p>
+      </div>
+      <span className="order-ticket__status" data-status={order.status}>
+        {ORDER_STATUS_LABELS[order.status]}
+      </span>
+    </header>
+  );
+}
+
+interface EditableItemRowProps {
+  readonly draft: EditableOrderItem;
+  readonly index: number;
+  readonly isMutating: boolean;
+  readonly canRemove: boolean;
+  readonly onUpdate: (index: number, update: Partial<EditableOrderItem>) => void;
+  readonly onRemove: (index: number) => void;
+}
+
+function EditableItemRow({
+  draft,
+  index,
+  isMutating,
+  canRemove,
+  onUpdate,
+  onRemove,
+}: Readonly<EditableItemRowProps>) {
+  const numericQuantity =
+    typeof draft.quantity === 'number'
+      ? draft.quantity
+      : Number.parseInt(String(draft.quantity), 10) || 0;
+
+  return (
+    <li className="order-ticket__item" key={draft.id ?? draft.itemId ?? `${draft.name}-${index}`}>
+      <div className="order-ticket__item-editor">
+        <strong>{draft.name}</strong>
+        <label htmlFor={`item-qty-${index}`}>
+          Cantidad de {draft.name}
+        </label>
+        <div className="order-ticket__stepper">
+          <button
+            type="button"
+            className="order-ticket__stepper-button"
+            aria-label={`Disminuir cantidad de ${draft.name}`}
+            disabled={numericQuantity <= 1 || isMutating}
+            onClick={() => {
+              if (numericQuantity > 1) {
+                onUpdate(index, { quantity: numericQuantity - 1 });
+              }
+            }}
+          >
+            −
+          </button>
+          <input
+            id={`item-qty-${index}`}
+            type="number"
+            min="1"
+            step="1"
+            className="order-ticket__stepper-input"
+            value={draft.quantity}
+            onChange={(event) => {
+              const val = event.target.value;
+              if (val === '') {
+                onUpdate(index, { quantity: '' });
+              } else {
+                const parsed = Number.parseInt(val, 10);
+                onUpdate(index, {
+                  quantity: Number.isNaN(parsed) ? '' : parsed,
+                });
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="order-ticket__stepper-button"
+            aria-label={`Aumentar cantidad de ${draft.name}`}
+            disabled={isMutating}
+            onClick={() => onUpdate(index, { quantity: numericQuantity + 1 })}
+          >
+            +
+          </button>
+        </div>
+        <label>
+          <span>Modificadores de {draft.name}</span>
+          <input
+            type="text"
+            value={draft.modifiers.join(', ')}
+            onChange={(event) =>
+              onUpdate(index, {
+                modifiers: event.target.value
+                  .split(',')
+                  .map((modifier) => modifier.trim())
+                  .filter(Boolean),
+              })
+            }
+          />
+        </label>
+        <label>
+          <span>Notas de {draft.name}</span>
+          <textarea
+            value={draft.notes}
+            onChange={(event) => onUpdate(index, { notes: event.target.value })}
+          />
+        </label>
+        {canRemove && (
+          <button
+            type="button"
+            className="order-ticket__button-secondary order-ticket__item-remove"
+            onClick={() => onRemove(index)}
+          >
+            Quitar platillo
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+interface ReadOnlyItemRowProps {
+  readonly item: OrderItem;
+  readonly isMutating: boolean;
+  readonly canRedo: boolean;
+  readonly onRedoItem: (item: OrderItem) => void;
+}
+
+function ReadOnlyItemRow({
+  item,
+  isMutating,
+  canRedo,
+  onRedoItem,
+}: Readonly<ReadOnlyItemRowProps>) {
+  const key = item.id ?? item.itemId ?? item.name;
+
+  return (
+    <li className="order-ticket__item" key={key}>
+      <div className="order-ticket__item-title">
+        <strong>
+          {item.quantity} × {item.name}
+        </strong>
+        <span>{ITEM_STATUS_LABELS[item.status]}</span>
+      </div>
+      {item.modifiers && item.modifiers.length > 0 && (
+        <p>Modificadores: {item.modifiers.join(', ')}</p>
+      )}
+      {item.notes && <p>Nota: {item.notes}</p>}
+      {canRedo && item.status === ItemStatus.DELIVERED && (
+        <button
+          type="button"
+          className="order-ticket__button-secondary"
+          aria-label={`Rehacer ${item.name}`}
+          disabled={isMutating}
+          onClick={() => onRedoItem(item)}
+        >
+          Rehacer
+        </button>
+      )}
+    </li>
+  );
+}
+
 interface OrderItemsListProps {
   readonly items: readonly OrderItem[];
   readonly isEditing: boolean;
@@ -308,6 +566,7 @@ interface OrderItemsListProps {
   readonly onUpdateDraftItem: (index: number, update: Partial<EditableOrderItem>) => void;
   readonly onRemoveDraftItem: (index: number) => void;
   readonly onRedoItem: (item: OrderItem) => void;
+  readonly onOpenAddDish: () => void;
 }
 
 function OrderItemsList({
@@ -319,7 +578,44 @@ function OrderItemsList({
   onUpdateDraftItem,
   onRemoveDraftItem,
   onRedoItem,
+  onOpenAddDish,
 }: Readonly<OrderItemsListProps>) {
+  if (isEditing) {
+    return (
+      <div className="order-ticket__items">
+        <h3>Platillos</h3>
+        {draftItems.length === 0 ? (
+          <p>Esta comanda todavía no tiene platillos.</p>
+        ) : (
+          <ul>
+            {draftItems.map((draft, index) => (
+              <EditableItemRow
+                key={draft.id ?? draft.itemId ?? `${draft.name}-${index}`}
+                draft={draft}
+                index={index}
+                isMutating={isMutating}
+                canRemove={draftItems.length > 1}
+                onUpdate={onUpdateDraftItem}
+                onRemove={onRemoveDraftItem}
+              />
+            ))}
+          </ul>
+        )}
+        <div className="order-ticket__add-item-container">
+          <button
+            type="button"
+            className="order-ticket__add-item-btn"
+            data-testid="order-ticket-add-dish-btn"
+            disabled={isMutating}
+            onClick={onOpenAddDish}
+          >
+            + Agregar platillo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <div className="order-ticket__items">
@@ -333,138 +629,21 @@ function OrderItemsList({
     <div className="order-ticket__items">
       <h3>Platillos</h3>
       <ul>
-        {items.map((item, index) => {
-          const key = item.id ?? item.itemId ?? `${item.name}-${index}`;
-          const draft = draftItems[index];
-
-          if (isEditing && draft) {
-            const numericQuantity =
-              typeof draft.quantity === 'number'
-                ? draft.quantity
-                : parseInt(String(draft.quantity), 10) || 0;
-
-            return (
-              <li className="order-ticket__item" key={key}>
-                <div className="order-ticket__item-editor">
-                  <strong>{draft.name}</strong>
-                  <label htmlFor={`item-qty-${index}`}>
-                    Cantidad de {draft.name}
-                  </label>
-                  <div className="order-ticket__stepper">
-                    <button
-                      type="button"
-                      className="order-ticket__stepper-button"
-                      aria-label={`Disminuir cantidad de ${draft.name}`}
-                      disabled={numericQuantity <= 1 || isMutating}
-                      onClick={() => {
-                        if (numericQuantity > 1) {
-                          onUpdateDraftItem(index, { quantity: numericQuantity - 1 });
-                        }
-                      }}
-                    >
-                      −
-                    </button>
-                    <input
-                      id={`item-qty-${index}`}
-                      type="number"
-                      min="1"
-                      step="1"
-                      className="order-ticket__stepper-input"
-                      value={draft.quantity}
-                      onChange={(event) => {
-                        const val = event.target.value;
-                        if (val === '') {
-                          onUpdateDraftItem(index, { quantity: '' });
-                        } else {
-                          const parsed = parseInt(val, 10);
-                          onUpdateDraftItem(index, {
-                            quantity: Number.isNaN(parsed) ? '' : parsed,
-                          });
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="order-ticket__stepper-button"
-                      aria-label={`Aumentar cantidad de ${draft.name}`}
-                      disabled={isMutating}
-                      onClick={() => {
-                        onUpdateDraftItem(index, { quantity: numericQuantity + 1 });
-                      }}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <label>
-                    <span>Modificadores de {draft.name}</span>
-                    <input
-                      type="text"
-                      value={draft.modifiers.join(', ')}
-                      onChange={(event) =>
-                        onUpdateDraftItem(index, {
-                          modifiers: event.target.value
-                            .split(',')
-                            .map((modifier) => modifier.trim())
-                            .filter(Boolean),
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>Notas de {draft.name}</span>
-                    <textarea
-                      value={draft.notes}
-                      onChange={(event) =>
-                        onUpdateDraftItem(index, { notes: event.target.value })
-                      }
-                    />
-                  </label>
-                  {draftItems.length > 1 && (
-                    <button
-                      type="button"
-                      className="order-ticket__button-secondary order-ticket__item-remove"
-                      onClick={() => onRemoveDraftItem(index)}
-                    >
-                      Quitar platillo
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          }
-
-          return (
-            <li className="order-ticket__item" key={key}>
-              <div className="order-ticket__item-title">
-                <strong>
-                  {item.quantity} × {item.name}
-                </strong>
-                <span>{ITEM_STATUS_LABELS[item.status]}</span>
-              </div>
-              {item.modifiers && item.modifiers.length > 0 && (
-                <p>Modificadores: {item.modifiers.join(', ')}</p>
-              )}
-              {item.notes && <p>Nota: {item.notes}</p>}
-              {canRedo && item.status === ItemStatus.DELIVERED && (
-                <button
-                  type="button"
-                  className="order-ticket__button-secondary"
-                  aria-label={`Rehacer ${item.name}`}
-                  disabled={isMutating}
-                  onClick={() => onRedoItem(item)}
-                >
-                  Rehacer
-                </button>
-              )}
-            </li>
-          );
-        })}
+        {items.map((item) => (
+          <ReadOnlyItemRow
+            key={item.id ?? item.itemId ?? item.name}
+            item={item}
+            isMutating={isMutating}
+            canRedo={canRedo}
+            onRedoItem={onRedoItem}
+          />
+        ))}
       </ul>
     </div>
   );
 }
 
-interface OrderTicketActionsProps {
+interface OrderTicketExistingActionsProps {
   readonly isEditing: boolean;
   readonly isMutating: boolean;
   readonly isEditPending: boolean;
@@ -480,7 +659,7 @@ interface OrderTicketActionsProps {
   readonly onDiscardEdits: () => void;
 }
 
-function OrderTicketActions({
+function OrderTicketExistingActions({
   isEditing,
   isMutating,
   isEditPending,
@@ -494,7 +673,7 @@ function OrderTicketActions({
   onStartEditing,
   onSubmitEdits,
   onDiscardEdits,
-}: Readonly<OrderTicketActionsProps>) {
+}: Readonly<OrderTicketExistingActionsProps>) {
   if (isEditing) {
     return (
       <footer className="order-ticket__actions">
@@ -538,50 +717,187 @@ function OrderTicketActions({
   );
 }
 
+interface OrderTicketDraftActionsProps {
+  readonly isMutating: boolean;
+  readonly isCreating: boolean;
+  readonly hasDraftItems: boolean;
+  readonly onConfirmCreate: () => void;
+  readonly onSaveDraft: () => void;
+  readonly onDiscard: () => void;
+}
+
+function OrderTicketDraftActions({
+  isMutating,
+  isCreating,
+  hasDraftItems,
+  onConfirmCreate,
+  onSaveDraft,
+  onDiscard,
+}: Readonly<OrderTicketDraftActionsProps>) {
+  return (
+    <footer className="order-ticket__actions">
+      <button
+        type="button"
+        data-testid="order-ticket-create-confirm-btn"
+        disabled={!hasDraftItems || isMutating}
+        onClick={onConfirmCreate}
+      >
+        {isCreating ? 'Enviando…' : 'Enviar a Cocina'}
+      </button>
+      <button
+        type="button"
+        className="order-ticket__button-secondary"
+        data-testid="order-ticket-create-draft-btn"
+        disabled={!hasDraftItems || isMutating}
+        onClick={onSaveDraft}
+      >
+        Guardar borrador
+      </button>
+      <button
+        type="button"
+        className="order-ticket__button-secondary"
+        data-testid="order-ticket-discard-btn"
+        disabled={isMutating}
+        onClick={onDiscard}
+      >
+        Descartar
+      </button>
+    </footer>
+  );
+}
+
 function OrderTicket({
-  orderId,
+  orderId: initialOrderId,
+  tableNumber: initialTableNumber,
+  isTakeaway: initialIsTakeaway,
   userId,
+  waiterId,
   tokenProvider,
   onCreateNewOrder,
+  onOrderCreated,
+  onOrderSubmitted,
+  onOrderCancelled,
   apiBaseUrl,
   webSocketBaseUrl,
   diningSessionId: propDiningSessionId,
   fetchFn,
   WebSocketClass,
 }: Readonly<OrderTicketWidgetProps>) {
+  const [activeOrderId, setActiveOrderId] = useState<string | undefined>(
+    initialOrderId || undefined,
+  );
+  const isDraftMode = !activeOrderId;
+
+  const [draftTableNumber, setDraftTableNumber] = useState<number | string>(
+    initialTableNumber ?? 1,
+  );
+  const [draftIsTakeaway, setDraftIsTakeaway] = useState<boolean>(
+    Boolean(initialIsTakeaway),
+  );
+  const [isEditing, setIsEditing] = useState(isDraftMode);
+  const [draftItems, setDraftItems] = useState<EditableOrderItem[]>([]);
+  const [selectedRedoItem, setSelectedRedoItem] = useState<OrderItem | null>(null);
+  const [isAddDishOpen, setIsAddDishOpen] = useState(false);
+  const [selectedDishForDialog, setSelectedDishForDialog] = useState<SelectedDishInfo | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const actionLock = useRef(false);
+
   const client = useQueryClient();
   const api = useMemo(
     () => createApiClient({ baseUrl: apiBaseUrl, tokenProvider, fetchFn }),
     [apiBaseUrl, tokenProvider, fetchFn],
   );
-  const queryKey = useMemo(() => [...ORDER_QUERY_PREFIX, orderId], [orderId]);
-  const channels = useMemo(() => ['floor', `user:${userId}`], [userId]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [draftItems, setDraftItems] = useState<EditableOrderItem[]>([]);
-  const [selectedRedoItem, setSelectedRedoItem] = useState<OrderItem | null>(null);
-  const actionLock = useRef(false);
+
+  const queryKey = useMemo(
+    () => [...ORDER_QUERY_PREFIX, activeOrderId ?? 'draft'],
+    [activeOrderId],
+  );
+  const effectiveUserId = userId || waiterId || 'waiter-default';
+  const channels = useMemo(
+    () => ['floor', `user:${effectiveUserId}`],
+    [effectiveUserId],
+  );
 
   const orderQuery = useQuery({
     queryKey,
     queryFn: () =>
       api.get<Order>(
-        `/orders/${encodeURIComponent(orderId)}`,
+        `/orders/${encodeURIComponent(activeOrderId!)}`,
         OrderSchema,
       ),
+    enabled: Boolean(activeOrderId),
   });
+
+  const order = orderQuery.data;
+
+  // Listen to external fmat:comanda:add-item and fmat:comanda:open-add-dialog DOM events
+  useEffect(() => {
+    const handleAddItemEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<AddItemEventDetail>;
+      const detail = customEvent.detail;
+      if (!detail?.name) return;
+
+      const newItem: EditableOrderItem = {
+        dishId: detail.dishId,
+        itemId: detail.itemId,
+        name: detail.name,
+        quantity:
+          typeof detail.quantity === 'number' && detail.quantity > 0
+            ? detail.quantity
+            : 1,
+        modifiers: Array.isArray(detail.modifiers) ? detail.modifiers : [],
+        notes: typeof detail.notes === 'string' ? detail.notes : '',
+      };
+
+      setDraftItems((prevItems) => {
+        let base = prevItems;
+        if (!isEditing && order) {
+          base = toEditableItems(order.items);
+        }
+        return mergeDraftItem(base, newItem);
+      });
+      setIsEditing(true);
+    };
+
+    const handleOpenAddDialogEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<SelectedDishInfo>;
+      const detail = customEvent.detail;
+      if (!detail?.name) return;
+
+      setSelectedDishForDialog({
+        dishId: detail.dishId,
+        itemId: detail.itemId,
+        name: detail.name,
+        unitPrice: detail.unitPrice,
+      });
+      setIsAddDishOpen(true);
+    };
+
+    window.addEventListener('fmat:comanda:add-item', handleAddItemEvent);
+    window.addEventListener('fmat:comanda:open-add-dialog', handleOpenAddDialogEvent);
+    return () => {
+      window.removeEventListener('fmat:comanda:add-item', handleAddItemEvent);
+      window.removeEventListener('fmat:comanda:open-add-dialog', handleOpenAddDialogEvent);
+    };
+  }, [isEditing, order]);
 
   const confirmMutation = useMutation({
     mutationFn: () =>
       api.post<Order>(
-        `/orders/${encodeURIComponent(orderId)}/confirm`,
+        `/orders/${encodeURIComponent(activeOrderId!)}/confirm`,
         undefined,
         OrderSchema,
       ),
-    onSuccess: (order) => {
+    onSuccess: (updated) => {
       client.setQueryData<Order>(queryKey, {
-        ...order,
-        awaitingStockConfirmation: order.status === OrderStatus.CREATED,
+        ...updated,
+        awaitingStockConfirmation: updated.status === OrderStatus.CREATED,
       });
+      if (activeOrderId) {
+        onOrderSubmitted?.(activeOrderId);
+      }
     },
     onSettled: () => {
       actionLock.current = false;
@@ -591,11 +907,14 @@ function OrderTicket({
   const cancelMutation = useMutation({
     mutationFn: () =>
       api.patch<Order>(
-        `/orders/${encodeURIComponent(orderId)}/cancel`,
+        `/orders/${encodeURIComponent(activeOrderId!)}/cancel`,
         undefined,
         OrderSchema,
       ),
-    onSuccess: (order) => client.setQueryData(queryKey, order),
+    onSuccess: (updated) => {
+      client.setQueryData(queryKey, updated);
+      onOrderCancelled?.();
+    },
     onSettled: () => {
       actionLock.current = false;
     },
@@ -604,7 +923,7 @@ function OrderTicket({
   const redoMutation = useMutation({
     mutationFn: ({ itemId, note }: { itemId: string; note: string }) =>
       api.patch<Order>(
-        `/orders/${encodeURIComponent(orderId)}/items/${encodeURIComponent(itemId)}/redo`,
+        `/orders/${encodeURIComponent(activeOrderId!)}/items/${encodeURIComponent(itemId)}/redo`,
         { note },
         OrderSchema,
       ),
@@ -613,7 +932,7 @@ function OrderTicket({
       client.setQueriesData<Order[]>(
         { queryKey: ['kds', 'queue'] },
         (cachedOrders) =>
-          updateKdsQueueWithRedoItem(cachedOrders, updatedOrder, itemId, orderId),
+          updateKdsQueueWithRedoItem(cachedOrders, updatedOrder, itemId, activeOrderId!),
       );
       setSelectedRedoItem(null);
     },
@@ -625,22 +944,25 @@ function OrderTicket({
   const editMutation = useMutation({
     mutationFn: () =>
       api.patch<Order>(
-        `/orders/${encodeURIComponent(orderId)}/items`,
+        `/orders/${encodeURIComponent(activeOrderId!)}/items`,
         {
           items: draftItems.map((item) => ({
             id: item.id,
             itemId: item.itemId,
             dishId: item.dishId ?? undefined,
             name: item.name,
-            quantity: typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 1,
+            quantity:
+              typeof item.quantity === 'number'
+                ? item.quantity
+                : Number(item.quantity) || 1,
             modifiers: item.modifiers,
             notes: item.notes,
           })),
         },
         OrderSchema,
       ),
-    onSuccess: (order) => {
-      client.setQueryData(queryKey, order);
+    onSuccess: (updated) => {
+      client.setQueryData(queryKey, updated);
       setIsEditing(false);
     },
     onSettled: () => {
@@ -649,7 +971,7 @@ function OrderTicket({
   });
 
   const handleOrderStatusChanged = (event: OrderStatusChangedEvent) => {
-    if (event.orderId !== orderId) {
+    if (!activeOrderId || event.orderId !== activeOrderId) {
       return;
     }
 
@@ -687,7 +1009,9 @@ function OrderTicket({
     confirmMutation.isPending ||
     cancelMutation.isPending ||
     editMutation.isPending ||
-    redoMutation.isPending;
+    redoMutation.isPending ||
+    isCreating;
+
   const runMutation = (action: () => void) => {
     if (actionLock.current || isMutating) {
       return;
@@ -695,54 +1019,6 @@ function OrderTicket({
     actionLock.current = true;
     action();
   };
-
-  if (orderQuery.isPending) {
-    return (
-      <section className="order-ticket" aria-busy="true">
-        <output>Cargando comanda…</output>
-      </section>
-    );
-  }
-
-  if (orderQuery.isError) {
-    return (
-      <section className="order-ticket">
-        <p className="order-ticket__error" role="alert">
-          {getDisplayError(orderQuery.error)}
-        </p>
-        <button type="button" onClick={() => void orderQuery.refetch()}>
-          Reintentar
-        </button>
-      </section>
-    );
-  }
-
-  const order = orderQuery.data;
-  const isCreated = order.status === OrderStatus.CREATED;
-  const isReserved = order.status === OrderStatus.RESERVED;
-  const isRejected = order.status === OrderStatus.REJECTED;
-
-  // "Cancelar" activo en CREATED (incluso confirmada), en RESERVED y en REJECTED (DoD)
-  const canCancel = isCreated || isReserved || isRejected;
-
-  // "Modificar" habilitado en CREATED sin confirmedAt, y en REJECTED (DoD / ADR-0016)
-  const canEdit = (isCreated && !order.confirmedAt) || isRejected;
-
-  // "Confirmar" habilitado en CREATED sin confirmedAt
-  const canConfirm = isCreated && !order.confirmedAt;
-
-  const rejectionDetailsParsed = parseRejectionDetails(order.rejectionDetails);
-  const alertMessage = getOrderAlert(order.status);
-  const connectionMessage = getRealtimeStatusMessage(
-    WEBSOCKET_STATUS_TRANSLATIONS[connectionStatus],
-  );
-
-  const effectiveDiningSessionId = order.diningSessionId || propDiningSessionId;
-  const tableOrTakeawayLabel = getTableOrTakeawayLabel(order);
-  const orderNumberDisplay = getOrderNumberDisplay(
-    order.orderNumber,
-    order.publicId ?? order.id ?? order.orderId ?? orderId,
-  );
 
   const updateDraftItem = (
     index: number,
@@ -759,19 +1035,41 @@ function OrderTicket({
     setDraftItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
   };
 
+  const handleAddDish = (dish: NewDishData) => {
+    const newItem: EditableOrderItem = {
+      dishId: dish.dishId,
+      itemId: dish.itemId,
+      name: dish.name,
+      quantity: dish.quantity,
+      modifiers: dish.modifiers,
+      notes: dish.notes,
+    };
+    setDraftItems((prev) => {
+      let base = prev;
+      if (!isEditing && order) {
+        base = toEditableItems(order.items);
+      }
+      return mergeDraftItem(base, newItem);
+    });
+    setIsEditing(true);
+    setSelectedDishForDialog(null);
+  };
+
   const startEditing = () => {
-    setDraftItems(toEditableItems(order.items));
+    if (order) {
+      setDraftItems(toEditableItems(order.items));
+    }
     setIsEditing(true);
   };
 
-  const hasInvalidQuantities =
-    draftItems.length === 0 ||
-    draftItems.some(
-      (item) =>
-        typeof item.quantity !== 'number' ||
-        !Number.isInteger(item.quantity) ||
-        item.quantity < 1,
-    );
+  const hasQuantityFormatErrors = draftItems.some(
+    (item) =>
+      typeof item.quantity !== 'number' ||
+      !Number.isInteger(item.quantity) ||
+      item.quantity < 1,
+  );
+
+  const hasInvalidQuantities = draftItems.length === 0 || hasQuantityFormatErrors;
 
   const submitEdits = () => {
     if (hasInvalidQuantities) {
@@ -792,26 +1090,145 @@ function OrderTicket({
     await redoMutation.mutateAsync({ itemId, note });
   };
 
+  const effectiveDiningSessionId = order?.diningSessionId || propDiningSessionId;
+
+  const handleCreateOrder = async (confirm: boolean) => {
+    if (hasInvalidQuantities || actionLock.current || isMutating || isCreating) {
+      return;
+    }
+    actionLock.current = true;
+    setIsCreating(true);
+    setCreateError(null);
+
+    try {
+      const tableNum = parseTableNumber(draftIsTakeaway, draftTableNumber);
+
+      const created = await api.post<Order>(
+        '/orders',
+        {
+          tableNumber: tableNum,
+          isTakeaway: draftIsTakeaway,
+          diningSessionId: effectiveDiningSessionId,
+        },
+        OrderSchema,
+      );
+
+      const createdId = created.id ?? created.orderId ?? created.publicId;
+      if (!createdId) {
+        throw new Error('No se pudo obtener el identificador de la comanda creada.');
+      }
+
+      const withItems = await api.patch<Order>(
+        `/orders/${encodeURIComponent(createdId)}/items`,
+        {
+          items: draftItems.map((item) => ({
+            id: item.id,
+            itemId: item.itemId,
+            dishId: item.dishId ?? undefined,
+            name: item.name,
+            quantity:
+              typeof item.quantity === 'number'
+                ? item.quantity
+                : Number(item.quantity) || 1,
+            modifiers: item.modifiers,
+            notes: item.notes,
+          })),
+        },
+        OrderSchema,
+      );
+
+      let finalOrder = withItems;
+      if (confirm) {
+        finalOrder = await api.post<Order>(
+          `/orders/${encodeURIComponent(createdId)}/confirm`,
+          undefined,
+          OrderSchema,
+        );
+      }
+
+      setActiveOrderId(createdId);
+      setIsEditing(false);
+      client.setQueryData([...ORDER_QUERY_PREFIX, createdId], {
+        ...finalOrder,
+        awaitingStockConfirmation:
+          confirm && finalOrder.status === OrderStatus.CREATED,
+      });
+      onOrderCreated?.(finalOrder);
+      if (confirm) {
+        onOrderSubmitted?.(createdId);
+      }
+    } catch (err) {
+      setCreateError(getDisplayError(err));
+    } finally {
+      actionLock.current = false;
+      setIsCreating(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    if (isDraftMode) {
+      setDraftItems([]);
+      onCreateNewOrder?.();
+    } else {
+      setIsEditing(false);
+    }
+  };
+
+  if (activeOrderId && orderQuery.isPending) {
+    return (
+      <section className="order-ticket" aria-busy="true">
+        <output>Cargando comanda…</output>
+      </section>
+    );
+  }
+
+  if (activeOrderId && orderQuery.isError) {
+    return (
+      <section className="order-ticket">
+        <p className="order-ticket__error" role="alert">
+          {getDisplayError(orderQuery.error)}
+        </p>
+        <button type="button" onClick={() => void orderQuery.refetch()}>
+          Reintentar
+        </button>
+      </section>
+    );
+  }
+
+  const isCreated = order?.status === OrderStatus.CREATED;
+  const isReserved = order?.status === OrderStatus.RESERVED;
+  const isRejected = order?.status === OrderStatus.REJECTED;
+
+  const canCancel = Boolean(isCreated || isReserved || isRejected);
+  const canEdit = Boolean((isCreated && !order?.confirmedAt) || isRejected);
+  const canConfirm = Boolean(isCreated && !order?.confirmedAt);
+
+  const rejectionDetailsParsed = order ? parseRejectionDetails(order.rejectionDetails) : null;
+  const alertMessage = order ? getOrderAlert(order.status) : '';
+  const connectionMessage = getRealtimeStatusMessage(
+    WEBSOCKET_STATUS_TRANSLATIONS[connectionStatus],
+  );
+
   return (
     <section className="order-ticket" aria-labelledby="order-ticket-title">
-      <header className="order-ticket__header">
-        <div>
-          <h2 id="order-ticket-title">Comanda #{orderNumberDisplay}</h2>
-          <p>
-            {tableOrTakeawayLabel}
-            {effectiveDiningSessionId && (
-              <span className="order-ticket__session">
-                {' '}· Sesión {formatSessionDisplay(effectiveDiningSessionId)}
-              </span>
-            )}
-          </p>
-        </div>
-        <span className="order-ticket__status" data-status={order.status}>
-          {ORDER_STATUS_LABELS[order.status]}
-        </span>
-      </header>
+      {order && activeOrderId ? (
+        <OrderExistingHeader
+          order={order}
+          orderId={activeOrderId}
+          diningSessionId={propDiningSessionId}
+        />
+      ) : (
+        <OrderDraftHeader
+          draftTableNumber={draftTableNumber}
+          draftIsTakeaway={draftIsTakeaway}
+          isMutating={isMutating}
+          diningSessionId={effectiveDiningSessionId}
+          onTableNumberChange={setDraftTableNumber}
+          onTakeawayChange={setDraftIsTakeaway}
+        />
+      )}
 
-      {order.awaitingStockConfirmation && (
+      {order?.awaitingStockConfirmation && (
         <output className="order-ticket__stock-status">
           Pendiente de confirmación de inventario
         </output>
@@ -824,7 +1241,7 @@ function OrderTicket({
       {alertMessage && (
         <div className="order-ticket__alert" role="status" aria-live="assertive">
           <p>{alertMessage}</p>
-          {order.status === OrderStatus.EXPIRED && (
+          {order?.status === OrderStatus.EXPIRED && (
             <button type="button" onClick={onCreateNewOrder}>
               Crear una nueva comanda
             </button>
@@ -832,21 +1249,27 @@ function OrderTicket({
         </div>
       )}
 
-      {isRejected && rejectionDetailsParsed && (
+      {isRejected && rejectionDetailsParsed && order && (
         <RejectionBreakdown details={rejectionDetailsParsed} orderItems={order.items} />
       )}
 
       <OrderItemsList
-        items={order.items}
+        items={order?.items ?? []}
         isEditing={isEditing}
         isMutating={isMutating}
-        canRedo={order.status === OrderStatus.DELIVERED}
+        canRedo={order?.status === OrderStatus.DELIVERED}
         draftItems={draftItems}
         onUpdateDraftItem={updateDraftItem}
         onRemoveDraftItem={removeDraftItem}
         onRedoItem={setSelectedRedoItem}
+        onOpenAddDish={() => setIsAddDishOpen(true)}
       />
 
+      {createError && (
+        <p className="order-ticket__error" role="alert">
+          {createError}
+        </p>
+      )}
       {confirmMutation.isError && (
         <p className="order-ticket__error" role="alert">
           {getDisplayError(confirmMutation.error)}
@@ -862,27 +1285,39 @@ function OrderTicket({
           {getDisplayError(editMutation.error)}
         </p>
       )}
-      {isEditing && hasInvalidQuantities && (
+      {isEditing && hasQuantityFormatErrors && (
         <p className="order-ticket__error" role="alert">
-          La cantidad de cada platillo debe ser un entero mayor que cero y debe haber al menos un platillo.
+          La cantidad de cada platillo debe ser un entero mayor que cero.
         </p>
       )}
 
-      <OrderTicketActions
-        isEditing={isEditing}
-        isMutating={isMutating}
-        isEditPending={editMutation.isPending}
-        isConfirmPending={confirmMutation.isPending}
-        isCancelPending={cancelMutation.isPending}
-        canConfirm={canConfirm}
-        canCancel={canCancel}
-        canEdit={canEdit}
-        onConfirm={() => runMutation(() => confirmMutation.mutate())}
-        onCancel={() => runMutation(() => cancelMutation.mutate())}
-        onStartEditing={startEditing}
-        onSubmitEdits={submitEdits}
-        onDiscardEdits={() => setIsEditing(false)}
-      />
+      {isDraftMode ? (
+        <OrderTicketDraftActions
+          isMutating={isMutating}
+          isCreating={isCreating}
+          hasDraftItems={draftItems.length > 0 && !hasQuantityFormatErrors}
+          onConfirmCreate={() => handleCreateOrder(true)}
+          onSaveDraft={() => handleCreateOrder(false)}
+          onDiscard={handleDiscard}
+        />
+      ) : (
+        <OrderTicketExistingActions
+          isEditing={isEditing}
+          isMutating={isMutating}
+          isEditPending={editMutation.isPending}
+          isConfirmPending={confirmMutation.isPending}
+          isCancelPending={cancelMutation.isPending}
+          canConfirm={canConfirm}
+          canCancel={canCancel}
+          canEdit={canEdit}
+          onConfirm={() => runMutation(() => confirmMutation.mutate())}
+          onCancel={() => runMutation(() => cancelMutation.mutate())}
+          onStartEditing={startEditing}
+          onSubmitEdits={submitEdits}
+          onDiscardEdits={handleDiscard}
+        />
+      )}
+
       {selectedRedoItem && (
         <RedoItemDialog
           itemName={selectedRedoItem.name}
@@ -893,6 +1328,17 @@ function OrderTicket({
           onSubmit={(note) => submitRedo(selectedRedoItem, note)}
         />
       )}
+
+      <AddDishDialog
+        isOpen={isAddDishOpen}
+        isPending={isMutating}
+        dish={selectedDishForDialog}
+        onClose={() => {
+          setIsAddDishOpen(false);
+          setSelectedDishForDialog(null);
+        }}
+        onAdd={handleAddDish}
+      />
     </section>
   );
 }
@@ -901,7 +1347,7 @@ export default function OrderTicketWidget(props: Readonly<OrderTicketWidgetProps
   return (
     <div className="orders-kds-root">
       <QueryClientProvider client={queryClient}>
-        <OrderTicket key={props.orderId} {...props} />
+        <OrderTicket key={props.orderId ?? 'draft'} {...props} />
       </QueryClientProvider>
     </div>
   );
