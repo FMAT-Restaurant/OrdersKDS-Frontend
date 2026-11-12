@@ -162,5 +162,74 @@ El Shell (`Auth-Frontend`) le pasa a `<App />` las siguientes props al montarlo,
      - `x-user-permissions`: Permisos separados por comas (ej. `menu:view,menu:dishes:manage` o `*`)
    - Asegúrate de que el Backend escuche en el puerto interno indicado en la tabla y autorice los endpoints leyendo `x-user-permissions` (o el `Bearer` token si se prueba directo sin Gateway).
 
+---
+
+### 4. Instrucciones Especiales para el Módulo de Menú (`menu_app`): Integración con la Comanda (`orders_app`)
+
+Si este repositorio es **`Menu-Frontend`**, debe permitir a los meseros enviar platillos directamente hacia el componente **`OrderTicketWidget`** (microfrontend de Órdenes y Cocina) mediante eventos desacoplados en el navegador:
+
+1. **En `src/features/offers/OfferCard.tsx`:**
+   Agregar el botón "+ Agregar a comanda" en cada tarjeta de platillo activo para emitir el evento `fmat:comanda:open-add-dialog`:
+   ```tsx
+   const customerDishName =
+     offer.presentationTag && offer.presentationTag !== "Sin etiqueta de presentación"
+       ? `${offer.entryName} (${offer.presentationTag})`
+       : offer.entryName;
+
+   const handleAddToComanda = () => {
+     window.dispatchEvent(
+       new CustomEvent("fmat:comanda:open-add-dialog", {
+         detail: {
+           dishId: offer.id,
+           name: customerDishName,
+           unitPrice: offer.basePrice,
+         },
+       })
+     );
+   };
+
+   // Dentro del renderizado de la tarjeta:
+   {active && (
+     <div className="offer-card__order-action">
+       <button
+         type="button"
+         className="button button--primary offer-card__add-to-order-btn"
+         data-testid={`offer-add-to-order-${offer.id}`}
+         onClick={(e) => {
+           e.preventDefault();
+           e.stopPropagation();
+           handleAddToComanda();
+         }}
+         aria-label={`Agregar ${customerDishName} a la comanda`}
+       >
+         + Agregar a comanda
+       </button>
+     </div>
+   )}
+   ```
+
+2. **En `src/features/offers/styles.css`:**
+   Agregar los estilos para el botón de acción:
+   ```css
+   :where(.menu-module[data-menu-module]) .offer-card__order-action {
+     padding: 8px 12px;
+     background: var(--surface);
+     border-bottom: 1px solid var(--border);
+   }
+
+   :where(.menu-module[data-menu-module]) .offer-card__add-to-order-btn {
+     width: 100%;
+     font-weight: 700;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     gap: 6px;
+   }
+   ```
+
+3. **Eventos soportados por `OrderTicketWidget`:**
+   - `fmat:comanda:open-add-dialog`: Abre el modal en el widget con nombre y precio precargados en solo lectura para seleccionar cantidad, notas y modificadores (`{ dishId, name, unitPrice }`).
+   - `fmat:comanda:add-item`: Suma el platillo directamente al borrador de la comanda sin abrir el modal (`{ dishId, name, unitPrice, quantity?, notes? }`).
+
 Por favor, aplica todos estos cambios, verifica que `npm run build` genere correctamente `dist/assets/remoteEntry.js` sin errores de TypeScript, y muéstrame un resumen de los archivos modificados.
 ````

@@ -8,11 +8,12 @@ import {
   type ApiClient as ApiClientType,
 } from '../../shared/api/client.ts';
 import { queryClient as defaultQueryClient } from '../../shared/api/queryClient.ts';
-import type { Order } from '../../shared/api/schemas.ts';
+import type { Order, OrderItem } from '../../shared/api/schemas.ts';
 import type { TokenProvider, UserRole } from '../../shared/types/auth.ts';
+import { ItemStatus, OrderStatus } from '../../shared/types/order.ts';
 import { OrderCard, type PendingUndoItem } from './OrderCard.tsx';
 import { StationSelector } from './StationSelector.tsx';
-import { type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
+import { type KdsTabType, type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 import { pointerAction } from './pointerAction.ts';
 import { getItemKey, getOrderKey, getOrderNumberDisplay } from './orderNumberDisplay.ts';
 import { AdminVoidDialog } from './dialogs/AdminVoidDialog.tsx';
@@ -25,20 +26,157 @@ import {
   registerGracePeriodCountdown,
 } from './kdsGracePeriod.ts';
 
+const BASE_TAB_CLASS =
+  'min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98]';
+
+function isRedoOrder(order: Order): boolean {
+  return (
+    order.status === OrderStatus.DELIVERED &&
+    order.items.some((item) => item.status === ItemStatus.PENDING)
+  );
+}
+
+function matchesKdsTab(order: Order, currentTab: KdsTabType): boolean {
+  if (currentTab === 'pending') {
+    return order.status === OrderStatus.RESERVED;
+  }
+  if (currentTab === 'in_preparation') {
+    return order.status === OrderStatus.IN_PREPARATION;
+  }
+  if (currentTab === 'redo') {
+    return isRedoOrder(order);
+  }
+  if (currentTab === 'delivered') {
+    return order.status === OrderStatus.DELIVERED;
+  }
+  // 'active' (default / backward-compatible queue view)
+  return order.status !== OrderStatus.DELIVERED || isRedoOrder(order);
+}
+
+function getRedoTabClass(isSelected: boolean, count: number): string {
+  if (count > 0) {
+    if (isSelected) {
+      return `${BASE_TAB_CLASS} bg-red-700 text-white shadow-md border border-red-800 ring-2 ring-red-400 font-extrabold`;
+    }
+    return `${BASE_TAB_CLASS} bg-red-600 hover:bg-red-700 text-white border border-red-700 shadow-lg animate-pulse font-extrabold`;
+  }
+  if (isSelected) {
+    return `${BASE_TAB_CLASS} bg-fmat-primary text-white shadow-md border border-fmat-primary`;
+  }
+  return `${BASE_TAB_CLASS} bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md`;
+}
+
 export interface KdsBoardProps {
   readonly client?: ApiClientType;
   readonly tokenProvider?: TokenProvider;
   readonly userRole?: UserRole;
   readonly queryClient?: QueryClient;
   readonly pageSize?: number;
-  readonly initialView?: KdsViewType;
+  readonly initialView?: KdsTabType;
   readonly initialStation?: string;
   readonly onOrderSelect?: (order: Order) => void;
   readonly onStartPreparation?: (order: Order) => void;
   readonly onRejectSupplies?: (order: Order) => void;
-  readonly onAdminVoid?: (order: Order) => void;
+  readonly onAdminVoid?: (
+    order: Order,
+    options?: { reason?: string; chargeCustomer?: boolean },
+  ) => void;
   readonly onChefVoid?: (order: Order, note: string) => void;
   readonly undoGracePeriodMs?: number;
+}
+
+type RunActionFn = (
+  key: string,
+  path: string,
+  body?: unknown,
+  successMsg?: { text: string; type: 'success' | 'info' },
+) => Promise<void>;
+
+async function performAdminVoid(
+  order: Order,
+  options: { reason?: string; chargeCustomer?: boolean } | undefined,
+  onAdminVoid:
+    | ((order: Order, options?: { reason?: string; chargeCustomer?: boolean }) => void)
+    | undefined,
+  runAction: RunActionFn,
+): Promise<void> {
+  const orderId = getOrderKey(order);
+  if (!orderId) return;
+
+  if (onAdminVoid) {
+    if (options?.reason != null || options?.chargeCustomer === false) {
+      onAdminVoid(order, options);
+    } else {
+      onAdminVoid(order);
+    }
+    return;
+  }
+
+  const chargeCustomer = options?.chargeCustomer ?? true;
+  const body =
+    options?.reason != null || !chargeCustomer
+      ? { reason: options?.reason, chargeCustomer }
+      : undefined;
+  const chargeText = chargeCustomer ? 'con cargo al cliente' : 'sin cargo al cliente';
+  await runAction('void-admin', `/orders/${orderId}/void`, body, {
+    text: `Comanda #${order.orderNumber ?? orderId} anulada por administración (${chargeText}).`,
+    type: 'info',
+  });
+}
+
+async function performChefVoid(
+  order: Order,
+  note: string,
+  onChefVoid: ((order: Order, note: string) => void) | undefined,
+  runAction: RunActionFn,
+): Promise<void> {
+  const orderId = getOrderKey(order);
+  if (!orderId) return;
+
+  if (onChefVoid) {
+    onChefVoid(order, note);
+    return;
+  }
+
+  await runAction(
+    'void-kitchen',
+    `/orders/${orderId}/void-kitchen-error`,
+    { note },
+    {
+      text: `Comanda #${order.orderNumber ?? orderId} anulada por error de cocina.`,
+      type: 'info',
+    },
+  );
+}
+
+function resolveRejectTargetItemId(order: Order, targetItem?: OrderItem | null): string {
+  const itemToReject =
+    targetItem ??
+    order.items.find((i) => i.status === 'PENDING') ??
+    order.items[0];
+  return itemToReject ? getItemKey(itemToReject) : '';
+}
+
+function extractAvailableStations(data: Order[] | undefined): string[] {
+  const extracted = new Set<string>();
+  extracted.add('general');
+  if (data) {
+    for (const order of data) {
+      for (const item of order.items) {
+        if (item.station) {
+          const normalized = item.station.trim().toLowerCase();
+          if (normalized) {
+            extracted.add(normalized);
+          }
+        }
+      }
+    }
+  }
+  const allList = Array.from(extracted);
+  const sortedStations = allList
+    .filter((s) => s !== 'general')
+    .sort((a, b) => a.localeCompare(b));
+  return ['general', ...sortedStations];
 }
 
 function KdsBoardContent({
@@ -55,7 +193,7 @@ function KdsBoardContent({
   onChefVoid,
   undoGracePeriodMs = 15000,
 }: Readonly<Omit<KdsBoardProps, 'queryClient'>>) {
-  const [view, setView] = useState<KdsViewType>(initialView);
+  const [tab, setTab] = useState<KdsTabType>(initialView);
   const [selectedStation, setSelectedStation] = useState<string>(initialStation);
   const [page, setPage] = useState<number>(1);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -85,11 +223,35 @@ function KdsBoardContent({
   }, [feedbackMessage]);
 
   // Consume GET /kds/queue?view=active | delivered
+  const backendView: KdsViewType = tab === 'delivered' ? 'delivered' : 'active';
   const { data, isLoading, isError, error } = useKdsQueue({
-    view,
+    view: backendView,
     client,
     tokenProvider,
   });
+
+  // Cached active queue data for badges (redo priority alert, pending, in_preparation)
+  const activeQueueData = useMemo(() => {
+    if (tab === 'delivered') {
+      return queryClient.getQueryData<Order[]>(['kds', 'queue', 'active']) ?? [];
+    }
+    return data ?? [];
+  }, [tab, data, queryClient]);
+
+  const redoCount = useMemo(
+    () => activeQueueData.filter((o) => isRedoOrder(o)).length,
+    [activeQueueData],
+  );
+
+  const pendingCount = useMemo(
+    () => activeQueueData.filter((o) => o.status === OrderStatus.RESERVED).length,
+    [activeQueueData],
+  );
+
+  const inPrepCount = useMemo(
+    () => activeQueueData.filter((o) => o.status === OrderStatus.IN_PREPARATION).length,
+    [activeQueueData],
+  );
 
   const [voidDialogOrder, setVoidDialogOrder] = useState<Order | null>(null);
   const [voidDialogType, setVoidDialogType] = useState<'admin' | 'chef' | null>(null);
@@ -155,44 +317,22 @@ function KdsBoardContent({
   }, []);
 
   const handleAdminVoidConfirm = useCallback(
-    async (order: Order) => {
-      const orderId = getOrderKey(order);
-      if (orderId) {
-        if (onAdminVoid) {
-          onAdminVoid(order);
-        } else {
-          await runAction('void-admin', `/orders/${orderId}/void`, undefined, {
-            text: `Comanda #${order.orderNumber ?? orderId} anulada por administración.`,
-            type: 'info',
-          });
-        }
-        setVoidDialogOrder(null);
-        setVoidDialogType(null);
-      }
+    async (
+      order: Order,
+      options?: { reason?: string; chargeCustomer?: boolean },
+    ) => {
+      await performAdminVoid(order, options, onAdminVoid, runAction);
+      setVoidDialogOrder(null);
+      setVoidDialogType(null);
     },
     [onAdminVoid, runAction],
   );
 
   const handleChefVoidConfirm = useCallback(
     async (order: Order, note: string) => {
-      const orderId = getOrderKey(order);
-      if (orderId) {
-        if (onChefVoid) {
-          onChefVoid(order, note);
-        } else {
-          await runAction(
-            'void-kitchen',
-            `/orders/${orderId}/void-kitchen-error`,
-            { note },
-            {
-              text: `Comanda #${order.orderNumber ?? orderId} anulada por error de cocina.`,
-              type: 'info',
-            },
-          );
-        }
-        setVoidDialogOrder(null);
-        setVoidDialogType(null);
-      }
+      await performChefVoid(order, note, onChefVoid, runAction);
+      setVoidDialogOrder(null);
+      setVoidDialogType(null);
     },
     [onChefVoid, runAction],
   );
@@ -210,13 +350,15 @@ function KdsBoardContent({
     [runAction],
   );
 
-  const [confirmRejectTarget, setConfirmRejectTarget] = useState<Order | null>(null);
+  const [confirmRejectTarget, setConfirmRejectTarget] = useState<{
+    order: Order;
+    item?: OrderItem | null;
+  } | null>(null);
 
   const executeRejectSupplies = useCallback(
-    (order: Order) => {
+    (order: Order, targetItem?: OrderItem | null) => {
       const orderId = getOrderKey(order);
-      const firstItem = order.items[0];
-      const itemId = firstItem ? getItemKey(firstItem) : '';
+      const itemId = resolveRejectTargetItemId(order, targetItem);
       if (orderId && itemId) {
         void runAction(
           'reject',
@@ -235,11 +377,11 @@ function KdsBoardContent({
   );
 
   const handleRejectClick = useCallback(
-    (order: Order) => {
+    (order: Order, item?: OrderItem | null) => {
       if (onRejectSupplies) {
         onRejectSupplies(order);
       } else {
-        setConfirmRejectTarget(order);
+        setConfirmRejectTarget({ order, item });
       }
     },
     [onRejectSupplies],
@@ -247,9 +389,9 @@ function KdsBoardContent({
 
   const handleConfirmRejectDialog = useCallback(() => {
     if (!confirmRejectTarget) return;
-    const order = confirmRejectTarget;
+    const { order, item } = confirmRejectTarget;
     setConfirmRejectTarget(null);
-    executeRejectSupplies(order);
+    executeRejectSupplies(order, item);
   }, [confirmRejectTarget, executeRejectSupplies]);
 
   const [confirmReadyTarget, setConfirmReadyTarget] = useState<{
@@ -529,45 +671,33 @@ function KdsBoardContent({
   }, [confirmReadyTarget]);
 
   // Dynamically derive available stations from current queue items, always including static "general"
-  const availableStations = useMemo<string[]>(() => {
-    const extracted = new Set<string>();
-    extracted.add('general');
-    if (data) {
-      for (const order of data) {
-        for (const item of order.items) {
-          if (item.station) {
-            const normalized = item.station.trim().toLowerCase();
-            if (normalized) {
-              extracted.add(normalized);
-            }
-          }
-        }
-      }
-    }
-    const allList = Array.from(extracted);
-    const sortedStations = allList
-      .filter((s) => s !== 'general')
-      .sort((a, b) => a.localeCompare(b));
-    return ['general', ...sortedStations];
-  }, [data]);
+  const availableStations = useMemo<string[]>(
+    () => extractAvailableStations(data),
+    [data],
+  );
 
   // Derive effective station: fallback to 'general' if selected station is not in queue
   const effectiveStation = availableStations.includes(selectedStation.toLowerCase())
     ? selectedStation
     : 'general';
 
+  // Filter orders by active sub-tab (Punto 2)
+  const tabOrders = useMemo<Order[]>(() => {
+    if (!data) return [];
+    return data.filter((order) => matchesKdsTab(order, tab));
+  }, [data, tab]);
+
   // Filter orders by station locally (OP-09, RF-08)
   const filteredOrders = useMemo<Order[]>(() => {
-    if (!data) return [];
     if (effectiveStation.toLowerCase() === 'general') {
-      return data;
+      return tabOrders;
     }
-    return data.filter((order) =>
+    return tabOrders.filter((order) =>
       order.items.some(
         (item) => item.station?.trim().toLowerCase() === effectiveStation.toLowerCase(),
       ),
     );
-  }, [data, effectiveStation]);
+  }, [tabOrders, effectiveStation]);
 
   // Local pagination without scroll
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
@@ -578,8 +708,8 @@ function KdsBoardContent({
     return filteredOrders.slice(start, start + pageSize);
   }, [filteredOrders, currentPage, pageSize]);
 
-  const handleViewChange = useCallback((newView: KdsViewType) => {
-    setView(newView);
+  const handleTabChange = useCallback((newTab: KdsTabType) => {
+    setTab(newTab);
     setPage(1);
   }, []);
 
@@ -735,33 +865,95 @@ function KdsBoardContent({
           <button
             type="button"
             role="tab"
-            id="tab-active"
+            id="tab-pending"
             aria-controls="panel-kds-grid"
-            aria-selected={view === 'active'}
+            aria-selected={tab === 'pending'}
             tabIndex={0}
-            data-testid="tab-active-view"
-            {...pointerAction(() => handleViewChange('active'))}
+            data-testid="tab-pending"
+            {...pointerAction(() => handleTabChange('pending'))}
             style={{ minHeight: 64 }}
             className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${
-              view === 'active'
+              tab === 'pending'
                 ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
                 : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
             }`}
           >
-            Comandas Activas
+            <span>Pendientes</span>
+            {pendingCount > 0 && (
+              <span
+                data-testid="pending-badge"
+                className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${
+                  tab === 'pending' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                {pendingCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-active"
+            aria-controls="panel-kds-grid"
+            aria-selected={tab === 'in_preparation' || tab === 'active'}
+            tabIndex={0}
+            data-testid="tab-active-view"
+            {...pointerAction(() => handleTabChange('in_preparation'))}
+            style={{ minHeight: 64 }}
+            className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${
+              tab === 'in_preparation' || tab === 'active'
+                ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
+                : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
+            }`}
+          >
+            <span>En Preparación</span>
+            {inPrepCount > 0 && (
+              <span
+                data-testid="in-prep-badge"
+                className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${
+                  tab === 'in_preparation' || tab === 'active'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                {inPrepCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-redo"
+            aria-controls="panel-kds-grid"
+            aria-selected={tab === 'redo'}
+            tabIndex={0}
+            data-testid="tab-redo-view"
+            {...pointerAction(() => handleTabChange('redo'))}
+            style={{ minHeight: 64 }}
+            className={getRedoTabClass(tab === 'redo', redoCount)}
+          >
+            <span>Rehechuras</span>
+            {redoCount > 0 && (
+              <span
+                data-testid="redo-badge"
+                className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-black rounded-full bg-white text-red-700 shadow-sm"
+              >
+                {redoCount}
+              </span>
+            )}
           </button>
           <button
             type="button"
             role="tab"
             id="tab-delivered"
             aria-controls="panel-kds-grid"
-            aria-selected={view === 'delivered'}
+            aria-selected={tab === 'delivered'}
             tabIndex={0}
             data-testid="tab-delivered"
-            {...pointerAction(() => handleViewChange('delivered'))}
+            {...pointerAction(() => handleTabChange('delivered'))}
             style={{ minHeight: 64 }}
             className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${
-              view === 'delivered'
+              tab === 'delivered'
                 ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
                 : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md'
             }`}
@@ -922,7 +1114,8 @@ function KdsBoardContent({
 
       {confirmRejectTarget && (
         <ConfirmRejectDialog
-          order={confirmRejectTarget}
+          order={confirmRejectTarget.order}
+          item={confirmRejectTarget.item}
           isOpen={true}
           isSubmitting={pendingAction === 'reject'}
           onConfirm={handleConfirmRejectDialog}

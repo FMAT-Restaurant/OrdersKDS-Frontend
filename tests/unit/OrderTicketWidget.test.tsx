@@ -57,7 +57,7 @@ describe('OrderTicketWidget', () => {
   it('renders the order, item details, and waiter realtime channels', async () => {
     renderTicket();
 
-    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
     expect(screen.getByText('1 × Ensalada César')).toBeInTheDocument();
     expect(screen.getByText('Modificadores: Extra queso')).toBeInTheDocument();
     expect(screen.getByText('Nota: Sin tomate')).toBeInTheDocument();
@@ -93,7 +93,7 @@ describe('OrderTicketWidget', () => {
     renderTicket();
 
     expect(await screen.findByText(/Mesa 12/)).toBeInTheDocument();
-    expect(screen.getByText(/Sesión session-/)).toBeInTheDocument();
+    expect(screen.getByText(/Sesión #12345678/)).toBeInTheDocument();
     expect(screen.getByText('Listo')).toBeInTheDocument();
     expect(screen.queryByText(/Modificadores:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Nota:/)).not.toBeInTheDocument();
@@ -120,7 +120,7 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket();
 
-    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
     expect(screen.getByText('Mesa sin asignar')).toBeInTheDocument();
     expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
     expect(screen.getByText('En preparación')).toBeInTheDocument();
@@ -221,7 +221,7 @@ describe('OrderTicketWidget', () => {
     fireEvent.click(confirmButton);
     fireEvent.click(confirmButton);
 
-    expect(await screen.findByText('Pendiente de confirmación de stock')).toBeInTheDocument();
+    expect(await screen.findByText('Pendiente de confirmación de inventario')).toBeInTheDocument();
     expect(confirmRequests).toBe(1);
     expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
   });
@@ -241,7 +241,7 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket();
 
-    expect(await screen.findByText('Pendiente de confirmación de stock')).toBeInTheDocument();
+    expect(await screen.findByText('Pendiente de confirmación de inventario')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Modificar' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeEnabled();
@@ -405,16 +405,15 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket();
 
-    expect(await screen.findByText('Detalle de rechazo de stock')).toBeInTheDocument();
-    expect(screen.getAllByText(/Queso Parmesano, Crutones/)).toHaveLength(2);
-    expect(screen.getAllByText(/solicitados: 3, disponibles: 1/i)).toHaveLength(2);
+    expect(await screen.findByText('Detalle de rechazo de inventario')).toBeInTheDocument();
+    expect(screen.getByText(/Queso Parmesano, Crutones/)).toBeInTheDocument();
+    expect(screen.getByText(/solicitados: 3, disponibles: 1/i)).toBeInTheDocument();
     expect(screen.getByText('Sopa de Tomate')).toBeInTheDocument();
     expect(screen.getByText(/: 2 apartados temporalmente/)).toBeInTheDocument();
 
     const alertLive = document.querySelector('.order-ticket__alert[aria-live="assertive"]');
     expect(alertLive).toBeInTheDocument();
-    expect(alertLive).toHaveTextContent('Ensalada César (solicitados: 3, disponibles: 1)');
-    expect(alertLive).toHaveTextContent('Queso Parmesano, Crutones');
+    expect(alertLive).toHaveTextContent('Motivo de rechazo: Inventario insuficiente.');
   });
 
   it('renders badge Reservado en cocina for RESERVED status (DoD)', async () => {
@@ -525,7 +524,7 @@ describe('OrderTicketWidget', () => {
   it('applies a newer waiter status event to the displayed order', async () => {
     renderTicket();
 
-    await screen.findByRole('heading', { name: 'Comanda ord-102' });
+    await screen.findByRole('heading', { name: 'Comanda #102' });
     const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
     options.onOrderStatusChanged?.({
       type: 'order.status_changed',
@@ -564,7 +563,7 @@ describe('OrderTicketWidget', () => {
     expect(screen.queryByText('Sensitive backend detail')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
 
-    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
   });
 
   it('discards edits and reverts to view mode when user clicks Descartar', async () => {
@@ -646,12 +645,12 @@ describe('OrderTicketWidget', () => {
       'Su sesión ha expirado o no es válida. Por favor inicie sesión nuevamente.',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
-    expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
   });
 
   it('ignores WebSocket events for a different orderId or older/equal version', async () => {
     renderTicket();
-    await screen.findByRole('heading', { name: 'Comanda ord-102' });
+    await screen.findByRole('heading', { name: 'Comanda #102' });
     const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
 
     // Different orderId -> ignored
@@ -692,7 +691,7 @@ describe('OrderTicketWidget', () => {
       ),
     );
     renderTicket();
-    await screen.findByText('Pendiente de confirmación de stock');
+    await screen.findByText('Pendiente de confirmación de inventario');
     const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
 
     // Event updating version while still in CREATED preserves awaitingStockConfirmation
@@ -702,7 +701,7 @@ describe('OrderTicketWidget', () => {
       status: OrderStatus.CREATED,
       version: order.version + 1,
     });
-    expect(await screen.findByText('Pendiente de confirmación de stock')).toBeInTheDocument();
+    expect(await screen.findByText('Pendiente de confirmación de inventario')).toBeInTheDocument();
 
     // Then transition to REJECTED with rejectionDetails
     options.onOrderStatusChanged?.({
@@ -719,7 +718,7 @@ describe('OrderTicketWidget', () => {
     });
     expect(await screen.findByText('Lechuga')).toBeInTheDocument();
     expect(screen.getByText('Torta')).toBeInTheDocument();
-    expect(screen.queryByText('Pendiente de confirmación de stock')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pendiente de confirmación de inventario')).not.toBeInTheDocument();
   });
 
   it('renders connection status messages for various websocket states', async () => {
@@ -756,7 +755,7 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket(vi.fn(), 'prop-session-abc');
     expect(await screen.findByText(/Para llevar/)).toBeInTheDocument();
-    expect(screen.getByText(/Sesión prop-ses/)).toBeInTheDocument();
+    expect(screen.getByText(/Sesión #prop-session-abc/)).toBeInTheDocument();
   });
 
   it('handles rejectionDetails with source only and without items or missing ingredients', async () => {
@@ -774,7 +773,7 @@ describe('OrderTicketWidget', () => {
     renderTicket();
     expect(
       await screen.findByText(
-        'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.',
+        'Motivo de rechazo: Inventario insuficiente. Modifica la comanda para ajustar cantidades o cancela.',
       ),
     ).toBeInTheDocument();
   });
@@ -792,10 +791,10 @@ describe('OrderTicketWidget', () => {
     renderTicket();
     expect(
       await screen.findByText(
-        'La comanda fue rechazada por falta de stock. Modifica la comanda para ajustar cantidades o cancela.',
+        'Motivo de rechazo: Inventario insuficiente. Modifica la comanda para ajustar cantidades o cancela.',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText('Detalle de rechazo de stock')).not.toBeInTheDocument();
+    expect(screen.queryByText('Detalle de rechazo de inventario')).not.toBeInTheDocument();
   });
 
   it('handles order with status PAID, WASTED, and VOIDED with correct labels and no alert', async () => {
@@ -809,7 +808,7 @@ describe('OrderTicketWidget', () => {
         ),
       );
       const { unmount } = renderTicket();
-      expect(await screen.findByRole('heading', { name: 'Comanda ord-102' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
       expect(document.querySelector('.order-ticket__alert')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
@@ -846,5 +845,390 @@ describe('OrderTicketWidget', () => {
     });
     expect(screen.getByLabelText('Modificadores de Ensalada César')).toHaveValue('');
     expect(screen.getByLabelText('Notas de Ensalada César')).toHaveValue('Nueva nota');
+  });
+
+  it('supports tablet touch stepper (+/- buttons) and prevents zero-lock when clearing quantity', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          items: [{ ...order.items[0], quantity: 2 }],
+        }),
+      ),
+    );
+    renderTicket();
+    fireEvent.click(await screen.findByRole('button', { name: 'Modificar' }));
+
+    const decreaseBtn = screen.getByRole('button', {
+      name: 'Disminuir cantidad de Ensalada César',
+    });
+    const increaseBtn = screen.getByRole('button', {
+      name: 'Aumentar cantidad de Ensalada César',
+    });
+    const input = screen.getByLabelText('Cantidad de Ensalada César');
+
+    expect(input).toHaveValue(2);
+    expect(decreaseBtn).toBeEnabled();
+
+    // Click decrease: 2 -> 1
+    fireEvent.click(decreaseBtn);
+    expect(input).toHaveValue(1);
+    expect(decreaseBtn).toBeDisabled();
+
+    // Click increase: 1 -> 2
+    fireEvent.click(increaseBtn);
+    expect(input).toHaveValue(2);
+    expect(decreaseBtn).toBeEnabled();
+
+    // Clearing input allows empty string without forcing 0
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input).toHaveValue(null);
+  });
+
+  it('formats ingredient names with underscores into readable spaces in rejection details', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.REJECTED,
+          rejectionDetails: {
+            missingIngredients: ['pan_brioche', 'queso_cheddar'],
+            rejectedItems: [
+              {
+                dishId: 'dish-burger-1',
+                name: 'Hamburguesa Doble Queso',
+                requestedQuantity: 3,
+                availableQuantity: 1,
+                reason: 'Stock insuficiente en almacén',
+              },
+            ],
+            reservedItems: [],
+          },
+        }),
+      ),
+    );
+    renderTicket();
+
+    expect(await screen.findByText('Detalle de rechazo de inventario')).toBeInTheDocument();
+    expect(screen.getByText(/pan brioche, queso cheddar/)).toBeInTheDocument();
+    expect(screen.getByText(/inventario insuficiente en almacén/i)).toBeInTheDocument();
+  });
+
+  it('allows adding a new dish via + Agregar platillo dialog in edit mode and persists via PATCH', async () => {
+    let capturedPayload: unknown = null;
+    server.use(
+      http.patch('*/orders/:orderId/items', async ({ request }) => {
+        capturedPayload = await request.json();
+        return HttpResponse.json({
+          ...order,
+          items: [
+            ...order.items,
+            {
+              id: 'item-new-1',
+              dishId: 'dish-burger-doble',
+              name: 'Hamburguesa Doble Queso',
+              quantity: 2,
+              status: 'PENDING',
+              modifiers: [],
+              notes: '',
+            },
+          ],
+        });
+      }),
+    );
+
+    renderTicket();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Modificar' }));
+    fireEvent(
+      window,
+      new CustomEvent('fmat:comanda:open-add-dialog', {
+        detail: {
+          dishId: 'dish-burger-doble',
+          name: 'Hamburguesa Doble Queso',
+          unitPrice: 160.0,
+        },
+      }),
+    );
+
+    expect(screen.getByTestId('add-dish-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('add-dish-name-input')).toHaveValue('Hamburguesa Doble Queso');
+    fireEvent.change(screen.getByTestId('add-dish-quantity-input'), {
+      target: { value: '2' },
+    });
+    fireEvent.click(screen.getByTestId('add-dish-submit-btn'));
+
+    expect(screen.queryByTestId('add-dish-dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Hamburguesa Doble Queso')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => {
+      expect(capturedPayload).toEqual({
+        items: [
+          expect.objectContaining({ name: 'Ensalada César' }),
+          expect.objectContaining({ name: 'Hamburguesa Doble Queso', quantity: 2 }),
+        ],
+      });
+    });
+  });
+
+  it('handles fmat:comanda:add-item DOM event and merges into draft items', async () => {
+    renderTicket();
+    await screen.findByRole('heading', { name: 'Comanda #102' });
+
+    fireEvent(
+      window,
+      new CustomEvent('fmat:comanda:add-item', {
+        detail: {
+          dishId: 'dish-fries-1',
+          name: 'Papas Francesas',
+          quantity: 2,
+          modifiers: ['Poco picante'],
+          notes: 'Bien crujientes',
+        },
+      }),
+    );
+
+    expect(await screen.findByText('Papas Francesas')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeInTheDocument();
+  });
+
+  it('supports draft mode: configures table/takeaway, adds dish, and submits to kitchen', async () => {
+    let orderCreatedPayload: unknown = null;
+    let itemsPayload: unknown = null;
+    let confirmCalled = false;
+
+    server.use(
+      http.post('*/orders', async ({ request }) => {
+        orderCreatedPayload = await request.json();
+        return HttpResponse.json(
+          {
+            id: 'ord-draft-new',
+            orderNumber: 999,
+            tableNumber: 5,
+            isTakeaway: false,
+            status: OrderStatus.CREATED,
+            items: [],
+            version: 1,
+            responsibleWaiterId: 'waiter-7',
+            createdAt: new Date().toISOString(),
+          },
+          { status: 201 },
+        );
+      }),
+      http.patch('*/orders/:orderId/items', async ({ request }) => {
+        itemsPayload = await request.json();
+        return HttpResponse.json({
+          id: 'ord-draft-new',
+          orderNumber: 999,
+          tableNumber: 5,
+          isTakeaway: false,
+          status: OrderStatus.CREATED,
+          items: [
+            {
+              id: 'item-created-1',
+              name: 'Tacos al Pastor',
+              quantity: 3,
+              unitPrice: 45.0,
+              status: 'PENDING',
+              modifiers: [],
+              notes: '',
+            },
+          ],
+          version: 2,
+          responsibleWaiterId: 'waiter-7',
+          createdAt: new Date().toISOString(),
+        });
+      }),
+      http.post('*/orders/:orderId/confirm', () => {
+        confirmCalled = true;
+        return HttpResponse.json({
+          id: 'ord-draft-new',
+          orderNumber: 999,
+          tableNumber: 5,
+          isTakeaway: false,
+          status: OrderStatus.CREATED,
+          items: [
+            {
+              id: 'item-created-1',
+              name: 'Tacos al Pastor',
+              quantity: 3,
+              unitPrice: 45.0,
+              status: 'PENDING',
+              modifiers: [],
+              notes: '',
+            },
+          ],
+          version: 3,
+          responsibleWaiterId: 'waiter-7',
+          confirmedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        });
+      }),
+    );
+
+    const onOrderCreated = vi.fn();
+    const onOrderSubmitted = vi.fn();
+
+    render(
+      <OrderTicketWidget
+        userId="waiter-7"
+        tokenProvider={async () => 'test-token'}
+        apiBaseUrl="http://localhost"
+        webSocketBaseUrl="ws://localhost"
+        tableNumber={5}
+        onOrderCreated={onOrderCreated}
+        onOrderSubmitted={onOrderSubmitted}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Nueva Comanda' })).toBeInTheDocument();
+    expect(screen.getByText('Borrador')).toBeInTheDocument();
+    expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
+
+    fireEvent(
+      window,
+      new CustomEvent('fmat:comanda:open-add-dialog', {
+        detail: {
+          dishId: 'dish-pastor',
+          name: 'Tacos al Pastor',
+          unitPrice: 45.0,
+        },
+      }),
+    );
+
+    expect(screen.getByTestId('add-dish-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('add-dish-name-input')).toHaveValue('Tacos al Pastor');
+    fireEvent.change(screen.getByTestId('add-dish-quantity-input'), {
+      target: { value: '3' },
+    });
+    fireEvent.click(screen.getByTestId('add-dish-submit-btn'));
+
+    expect(screen.getByText('Tacos al Pastor')).toBeInTheDocument();
+
+    const submitKitchenBtn = screen.getByTestId('order-ticket-create-confirm-btn');
+    fireEvent.click(submitKitchenBtn);
+
+    await waitFor(() => {
+      expect(confirmCalled).toBe(true);
+    });
+
+    expect(orderCreatedPayload).toEqual(
+      expect.objectContaining({
+        tableNumber: 5,
+        isTakeaway: false,
+      }),
+    );
+    expect(itemsPayload).toEqual({
+      items: [
+        expect.objectContaining({
+          name: 'Tacos al Pastor',
+          quantity: 3,
+        }),
+      ],
+    });
+    expect(onOrderCreated).toHaveBeenCalledTimes(1);
+    expect(onOrderSubmitted).toHaveBeenCalledWith('ord-draft-new');
+  });
+
+  it('supports draft mode: saves draft without confirmation and allows discard', async () => {
+    let confirmCalled = false;
+    server.use(
+      http.post('*/orders', () =>
+        HttpResponse.json(
+          {
+            id: 'ord-draft-save',
+            orderNumber: 888,
+            tableNumber: 2,
+            isTakeaway: false,
+            status: OrderStatus.CREATED,
+            items: [],
+            version: 1,
+            responsibleWaiterId: 'waiter-7',
+            createdAt: new Date().toISOString(),
+          },
+          { status: 201 },
+        ),
+      ),
+      http.patch('*/orders/:orderId/items', () =>
+        HttpResponse.json({
+          id: 'ord-draft-save',
+          orderNumber: 888,
+          tableNumber: 2,
+          isTakeaway: false,
+          status: OrderStatus.CREATED,
+          items: [
+            {
+              id: 'item-draft-1',
+              name: 'Refresco Cola',
+              quantity: 1,
+              unitPrice: 30.0,
+              status: 'PENDING',
+              modifiers: [],
+              notes: '',
+            },
+          ],
+          version: 2,
+          responsibleWaiterId: 'waiter-7',
+          createdAt: new Date().toISOString(),
+        }),
+      ),
+      http.post('*/orders/:orderId/confirm', () => {
+        confirmCalled = true;
+        return HttpResponse.json({});
+      }),
+    );
+
+    const onOrderCreated = vi.fn();
+    const onCreateNewOrder = vi.fn();
+
+    const { unmount } = render(
+      <OrderTicketWidget
+        userId="waiter-7"
+        tokenProvider={async () => 'test-token'}
+        apiBaseUrl="http://localhost"
+        webSocketBaseUrl="ws://localhost"
+        tableNumber={2}
+        onOrderCreated={onOrderCreated}
+        onCreateNewOrder={onCreateNewOrder}
+      />,
+    );
+
+    fireEvent(
+      window,
+      new CustomEvent('fmat:comanda:open-add-dialog', {
+        detail: {
+          dishId: 'dish-soda',
+          name: 'Refresco Cola',
+          unitPrice: 30.0,
+        },
+      }),
+    );
+
+    expect(screen.getByTestId('add-dish-dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('add-dish-submit-btn'));
+
+    fireEvent.click(screen.getByTestId('order-ticket-create-draft-btn'));
+
+    await waitFor(() => {
+      expect(onOrderCreated).toHaveBeenCalledTimes(1);
+    });
+    expect(confirmCalled).toBe(false);
+
+    unmount();
+
+    // Now test discard in draft mode
+    render(
+      <OrderTicketWidget
+        userId="waiter-7"
+        tokenProvider={async () => 'test-token'}
+        apiBaseUrl="http://localhost"
+        onCreateNewOrder={onCreateNewOrder}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('order-ticket-discard-btn'));
+    expect(onCreateNewOrder).toHaveBeenCalledTimes(1);
   });
 });

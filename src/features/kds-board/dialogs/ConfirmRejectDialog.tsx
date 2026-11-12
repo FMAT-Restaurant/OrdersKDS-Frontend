@@ -1,9 +1,10 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
-import type { Order } from '../../../shared/api/schemas.ts';
+import type { Order, OrderItem } from '../../../shared/api/schemas.ts';
 import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
 
 export interface ConfirmRejectDialogProps {
   readonly order: Order;
+  readonly item?: OrderItem | null;
   readonly isOpen: boolean;
   readonly isSubmitting?: boolean;
   readonly onConfirm: () => void;
@@ -12,6 +13,7 @@ export interface ConfirmRejectDialogProps {
 
 export function ConfirmRejectDialog({
   order,
+  item,
   isOpen,
   isSubmitting = false,
   onConfirm,
@@ -75,24 +77,29 @@ export function ConfirmRejectDialog({
           </div>
           <div>
             <h2 id="confirm-reject-dialog-title" className="text-xl font-bold text-ink">
-              ¿Rechazar comanda por falta de insumos?
+              {item ? '¿Rechazar platillo por falta de insumos?' : '¿Rechazar comanda por falta de insumos?'}
             </h2>
             <p className="text-sm text-muted">
               {tableDisplay ? `${tableDisplay} · ` : ''}Comanda #{orderNumberDisplay}
+              {item ? ` · ${item.name}` : ''}
             </p>
           </div>
         </div>
 
         <div id="confirm-reject-dialog-desc" className="text-body text-sm space-y-2.5">
           <p>
-            ¿Estás seguro de que deseas rechazar esta orden?
+            {item
+              ? `¿Estás seguro de que deseas rechazar "${item.name}" por falta de insumos físicos en cocina?`
+              : '¿Estás seguro de que deseas rechazar esta orden?'}
           </p>
           <div className="p-3 bg-red-50 rounded-control border border-red-200 text-red-900 text-xs sm:text-sm">
             <p className="font-semibold mb-1">
               Atención: Esta acción notificará la falta de insumos en cocina.
             </p>
             <p className="text-red-800">
-              Se informará al personal de piso y servicio para cancelar o ajustar la comanda con el cliente.
+              {item
+                ? 'El platillo se cancelará sin cobro al comensal y se actualizará su disponibilidad en el menú.'
+                : 'Se informará al personal de piso y servicio para cancelar o ajustar la comanda con el cliente.'}
             </p>
           </div>
         </div>

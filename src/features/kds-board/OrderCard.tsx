@@ -19,7 +19,7 @@ export interface OrderCardProps {
   readonly onStartPreparation?: (order: Order) => void;
   readonly onMarkOrderReady?: (order: Order) => void;
   readonly onItemReady?: (order: Order, item: OrderItem) => void;
-  readonly onRejectSupplies?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order, item?: OrderItem) => void;
   readonly onAdminVoid?: (order: Order) => void;
   readonly onChefVoid?: (order: Order) => void;
   readonly userRole?: UserRole;
@@ -200,6 +200,7 @@ function OrderCardItem({
   index,
   onReady,
   onUndo,
+  onRejectSupplies,
   isPending,
   isRedoPending,
   isPendingUndo = false,
@@ -212,6 +213,7 @@ function OrderCardItem({
   index: number;
   onReady?: () => void;
   onUndo?: () => void;
+  onRejectSupplies?: () => void;
   isPending: boolean;
   isRedoPending: boolean;
   isPendingUndo?: boolean;
@@ -293,6 +295,26 @@ function OrderCardItem({
               isPending={isPending}
               onReady={onReady}
             />
+          )}
+
+          {isRedoPending && !isFinished && !isPendingUndo && (
+            <button
+              type="button"
+              data-testid={`order-item-reject-redo-${itemId}`}
+              aria-label={`Rechazar ${item.name} por falta de insumos`}
+              disabled={isPending}
+              {...pointerAction(() => onRejectSupplies?.())}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onRejectSupplies?.();
+                }
+              }}
+              style={{ minHeight: isCompactDensity ? 36 : 40 }}
+              className="min-h-[36px] px-2.5 py-1 rounded-control text-xs font-bold bg-surface hover:bg-red-50 active:bg-red-100 text-red-700 hover:text-red-800 border border-red-300 hover:border-red-400 cursor-pointer shadow-sm transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              Sin insumos
+            </button>
           )}
         </div>
       </div>
@@ -386,7 +408,7 @@ interface OrderCardActionsProps {
   readonly userRole?: UserRole;
   readonly isCompact?: boolean;
   readonly onStartPreparation?: (order: Order) => void;
-  readonly onRejectSupplies?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order, item?: OrderItem) => void;
   readonly onAdminVoid?: (order: Order) => void;
   readonly onChefVoid?: (order: Order) => void;
   readonly onMarkOrderReady?: (order: Order) => void;
@@ -631,12 +653,66 @@ function OrderCardReadyAction({
   );
 }
 
+function OrderCardRedoActions({
+  order,
+  displayId,
+  pendingAction,
+  isCompact = false,
+  onRejectSupplies,
+}: Readonly<{
+  order: Order;
+  displayId: string;
+  pendingAction?: string;
+  isCompact?: boolean;
+  onRejectSupplies?: (order: Order, item?: OrderItem) => void;
+}>) {
+  const isRedoOrder =
+    order.status === 'DELIVERED' &&
+    order.items.some((i) => i.status === 'PENDING');
+  if (!isRedoOrder) return null;
+
+  return (
+    <div
+      data-testid={`order-redo-actions-${displayId}`}
+      className={`shrink-0 ${
+        isCompact ? 'px-2.5 pb-2 pt-0.5' : 'px-4 pb-3 pt-1'
+      } flex items-center w-full bg-transparent`}
+    >
+      <button
+        type="button"
+        data-testid={`order-action-reject-redo-${displayId}`}
+        aria-label={`Rechazar rehechura por falta de insumos para la comanda ${displayId}`}
+        disabled={pendingAction === 'reject'}
+        {...pointerAction(() => {
+          const pendingItem = order.items.find((i) => i.status === 'PENDING');
+          onRejectSupplies?.(order, pendingItem);
+        })}
+        onKeyDown={(e) =>
+          handleButtonKey(e, () => {
+            const pendingItem = order.items.find((i) => i.status === 'PENDING');
+            onRejectSupplies?.(order, pendingItem);
+          })
+        }
+        style={{ minHeight: isCompact ? 48 : 64 }}
+        className={`${
+          isCompact
+            ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
+            : 'min-h-[64px] px-4 py-2.5 text-sm'
+        } w-full rounded-control font-bold bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0`}
+      >
+        Rechazar rehechura (Sin insumos)
+      </button>
+    </div>
+  );
+}
+
 function OrderCardActions(props: Readonly<OrderCardActionsProps>) {
   return (
     <>
       <OrderCardReservedActions {...props} />
       <OrderCardVoidActions {...props} />
       <OrderCardReadyAction {...props} />
+      <OrderCardRedoActions {...props} />
     </>
   );
 }
@@ -826,6 +902,7 @@ export function OrderCard({
               index={index}
               onReady={() => onItemReady?.(order, item)}
               onUndo={() => onUndoReady?.(order, item)}
+              onRejectSupplies={() => onRejectSupplies?.(order, item)}
               isPending={pendingAction === `item:${itemId}`}
               isRedoPending={isRedoPending}
               isPendingUndo={isPendingUndo}

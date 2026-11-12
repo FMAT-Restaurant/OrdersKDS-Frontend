@@ -20,7 +20,7 @@ export interface OrderDetailsDialogProps {
   readonly onItemReady?: (order: Order, item: OrderItem) => void;
   readonly onUndoItemReady?: (order: Order, item: OrderItem) => void;
   readonly onStartPreparation?: (order: Order) => void;
-  readonly onRejectSupplies?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order, item?: OrderItem) => void;
   readonly onMarkOrderReady?: (order: Order) => void;
   readonly onUndoOrderReady?: (order: Order) => void;
   readonly onAdminVoid?: (order: Order) => void;
@@ -70,6 +70,7 @@ function OrderDetailsItemRow({
   index,
   onItemReady,
   onUndoItemReady,
+  onRejectSupplies,
   isPending,
   isPendingUndo,
   isOptimisticallyReady,
@@ -80,6 +81,7 @@ function OrderDetailsItemRow({
   index: number;
   onItemReady?: (order: Order, item: OrderItem) => void;
   onUndoItemReady?: (order: Order, item: OrderItem) => void;
+  onRejectSupplies?: (order: Order, item: OrderItem) => void;
   isPending: boolean;
   isPendingUndo: boolean;
   isOptimisticallyReady: boolean;
@@ -172,6 +174,26 @@ function OrderDetailsItemRow({
                   <span>Marcar listo</span>
                 </>
               )}
+            </button>
+          )}
+
+          {isRedoPending && !isFinished && !isPendingUndo && (
+            <button
+              type="button"
+              data-testid={`order-details-item-reject-redo-${itemId}`}
+              aria-label={`Rechazar ${item.name} por falta de insumos`}
+              disabled={isPending}
+              {...pointerAction(() => onRejectSupplies?.(order, item))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onRejectSupplies?.(order, item);
+                }
+              }}
+              style={{ minHeight: 48 }}
+              className="min-h-[48px] px-3.5 py-2 rounded-control text-xs sm:text-sm font-bold bg-surface hover:bg-red-50 active:bg-red-100 text-red-700 hover:text-red-800 border border-red-300 hover:border-red-400 cursor-pointer shadow-sm transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              Sin insumos
             </button>
           )}
         </div>
@@ -277,7 +299,7 @@ interface OrderDetailsActionsProps {
   readonly isPendingUndoOrder?: boolean;
   readonly undoOrderSecondsLeft?: number;
   readonly onStartPreparation?: (order: Order) => void;
-  readonly onRejectSupplies?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order, item?: OrderItem) => void;
   readonly onAdminVoid?: (order: Order) => void;
   readonly onChefVoid?: (order: Order) => void;
   readonly onMarkOrderReady?: (order: Order) => void;
@@ -489,12 +511,57 @@ function OrderDetailsReadyAction({
   );
 }
 
+function OrderDetailsRedoActions({
+  order,
+  orderNumberDisplay,
+  pendingAction,
+  onRejectSupplies,
+  onClose,
+}: Readonly<{
+  order: Order;
+  orderNumberDisplay: string;
+  pendingAction?: string;
+  onRejectSupplies?: (order: Order, item?: OrderItem) => void;
+  onClose: () => void;
+}>) {
+  const isRedoOrder =
+    order.status === 'DELIVERED' &&
+    order.items.some((i) => i.status === 'PENDING');
+  if (!isRedoOrder) return null;
+
+  return (
+    <button
+      type="button"
+      data-testid="order-details-action-reject-redo"
+      aria-label={`Rechazar rehechura por falta de insumos para #${orderNumberDisplay}`}
+      disabled={pendingAction === 'reject'}
+      {...pointerAction(() => {
+        const pendingItem = order.items.find((i) => i.status === 'PENDING');
+        onRejectSupplies?.(order, pendingItem);
+        onClose();
+      })}
+      onKeyDown={(e) =>
+        handleButtonKey(e, () => {
+          const pendingItem = order.items.find((i) => i.status === 'PENDING');
+          onRejectSupplies?.(order, pendingItem);
+          onClose();
+        })
+      }
+      style={{ minHeight: 48 }}
+      className="min-h-[48px] px-4 py-2 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
+    >
+      Rechazar rehechura (Sin insumos)
+    </button>
+  );
+}
+
 function OrderDetailsActions(props: Readonly<OrderDetailsActionsProps>) {
   return (
     <div className="flex items-center gap-2 flex-wrap flex-1">
       <OrderDetailsReservedActions {...props} />
       <OrderDetailsVoidActions {...props} />
       <OrderDetailsReadyAction {...props} />
+      <OrderDetailsRedoActions {...props} />
     </div>
   );
 }
@@ -678,6 +745,7 @@ export function OrderDetailsDialog({
                   isPendingUndo={isPendingUndo}
                   isOptimisticallyReady={isOptimisticallyReady}
                   undoSecondsLeft={pendingUndoItem?.secondsLeft}
+                  onRejectSupplies={onRejectSupplies}
                 />
               );
             })}

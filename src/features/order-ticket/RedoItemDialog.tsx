@@ -103,19 +103,19 @@ export function RedoItemDialog({
       aria-describedby="redo-item-description"
       tabIndex={-1}
       data-testid="redo-item-dialog-backdrop"
-      className="fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/70 border-none backdrop:bg-transparent"
+      className="fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 border-none backdrop:bg-transparent"
     >
-      <div className="w-full max-w-lg rounded-lg border border-gray-700 bg-gray-900 p-6 text-white shadow-2xl">
-        <h2 id="redo-item-title" className="text-xl font-bold">
+      <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl">
+        <h2 id="redo-item-title" className="text-xl font-bold text-gray-900">
           Rehacer platillo
         </h2>
-        <p id="redo-item-description" className="mt-2 text-gray-300">
-          Indica por qué se devuelve <span className="font-semibold">{itemName}</span> a cocina.
+        <p id="redo-item-description" className="mt-2 text-gray-600 text-sm sm:text-base">
+          Indica por qué se devuelve <span className="font-semibold text-gray-900">{itemName}</span> a cocina.
         </p>
 
         <form className="mt-5" onSubmit={(event) => void handleSubmit(event)}>
-          <label htmlFor="redo-item-note" className="mb-2 block text-sm font-semibold">
-            Motivo <span aria-hidden="true">*</span>
+          <label htmlFor="redo-item-note" className="mb-2 block text-sm font-semibold text-gray-800">
+            Motivo <span aria-hidden="true" className="text-red-600">*</span>
           </label>
           <textarea
             ref={noteInput}
@@ -126,10 +126,10 @@ export function RedoItemDialog({
             value={note}
             onChange={(event) => setNote(event.currentTarget.value)}
             disabled={isPending}
-            className="w-full resize-y rounded-md border border-gray-600 bg-gray-800 p-3 text-white placeholder:text-gray-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="w-full resize-y rounded-md border border-gray-400 bg-white p-3 text-gray-900 placeholder:text-gray-400 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
           />
           {error && (
-            <p role="alert" className="mt-2 text-sm text-red-300">
+            <p role="alert" className="mt-2 text-sm text-red-600 font-semibold">
               {error}
             </p>
           )}
@@ -139,16 +139,16 @@ export function RedoItemDialog({
               type="button"
               onClick={onClose}
               disabled={isPending}
-              className="min-h-12 rounded-md border border-gray-600 px-4 py-2 font-semibold text-gray-200 hover:bg-gray-800 disabled:opacity-50"
+              className="order-ticket__redo-cancel min-h-12 min-w-[7rem] rounded-md border border-gray-400 bg-white px-4 py-2 font-semibold text-gray-800 hover:bg-gray-100 disabled:opacity-50 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={!note.trim() || isPending}
-              className="min-h-12 rounded-md bg-amber-600 px-4 py-2 font-bold text-white hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="order-ticket__redo-submit min-h-12 min-w-[7rem] rounded-md bg-amber-600 px-4 py-2 font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
             >
-              {isPending ? 'Enviando...' : 'Rehacer'}
+              {isPending ? 'Enviando…' : 'Rehacer'}
             </button>
           </div>
         </form>

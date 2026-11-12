@@ -1132,5 +1132,53 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       fireEvent.click(footerBtn);
       expect(onClick).toHaveBeenCalledWith(inPrepOrder);
     });
+
+    it('renders redo rejection button on dish and card footer when order has pending redo', () => {
+      const onReject = vi.fn();
+      const redoOrder: Order = {
+        ...reservedOrder,
+        id: 'ord-redo-1',
+        status: OrderStatus.DELIVERED,
+        items: [
+          {
+            id: 'item-delivered-1',
+            name: 'Hamburguesa',
+            quantity: 1,
+            unitPrice: 100,
+            status: ItemStatus.DELIVERED,
+          },
+          {
+            id: 'item-redo-1',
+            name: 'Papas Francesas',
+            quantity: 1,
+            unitPrice: 40,
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
+
+      render(
+        <OrderCard
+          order={redoOrder}
+          onRejectSupplies={onReject}
+        />,
+      );
+
+      // Dish-level "Sin insumos" button
+      const dishRejectBtn = screen.getByTestId('order-item-reject-redo-item-redo-1');
+      expect(dishRejectBtn).toBeInTheDocument();
+      expect(dishRejectBtn).toHaveTextContent('Sin insumos');
+
+      fireEvent.click(dishRejectBtn);
+      expect(onReject).toHaveBeenCalledWith(redoOrder, redoOrder.items[1]);
+
+      // Card footer "Rechazar rehechura (Sin insumos)"
+      const cardRejectBtn = screen.getByTestId('order-action-reject-redo-ord-redo-1');
+      expect(cardRejectBtn).toBeInTheDocument();
+      expect(cardRejectBtn).toHaveTextContent('Rechazar rehechura (Sin insumos)');
+
+      fireEvent.click(cardRejectBtn);
+      expect(onReject).toHaveBeenCalledTimes(2);
+    });
   });
 });

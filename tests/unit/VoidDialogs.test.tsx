@@ -367,7 +367,10 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       expect(cancelBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
 
       fireEvent.click(confirmBtn);
-      expect(onConfirm).toHaveBeenCalledWith(inPreparationOrder);
+      expect(onConfirm).toHaveBeenCalledWith(
+        inPreparationOrder,
+        expect.objectContaining({ chargeCustomer: true }),
+      );
     });
 
     it('enforces >= 64x64px minimum touch area on every button, quick reason, and virtual keyboard key in ChefVoidDialog', () => {
@@ -427,7 +430,10 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
         'Se cobrará la comanda mermada',
       );
       fireEvent.click(screen.getByTestId('admin-void-confirm'));
-      expect(onAdminConfirm).toHaveBeenCalledWith(inPreparationOrder);
+      expect(onAdminConfirm).toHaveBeenCalledWith(
+        inPreparationOrder,
+        expect.objectContaining({ chargeCustomer: true }),
+      );
       unmountAdmin();
 
       // Chef executes kitchen-error void
@@ -598,6 +604,112 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       );
 
       expect(screen.getByText(/Anulación por Error de Cocina · #88/)).toBeInTheDocument();
+    });
+
+    it('supports quick administrative reasons, virtual keyboard notes, and charge customer toggle (Punto 3)', () => {
+      const onConfirm = vi.fn();
+      const onCancel = vi.fn();
+      render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.ADMIN}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />,
+      );
+
+      // Initially charge is true, but no quick reason or custom reason active, so toggle is disabled
+      const warning = screen.getByTestId('admin-void-warning');
+      expect(warning).toHaveTextContent('Se cobrará la comanda mermada al cliente');
+      const chargeToggle = screen.getByTestId('admin-void-charge-toggle');
+      expect(chargeToggle).toBeDisabled();
+
+      // Click quick reason "Error de captura del mesero" which defaults charge to false
+      const waiterErrorBtn = screen.getByTestId('admin-void-reason-error-de-captura-del-mesero');
+      fireEvent.click(waiterErrorBtn);
+      expect(waiterErrorBtn).toHaveAttribute('aria-pressed', 'true');
+      expect(warning).toHaveTextContent('Merma pura asumida por el restaurante (sin cobro al cliente)');
+
+      // Charge toggle remains disabled because quick reasons fix the charge value (no contradictions allowed)
+      expect(chargeToggle).toBeDisabled();
+      expect(chargeToggle).toHaveAttribute('aria-checked', 'false');
+
+      // Deselect quick reason
+      fireEvent.click(waiterErrorBtn);
+      expect(waiterErrorBtn).toHaveAttribute('aria-pressed', 'false');
+
+      // Activate custom reason via the button
+      const toggleCustomReasonBtn = screen.getByTestId('admin-void-toggle-custom-reason');
+      fireEvent.click(toggleCustomReasonBtn);
+
+      // Now manual charge switch is enabled!
+      expect(chargeToggle).not.toBeDisabled();
+      fireEvent.click(chargeToggle);
+      expect(chargeToggle).toHaveAttribute('aria-checked', 'true');
+      expect(warning).toHaveTextContent('Se cobrará la comanda mermada al cliente');
+
+      // Toggle switch back to false
+      fireEvent.click(chargeToggle);
+      expect(chargeToggle).toHaveAttribute('aria-checked', 'false');
+
+      // Toggle virtual keyboard
+      const toggleKeyboardBtn = screen.getByTestId('admin-void-toggle-keyboard');
+      fireEvent.click(toggleKeyboardBtn);
+      expect(screen.getByTestId('virtual-keyboard')).toBeInTheDocument();
+
+      // Enter text via custom reason input
+      const customReasonInput = screen.getByTestId('admin-void-custom-reason-input');
+      fireEvent.change(customReasonInput, { target: { value: 'Comanda duplicada' } });
+
+      // Confirm void
+      fireEvent.click(screen.getByTestId('admin-void-confirm'));
+      expect(onConfirm).toHaveBeenCalledWith(
+        inPreparationOrder,
+        expect.objectContaining({
+          reason: 'Comanda duplicada',
+          chargeCustomer: false,
+        }),
+      );
+    });
+
+    it('prevents contradictory reasons selection and unifies compatible reasons', () => {
+      const onConfirm = vi.fn();
+      render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          userRole={UserRole.ADMIN}
+          onConfirm={onConfirm}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      const desertionBtn = screen.getByTestId('admin-void-reason-deserción-del-comensal');
+      const lateCancelBtn = screen.getByTestId('admin-void-reason-cancelación-tardía');
+      const waiterErrorBtn = screen.getByTestId('admin-void-reason-error-de-captura-del-mesero');
+      const courtesyBtn = screen.getByTestId('admin-void-reason-cortesía-gerencial');
+
+      // Select first charge reason: "Deserción del comensal"
+      fireEvent.click(desertionBtn);
+      expect(desertionBtn).toHaveAttribute('aria-pressed', 'true');
+
+      // Contradictory reasons (defaultCharge: false) must be disabled
+      expect(waiterErrorBtn).toBeDisabled();
+      expect(courtesyBtn).toBeDisabled();
+
+      // Compatible reason (defaultCharge: true) can be selected together
+      expect(lateCancelBtn).not.toBeDisabled();
+      fireEvent.click(lateCancelBtn);
+      expect(lateCancelBtn).toHaveAttribute('aria-pressed', 'true');
+
+      // Confirm void: should emit single unified reason
+      fireEvent.click(screen.getByTestId('admin-void-confirm'));
+      expect(onConfirm).toHaveBeenCalledWith(
+        inPreparationOrder,
+        expect.objectContaining({
+          reason: 'Deserción del comensal - Cancelación tardía',
+          chargeCustomer: true,
+        }),
+      );
     });
   });
 });

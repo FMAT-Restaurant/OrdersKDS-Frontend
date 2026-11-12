@@ -40,6 +40,7 @@ En la experiencia de atención en sala de FMAT Restaurant, el mesero interactúa
 
 ---
 
+
 ## 3. Contrato de Inyección de `OrderTicketWidget` en `Menu-Frontend`
 
 ### 3.1 Declaración del Remote en `Menu-Frontend/vite.config.ts`
@@ -130,22 +131,125 @@ export interface OrderTicketWidgetProps {
 ```
 
 ### 4.2 Bus de Eventos DOM (`CustomEvent`)
-Permite que cualquier componente del catálogo de Menú envíe platillos a la comanda con una sola línea de código sin necesitar acceso a referencias de React:
+Para desacoplar por completo el microfrontend de Menú del microfrontend de Órdenes (evitando dependencias cíclicas de paquetes o manipulación de estado compartido), la integración se apoya en un bus de eventos en el navegador mediante `window.dispatchEvent` y `window.addEventListener`.
 
-1. **Evento para Agregar Ítem (`fmat:comanda:add-item`):**
-   ```javascript
-   window.dispatchEvent(new CustomEvent('fmat:comanda:add-item', {
-     detail: {
-       dishId: "b3e34b9f-6fa1-4a55-93df-520e5c8e312a",
-       name: "Hamburguesa Clásica",
-       unitPrice: 150.00,
-       quantity: 1,
-       notes: "Sin cebolla"
-     }
-   }));
-   ```
-2. **Escucha en `OrderTicketWidget`:**
-   El widget escucha el evento en `window.addEventListener('fmat:comanda:add-item', ...)` y agrega automáticamente el renglón al estado del ticket.
+Existen dos modalidades de eventos soportadas por `OrderTicketWidget`:
+
+#### 1. Apertura de Diálogo con Platillo Precargado (`fmat:comanda:open-add-dialog`) - **Flujo Recomendado**
+Permite que el mesero pulse "+ Agregar a comanda" en la tarjeta del platillo en Menú; esto abre en el widget de Órdenes el modal interactivo `AddDishDialog` con el nombre y precio bloqueados en solo lectura (para garantizar fidelidad con el menú), permitiendo al mesero seleccionar cantidad, notas especiales (ej. "sin cebolla") y modificadores antes de incorporarlo al ticket.
+
+* **Evento emitido desde Menú (`OfferCard.tsx`):**
+```tsx
+const customerDishName =
+  offer.presentationTag && offer.presentationTag !== "Sin etiqueta de presentación"
+    ? `${offer.entryName} (${offer.presentationTag})`
+    : offer.entryName;
+
+window.dispatchEvent(
+  new CustomEvent("fmat:comanda:open-add-dialog", {
+    detail: {
+      dishId: offer.id,
+      name: customerDishName,
+      unitPrice: offer.basePrice,
+    },
+  })
+);
+```
+
+#### 2. Inserción Directa al Ticket (`fmat:comanda:add-item`)
+Agrega directamente el platillo con cantidad y notas opcionales al borrador de la comanda sin pasar por el diálogo modal:
+```javascript
+window.dispatchEvent(
+  new CustomEvent("fmat:comanda:add-item", {
+    detail: {
+      dishId: "b3e34b9f-6fa1-4a55-93df-520e5c8e312a",
+      name: "Hamburguesa Clásica",
+      unitPrice: 150.0,
+      quantity: 1,
+      notes: "Sin cebolla"
+    }
+  })
+);
+```
+
+### 4.3 Implementación de Referencia para el Equipo de Menú
+
+> [!IMPORTANT]
+> **Responsabilidad del Equipo de Menú:**
+> Esta integración debe ser revisada, adaptada y mergeada por el equipo dueño de `Menu-Frontend` en su propio ciclo de desarrollo. A continuación se documenta el código exacto de referencia validado durante las pruebas de integración:
+
+#### A. Modificación en `src/features/offers/OfferCard.tsx`
+Se agrega el botón de acción rápida en la tarjeta de oferta activa, interceptando el evento para no detonar la navegación al detalle de edición:
+
+```tsx
+// src/features/offers/OfferCard.tsx
+export function OfferCard({ offer, busy, returnTo, catalogReturnTo, onStatusChange }: OfferCardProps) {
+  // ... lógica existente ...
+
+  const customerDishName =
+    offer.presentationTag && offer.presentationTag !== "Sin etiqueta de presentación"
+      ? `${offer.entryName} (${offer.presentationTag})`
+      : offer.entryName;
+
+  const handleAddToComanda = () => {
+    window.dispatchEvent(
+      new CustomEvent("fmat:comanda:open-add-dialog", {
+        detail: {
+          dishId: offer.id,
+          name: customerDishName,
+          unitPrice: offer.basePrice,
+        },
+      })
+    );
+  };
+
+  return (
+    <article className="offer-card" data-return-key={`offer:${offer.id}`} tabIndex={-1}>
+      {active && (
+        <div className="offer-card__order-action">
+          <button
+            type="button"
+            className="button button--primary offer-card__add-to-order-btn"
+            data-testid={`offer-add-to-order-${offer.id}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleAddToComanda();
+            }}
+            aria-label={`Agregar ${customerDishName} a la comanda`}
+          >
+            + Agregar a comanda
+          </button>
+        </div>
+      )}
+      <Link data-return-key={`offer:${offer.id}:edit`} className="offer-card__content" to={editPath} state={{ returnTo, catalogReturnTo }} aria-label={`Abrir oferta ${presentation} para editar`}>
+        {/* ... contenido existente de la tarjeta ... */}
+      </Link>
+    </article>
+  );
+}
+```
+
+#### B. Estilos en `src/features/offers/styles.css`
+Aislamiento con selector de especificidad `:where(.menu-module[data-menu-module])`:
+
+```css
+/* src/features/offers/styles.css */
+:where(.menu-module[data-menu-module]) .offer-card__order-action {
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+:where(.menu-module[data-menu-module]) .offer-card__add-to-order-btn {
+  width: 100%;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+```
 
 ---
 
