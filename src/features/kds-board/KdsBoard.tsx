@@ -85,6 +85,100 @@ export interface KdsBoardProps {
   readonly undoGracePeriodMs?: number;
 }
 
+type RunActionFn = (
+  key: string,
+  path: string,
+  body?: unknown,
+  successMsg?: { text: string; type: 'success' | 'info' },
+) => Promise<void>;
+
+async function performAdminVoid(
+  order: Order,
+  options: { reason?: string; chargeCustomer?: boolean } | undefined,
+  onAdminVoid:
+    | ((order: Order, options?: { reason?: string; chargeCustomer?: boolean }) => void)
+    | undefined,
+  runAction: RunActionFn,
+): Promise<void> {
+  const orderId = getOrderKey(order);
+  if (!orderId) return;
+
+  if (onAdminVoid) {
+    if (options?.reason != null || options?.chargeCustomer === false) {
+      onAdminVoid(order, options);
+    } else {
+      onAdminVoid(order);
+    }
+    return;
+  }
+
+  const chargeCustomer = options?.chargeCustomer ?? true;
+  const body =
+    options?.reason != null || !chargeCustomer
+      ? { reason: options?.reason, chargeCustomer }
+      : undefined;
+  const chargeText = chargeCustomer ? 'con cargo al cliente' : 'sin cargo al cliente';
+  await runAction('void-admin', `/orders/${orderId}/void`, body, {
+    text: `Comanda #${order.orderNumber ?? orderId} anulada por administración (${chargeText}).`,
+    type: 'info',
+  });
+}
+
+async function performChefVoid(
+  order: Order,
+  note: string,
+  onChefVoid: ((order: Order, note: string) => void) | undefined,
+  runAction: RunActionFn,
+): Promise<void> {
+  const orderId = getOrderKey(order);
+  if (!orderId) return;
+
+  if (onChefVoid) {
+    onChefVoid(order, note);
+    return;
+  }
+
+  await runAction(
+    'void-kitchen',
+    `/orders/${orderId}/void-kitchen-error`,
+    { note },
+    {
+      text: `Comanda #${order.orderNumber ?? orderId} anulada por error de cocina.`,
+      type: 'info',
+    },
+  );
+}
+
+function resolveRejectTargetItemId(order: Order, targetItem?: OrderItem | null): string {
+  const itemToReject =
+    targetItem ??
+    order.items.find((i) => i.status === 'PENDING') ??
+    order.items[0];
+  return itemToReject ? getItemKey(itemToReject) : '';
+}
+
+function extractAvailableStations(data: Order[] | undefined): string[] {
+  const extracted = new Set<string>();
+  extracted.add('general');
+  if (data) {
+    for (const order of data) {
+      for (const item of order.items) {
+        if (item.station) {
+          const normalized = item.station.trim().toLowerCase();
+          if (normalized) {
+            extracted.add(normalized);
+          }
+        }
+      }
+    }
+  }
+  const allList = Array.from(extracted);
+  const sortedStations = allList
+    .filter((s) => s !== 'general')
+    .sort((a, b) => a.localeCompare(b));
+  return ['general', ...sortedStations];
+}
+
 function KdsBoardContent({
   client,
   tokenProvider,
@@ -227,53 +321,18 @@ function KdsBoardContent({
       order: Order,
       options?: { reason?: string; chargeCustomer?: boolean },
     ) => {
-      const orderId = getOrderKey(order);
-      if (orderId) {
-        if (onAdminVoid) {
-          if (options?.reason != null || options?.chargeCustomer === false) {
-            onAdminVoid(order, options);
-          } else {
-            onAdminVoid(order);
-          }
-        } else {
-          const chargeCustomer = options?.chargeCustomer ?? true;
-          const body =
-            options?.reason != null || !chargeCustomer
-              ? { reason: options?.reason, chargeCustomer }
-              : undefined;
-          const chargeText = chargeCustomer ? 'con cargo al cliente' : 'sin cargo al cliente';
-          await runAction('void-admin', `/orders/${orderId}/void`, body, {
-            text: `Comanda #${order.orderNumber ?? orderId} anulada por administración (${chargeText}).`,
-            type: 'info',
-          });
-        }
-        setVoidDialogOrder(null);
-        setVoidDialogType(null);
-      }
+      await performAdminVoid(order, options, onAdminVoid, runAction);
+      setVoidDialogOrder(null);
+      setVoidDialogType(null);
     },
     [onAdminVoid, runAction],
   );
 
   const handleChefVoidConfirm = useCallback(
     async (order: Order, note: string) => {
-      const orderId = getOrderKey(order);
-      if (orderId) {
-        if (onChefVoid) {
-          onChefVoid(order, note);
-        } else {
-          await runAction(
-            'void-kitchen',
-            `/orders/${orderId}/void-kitchen-error`,
-            { note },
-            {
-              text: `Comanda #${order.orderNumber ?? orderId} anulada por error de cocina.`,
-              type: 'info',
-            },
-          );
-        }
-        setVoidDialogOrder(null);
-        setVoidDialogType(null);
-      }
+      await performChefVoid(order, note, onChefVoid, runAction);
+      setVoidDialogOrder(null);
+      setVoidDialogType(null);
     },
     [onChefVoid, runAction],
   );
@@ -299,11 +358,7 @@ function KdsBoardContent({
   const executeRejectSupplies = useCallback(
     (order: Order, targetItem?: OrderItem | null) => {
       const orderId = getOrderKey(order);
-      const itemToReject =
-        targetItem ??
-        order.items.find((i) => i.status === 'PENDING') ??
-        order.items[0];
-      const itemId = itemToReject ? getItemKey(itemToReject) : '';
+      const itemId = resolveRejectTargetItemId(order, targetItem);
       if (orderId && itemId) {
         void runAction(
           'reject',
@@ -616,27 +671,10 @@ function KdsBoardContent({
   }, [confirmReadyTarget]);
 
   // Dynamically derive available stations from current queue items, always including static "general"
-  const availableStations = useMemo<string[]>(() => {
-    const extracted = new Set<string>();
-    extracted.add('general');
-    if (data) {
-      for (const order of data) {
-        for (const item of order.items) {
-          if (item.station) {
-            const normalized = item.station.trim().toLowerCase();
-            if (normalized) {
-              extracted.add(normalized);
-            }
-          }
-        }
-      }
-    }
-    const allList = Array.from(extracted);
-    const sortedStations = allList
-      .filter((s) => s !== 'general')
-      .sort((a, b) => a.localeCompare(b));
-    return ['general', ...sortedStations];
-  }, [data]);
+  const availableStations = useMemo<string[]>(
+    () => extractAvailableStations(data),
+    [data],
+  );
 
   // Derive effective station: fallback to 'general' if selected station is not in queue
   const effectiveStation = availableStations.includes(selectedStation.toLowerCase())
