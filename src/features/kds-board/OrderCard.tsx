@@ -5,6 +5,7 @@ import { StatusBadge } from './StatusBadge.tsx';
 import { useElapsedTime } from './useElapsedTime.ts';
 import { pointerAction } from './pointerAction.ts';
 import { getItemKey, getOrderKey, getOrderNumberDisplay } from './orderNumberDisplay.ts';
+import { getOrderTtlStatus, type OrderTtlStatus } from './kdsTtl.ts';
 
 export interface PendingUndoItem {
   readonly orderId: string;
@@ -415,6 +416,7 @@ interface OrderCardActionsProps {
   readonly isPendingUndoOrder?: boolean;
   readonly undoOrderSecondsLeft?: number;
   readonly onUndoOrderReady?: (order: Order) => void;
+  readonly ttlStatus?: OrderTtlStatus;
 }
 
 function handleButtonKey(
@@ -474,6 +476,7 @@ function OrderCardReservedActions({
   isCompact = false,
   onStartPreparation,
   onRejectSupplies,
+  ttlStatus,
 }: Readonly<{
   order: Order;
   displayId: string;
@@ -481,48 +484,75 @@ function OrderCardReservedActions({
   isCompact?: boolean;
   onStartPreparation?: (order: Order) => void;
   onRejectSupplies?: (order: Order) => void;
+  ttlStatus?: OrderTtlStatus;
 }>) {
   if (order.status !== 'RESERVED') return null;
+
+  const isTtlExpired = Boolean(ttlStatus?.isExpired);
 
   return (
     <div
       data-testid={`order-actions-${displayId}`}
       className={`shrink-0 ${
-        isCompact ? 'px-2.5 pb-2 pt-0.5 gap-2' : 'px-4 pb-3 pt-1 gap-3'
-      } flex items-center w-full bg-transparent`}
+        isCompact ? 'px-2.5 pb-2 pt-0.5' : 'px-4 pb-3 pt-1'
+      } flex flex-col items-center w-full bg-transparent`}
     >
-      <button
-        type="button"
-        data-testid={`order-action-start-${displayId}`}
-        aria-label={`Iniciar preparación para la comanda ${displayId}`}
-        disabled={pendingAction === 'start'}
-        {...pointerAction(() => onStartPreparation?.(order))}
-        onKeyDown={(e) => handleButtonKey(e, () => onStartPreparation?.(order))}
-        style={{ minHeight: isCompact ? 48 : 64 }}
-        className={`${
-          isCompact
-            ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
-            : 'min-h-[64px] px-4 py-2.5 text-sm'
-        } flex-1 rounded-control font-bold bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0`}
-      >
-        Iniciar preparación
-      </button>
-      <button
-        type="button"
-        data-testid={`order-action-reject-${displayId}`}
-        aria-label={`Rechazar insumo para la comanda ${displayId}`}
-        disabled={pendingAction === 'reject'}
-        {...pointerAction(() => onRejectSupplies?.(order))}
-        onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
-        style={{ minHeight: isCompact ? 48 : 64 }}
-        className={`${
-          isCompact
-            ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
-            : 'min-h-[64px] px-4 py-2.5 text-sm'
-        } flex-1 rounded-control font-bold bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0`}
-      >
-        Rechazar insumo
-      </button>
+      {isTtlExpired && (
+        <div
+          data-testid={`order-ttl-expired-alert-${displayId}`}
+          className="w-full mb-1.5 p-1 rounded bg-red-100 border border-red-300 text-red-900 text-xs font-bold text-center"
+        >
+          Tiempo límite agotado — Cocina no confirmó a tiempo (Ocultando en {ttlStatus?.secondsUntilRemoval}s)
+        </div>
+      )}
+      <div className={`flex items-center w-full ${isCompact ? 'gap-2' : 'gap-3'}`}>
+        <button
+          type="button"
+          data-testid={`order-action-start-${displayId}`}
+          aria-label={
+            isTtlExpired
+              ? `Preparación bloqueada por expiración para la comanda ${displayId}`
+              : `Iniciar preparación para la comanda ${displayId}`
+          }
+          disabled={pendingAction === 'start' || isTtlExpired}
+          {...pointerAction(() => {
+            if (!isTtlExpired) onStartPreparation?.(order);
+          })}
+          onKeyDown={(e) =>
+            handleButtonKey(e, () => {
+              if (!isTtlExpired) onStartPreparation?.(order);
+            })
+          }
+          style={{ minHeight: isCompact ? 48 : 64 }}
+          className={`${
+            isCompact
+              ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
+              : 'min-h-[64px] px-4 py-2.5 text-sm'
+          } flex-1 rounded-control font-bold ${
+            isTtlExpired
+              ? 'bg-gray-400 text-gray-200 cursor-not-allowed opacity-60'
+              : 'bg-fmat-primary text-white hover:bg-fmat-primary-hover active:scale-[.98]'
+          } focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center select-none shadow-sm border-0`}
+        >
+          {isTtlExpired ? 'Expirada (Bloqueada)' : 'Iniciar preparación'}
+        </button>
+        <button
+          type="button"
+          data-testid={`order-action-reject-${displayId}`}
+          aria-label={`Rechazar insumo para la comanda ${displayId}`}
+          disabled={pendingAction === 'reject'}
+          {...pointerAction(() => onRejectSupplies?.(order))}
+          onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
+          style={{ minHeight: isCompact ? 48 : 64 }}
+          className={`${
+            isCompact
+              ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
+              : 'min-h-[64px] px-4 py-2.5 text-sm'
+          } flex-1 rounded-control font-bold bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0`}
+        >
+          Rechazar insumo
+        </button>
+      </div>
     </div>
   );
 }
@@ -760,6 +790,8 @@ export function OrderCard({
 
   const isManyItems = order.items.length >= 5;
 
+  const ttlStatus = getOrderTtlStatus(order);
+
   const { inPrepAt, stockReservedAt, isFinished } = getStopwatchState(order);
 
   const rawElapsedTime = useElapsedTime(
@@ -945,6 +977,7 @@ export function OrderCard({
         isPendingUndoOrder={isPendingUndoOrder}
         undoOrderSecondsLeft={undoOrderSecondsLeft}
         onUndoOrderReady={onUndoOrderReady}
+        ttlStatus={ttlStatus}
       />
     </article>
   );
