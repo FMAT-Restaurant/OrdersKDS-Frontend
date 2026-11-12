@@ -54,6 +54,8 @@ export interface OrderTicketWidgetProps {
   readonly apiBaseUrl?: string;
   readonly webSocketBaseUrl?: string;
   readonly diningSessionId?: string;
+  readonly entityLabel?: 'comanda' | 'orden';
+  readonly allowRemoveAllItems?: boolean;
   readonly fetchFn?: typeof fetch;
   readonly WebSocketClass?: typeof WebSocket;
 }
@@ -63,9 +65,11 @@ interface RejectedItemDetail {
   readonly dishId?: string;
   readonly itemId?: string;
   readonly name?: string;
+  readonly itemName?: string;
   readonly reason?: string;
   readonly requestedQuantity?: number | null;
   readonly availableQuantity?: number;
+  readonly availableStock?: number;
 }
 
 interface ReservedItemDetail {
@@ -78,6 +82,7 @@ interface ReservedItemDetail {
 
 interface ParsedRejectionDetails {
   readonly source?: string;
+  readonly reason?: string;
   readonly missingIngredients?: string[];
   readonly rejectedItems: readonly RejectedItemDetail[];
   readonly reservedItems: readonly ReservedItemDetail[];
@@ -140,27 +145,95 @@ function formatSessionDisplay(sessionId: string): string {
   return `#${cleaned || sessionId}`;
 }
 
+function parseItemIdentifier(itemObj: Record<string, unknown>): {
+  offerId?: string;
+  dishId?: string;
+  itemId?: string;
+} {
+  const itemId = typeof itemObj.itemId === 'string' ? itemObj.itemId : undefined;
+  const plateId = typeof itemObj.plateId === 'string' ? itemObj.plateId : undefined;
+  const offerId = typeof itemObj.offerId === 'string' ? itemObj.offerId : itemId;
+  const dishId = typeof itemObj.dishId === 'string' ? itemObj.dishId : (plateId ?? itemId);
+  return { offerId, dishId, itemId };
+}
+
+function parseItemQuantities(itemObj: Record<string, unknown>): {
+  requestedQuantity: number | null;
+  availableQuantity: number;
+} {
+  let availableQuantity = 0;
+  if (typeof itemObj.availableQuantity === 'number') {
+    availableQuantity = itemObj.availableQuantity;
+  } else if (typeof itemObj.availableStock === 'number') {
+    availableQuantity = itemObj.availableStock;
+  }
+
+  let requestedQuantity: number | null = null;
+  if (typeof itemObj.requestedQuantity === 'number') {
+    requestedQuantity = itemObj.requestedQuantity;
+  } else if (typeof itemObj.quantity === 'number') {
+    requestedQuantity = itemObj.quantity;
+  }
+
+  return { requestedQuantity, availableQuantity };
+}
+
+function parseSingleRejectedItem(it: unknown): RejectedItemDetail {
+  if (!it || typeof it !== 'object') {
+    return {};
+  }
+  const itemObj = it as Record<string, unknown>;
+  const ids = parseItemIdentifier(itemObj);
+  const quantities = parseItemQuantities(itemObj);
+
+  const itemName = typeof itemObj.itemName === 'string' ? itemObj.itemName : undefined;
+  const name = typeof itemObj.name === 'string' ? itemObj.name : itemName;
+  const reason = typeof itemObj.reason === 'string' ? itemObj.reason : undefined;
+
+  return {
+    ...ids,
+    name,
+    itemName,
+    reason,
+    requestedQuantity: quantities.requestedQuantity,
+    availableQuantity: quantities.availableQuantity,
+    availableStock: quantities.availableQuantity,
+  };
+}
+
+function extractRawArray(primary: unknown, fallback: unknown): unknown[] {
+  if (Array.isArray(primary)) return primary;
+  if (Array.isArray(fallback)) return fallback;
+  return [];
+}
+
 function parseRejectionDetails(details: unknown): ParsedRejectionDetails | null {
   if (!details || typeof details !== 'object') {
     return null;
   }
   const raw = details as Record<string, unknown>;
-  const missing =
-    (Array.isArray(raw.missingIngredients) ? raw.missingIngredients : null) ??
-    (Array.isArray(raw.faltantes) ? raw.faltantes : []);
-  const rejected = Array.isArray(raw.rejectedItems)
-    ? (raw.rejectedItems as RejectedItemDetail[])
-    : [];
-  const reserved = Array.isArray(raw.reservedItems)
-    ? (raw.reservedItems as ReservedItemDetail[])
-    : [];
+  const missing = extractRawArray(raw.missingIngredients, raw.faltantes);
+  const rawRejected = extractRawArray(raw.rejectedItems, raw.items);
+  const rejected = rawRejected.map(parseSingleRejectedItem);
+  const reserved = extractRawArray(raw.reservedItems, null) as ReservedItemDetail[];
 
-  if (missing.length === 0 && rejected.length === 0 && reserved.length === 0 && !raw.source) {
+  const reason =
+    typeof raw.reason === 'string' && raw.reason.trim() ? raw.reason.trim() : undefined;
+
+  const hasContent =
+    missing.length > 0 ||
+    rejected.length > 0 ||
+    reserved.length > 0 ||
+    Boolean(raw.source) ||
+    Boolean(reason);
+
+  if (!hasContent) {
     return null;
   }
 
   return {
     source: typeof raw.source === 'string' ? raw.source : undefined,
+    reason,
     missingIngredients: missing.map(String),
     rejectedItems: rejected,
     reservedItems: reserved,
@@ -181,12 +254,14 @@ function resolveDishName(
   return found?.name ?? dishIdOrOfferId;
 }
 
-function getOrderAlert(status: OrderStatusValue): string {
+function getOrderAlert(status: OrderStatusValue, entityNounLower: string = 'comanda'): string {
   switch (status) {
     case OrderStatus.REJECTED:
-      return 'Motivo de rechazo: Inventario insuficiente. Modifica la comanda para ajustar cantidades o cancela.';
+      return `Motivo de rechazo: Inventario insuficiente. Modifica la ${entityNounLower} para ajustar cantidades o cancela.`;
     case OrderStatus.EXPIRED:
-      return 'La comanda expiró. Crea una nueva comanda.';
+      return `La ${entityNounLower} expiró. Crea una nueva ${entityNounLower}.`;
+    case OrderStatus.CANCELLED:
+      return `La ${entityNounLower} ha sido cancelada.`;
     case OrderStatus.DELIVERED:
       return 'Entregada por cocina — recoger.';
     default:
@@ -252,6 +327,11 @@ function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdown
   return (
     <div className="order-ticket__rejection-breakdown">
       <h3>Detalle de rechazo de inventario</h3>
+      {details.reason && (
+        <p className="order-ticket__rejection-reason" data-testid="rejection-reason-banner">
+          <strong>Motivo:</strong> {details.reason}
+        </p>
+      )}
       {details.missingIngredients && details.missingIngredients.length > 0 && (
         <p className="order-ticket__missing-ingredients">
           <strong>Ingredientes faltantes:</strong>{' '}
@@ -264,7 +344,9 @@ function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBreakdown
           <ul>
             {details.rejectedItems.map((item, idx) => {
               const dishName =
-                item.name ?? resolveDishName(item.dishId ?? item.offerId, orderItems);
+                item.name ??
+                item.itemName ??
+                resolveDishName(item.dishId ?? item.offerId, orderItems);
               const formattedReason = item.reason
                 ? item.reason.replace(/stock/gi, 'inventario')
                 : undefined;
@@ -311,6 +393,7 @@ interface OrderDraftHeaderProps {
   readonly draftIsTakeaway: boolean;
   readonly isMutating: boolean;
   readonly diningSessionId?: string;
+  readonly entityNoun?: string;
   readonly onTableNumberChange: (table: number | string) => void;
   readonly onTakeawayChange: (takeaway: boolean) => void;
 }
@@ -320,13 +403,14 @@ function OrderDraftHeader({
   draftIsTakeaway,
   isMutating,
   diningSessionId,
+  entityNoun = 'Comanda',
   onTableNumberChange,
   onTakeawayChange,
 }: Readonly<OrderDraftHeaderProps>) {
   return (
     <header className="order-ticket__header">
       <div>
-        <h2 id="order-ticket-title">Nueva Comanda</h2>
+        <h2 id="order-ticket-title">{`Nueva ${entityNoun}`}</h2>
         <div className="order-ticket__draft-table-controls">
           <label>
             <input
@@ -373,12 +457,14 @@ interface OrderExistingHeaderProps {
   readonly order: Order;
   readonly orderId: string;
   readonly diningSessionId?: string;
+  readonly entityNoun?: string;
 }
 
 function OrderExistingHeader({
   order,
   orderId,
   diningSessionId,
+  entityNoun = 'Comanda',
 }: Readonly<OrderExistingHeaderProps>) {
   const effectiveSession = order.diningSessionId || diningSessionId;
   const tableOrTakeaway = getTableOrTakeawayLabel(order);
@@ -390,7 +476,7 @@ function OrderExistingHeader({
   return (
     <header className="order-ticket__header">
       <div>
-        <h2 id="order-ticket-title">Comanda #{orderNumber}</h2>
+        <h2 id="order-ticket-title">{`${entityNoun} #${orderNumber}`}</h2>
         <p>
           {tableOrTakeaway}
           {effectiveSession && (
@@ -563,6 +649,8 @@ interface OrderItemsListProps {
   readonly isMutating: boolean;
   readonly canRedo: boolean;
   readonly draftItems: readonly EditableOrderItem[];
+  readonly emptyMessage?: string;
+  readonly canRemoveItem?: boolean;
   readonly onUpdateDraftItem: (index: number, update: Partial<EditableOrderItem>) => void;
   readonly onRemoveDraftItem: (index: number) => void;
   readonly onRedoItem: (item: OrderItem) => void;
@@ -575,17 +663,20 @@ function OrderItemsList({
   isMutating,
   canRedo,
   draftItems,
+  emptyMessage = 'Esta comanda todavía no tiene platillos.',
+  canRemoveItem = false,
   onUpdateDraftItem,
   onRemoveDraftItem,
   onRedoItem,
   onOpenAddDish,
 }: Readonly<OrderItemsListProps>) {
   if (isEditing) {
+    const allowRemove = canRemoveItem || draftItems.length > 1;
     return (
       <div className="order-ticket__items">
         <h3>Platillos</h3>
         {draftItems.length === 0 ? (
-          <p>Esta comanda todavía no tiene platillos.</p>
+          <p>{emptyMessage}</p>
         ) : (
           <ul>
             {draftItems.map((draft, index) => (
@@ -594,7 +685,7 @@ function OrderItemsList({
                 draft={draft}
                 index={index}
                 isMutating={isMutating}
-                canRemove={draftItems.length > 1}
+                canRemove={allowRemove}
                 onUpdate={onUpdateDraftItem}
                 onRemove={onRemoveDraftItem}
               />
@@ -620,7 +711,7 @@ function OrderItemsList({
     return (
       <div className="order-ticket__items">
         <h3>Platillos</h3>
-        <p>Esta comanda todavía no tiene platillos.</p>
+        <p>{emptyMessage}</p>
       </div>
     );
   }
@@ -652,11 +743,13 @@ interface OrderTicketExistingActionsProps {
   readonly canConfirm: boolean;
   readonly canCancel: boolean;
   readonly canEdit: boolean;
+  readonly canResetToNew?: boolean;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
   readonly onStartEditing: () => void;
   readonly onSubmitEdits: () => void;
   readonly onDiscardEdits: () => void;
+  readonly onResetToNew?: () => void;
 }
 
 function OrderTicketExistingActions({
@@ -668,11 +761,13 @@ function OrderTicketExistingActions({
   canConfirm,
   canCancel,
   canEdit,
+  canResetToNew,
   onConfirm,
   onCancel,
   onStartEditing,
   onSubmitEdits,
   onDiscardEdits,
+  onResetToNew,
 }: Readonly<OrderTicketExistingActionsProps>) {
   if (isEditing) {
     return (
@@ -713,6 +808,16 @@ function OrderTicketExistingActions({
       >
         Modificar
       </button>
+      {canResetToNew && onResetToNew && (
+        <button
+          type="button"
+          className="order-ticket__button-secondary"
+          onClick={onResetToNew}
+          disabled={isMutating}
+        >
+          Nueva orden
+        </button>
+      )}
     </footer>
   );
 }
@@ -780,9 +885,15 @@ function OrderTicket({
   apiBaseUrl,
   webSocketBaseUrl,
   diningSessionId: propDiningSessionId,
+  entityLabel: entityLabelProp,
+  allowRemoveAllItems,
   fetchFn,
   WebSocketClass,
 }: Readonly<OrderTicketWidgetProps>) {
+  const entityNoun = entityLabelProp === 'orden' ? 'Orden' : 'Comanda';
+  const entityNounLower = entityNoun.toLowerCase();
+  const emptyItemsMessage = `Esta ${entityNounLower} todavía no tiene platillos.`;
+
   const [activeOrderId, setActiveOrderId] = useState<string | undefined>(
     initialOrderId || undefined,
   );
@@ -832,15 +943,18 @@ function OrderTicket({
 
   const order = orderQuery.data;
 
-  // Listen to external fmat:comanda:add-item and fmat:comanda:open-add-dialog DOM events
+  // Listen to external fmat:comanda:add-item, fmat:orden:add-item and open-add-dialog DOM events
   useEffect(() => {
     const handleAddItemEvent = (event: Event) => {
       const customEvent = event as CustomEvent<AddItemEventDetail>;
       const detail = customEvent.detail;
       if (!detail?.name) return;
 
+      const effectiveDishId = detail.sourceId || detail.dishId || detail.itemId;
       const newItem: EditableOrderItem = {
-        dishId: detail.dishId,
+        dishId: effectiveDishId,
+        sourceId: detail.sourceId || detail.dishId,
+        offerId: detail.offerId,
         itemId: detail.itemId,
         name: detail.name,
         quantity:
@@ -867,7 +981,9 @@ function OrderTicket({
       if (!detail?.name) return;
 
       setSelectedDishForDialog({
-        dishId: detail.dishId,
+        dishId: detail.sourceId || detail.dishId,
+        sourceId: detail.sourceId || detail.dishId,
+        offerId: detail.offerId,
         itemId: detail.itemId,
         name: detail.name,
         unitPrice: detail.unitPrice,
@@ -877,9 +993,13 @@ function OrderTicket({
 
     window.addEventListener('fmat:comanda:add-item', handleAddItemEvent);
     window.addEventListener('fmat:comanda:open-add-dialog', handleOpenAddDialogEvent);
+    window.addEventListener('fmat:orden:add-item', handleAddItemEvent);
+    window.addEventListener('fmat:orden:open-add-dialog', handleOpenAddDialogEvent);
     return () => {
       window.removeEventListener('fmat:comanda:add-item', handleAddItemEvent);
       window.removeEventListener('fmat:comanda:open-add-dialog', handleOpenAddDialogEvent);
+      window.removeEventListener('fmat:orden:add-item', handleAddItemEvent);
+      window.removeEventListener('fmat:orden:open-add-dialog', handleOpenAddDialogEvent);
     };
   }, [isEditing, order]);
 
@@ -949,7 +1069,7 @@ function OrderTicket({
           items: draftItems.map((item) => ({
             id: item.id,
             itemId: item.itemId,
-            dishId: item.dishId ?? undefined,
+            dishId: item.sourceId || item.dishId || undefined,
             name: item.name,
             quantity:
               typeof item.quantity === 'number'
@@ -1036,8 +1156,11 @@ function OrderTicket({
   };
 
   const handleAddDish = (dish: NewDishData) => {
+    const effectiveDishId = dish.sourceId || dish.dishId || dish.itemId;
     const newItem: EditableOrderItem = {
-      dishId: dish.dishId,
+      dishId: effectiveDishId,
+      sourceId: dish.sourceId || dish.dishId,
+      offerId: dish.offerId,
       itemId: dish.itemId,
       name: dish.name,
       quantity: dish.quantity,
@@ -1115,7 +1238,7 @@ function OrderTicket({
 
       const createdId = created.id ?? created.orderId ?? created.publicId;
       if (!createdId) {
-        throw new Error('No se pudo obtener el identificador de la comanda creada.');
+        throw new Error('No se pudo obtener el identificador de la orden creada.');
       }
 
       const withItems = await api.patch<Order>(
@@ -1124,7 +1247,7 @@ function OrderTicket({
           items: draftItems.map((item) => ({
             id: item.id,
             itemId: item.itemId,
-            dishId: item.dishId ?? undefined,
+            dishId: item.sourceId || item.dishId || undefined,
             name: item.name,
             quantity:
               typeof item.quantity === 'number'
@@ -1177,7 +1300,7 @@ function OrderTicket({
   if (activeOrderId && orderQuery.isPending) {
     return (
       <section className="order-ticket" aria-busy="true">
-        <output>Cargando comanda…</output>
+        <output>Cargando {entityNounLower}…</output>
       </section>
     );
   }
@@ -1198,13 +1321,23 @@ function OrderTicket({
   const isCreated = order?.status === OrderStatus.CREATED;
   const isReserved = order?.status === OrderStatus.RESERVED;
   const isRejected = order?.status === OrderStatus.REJECTED;
+  const isExpired = order?.status === OrderStatus.EXPIRED;
+  const isCancelled = order?.status === OrderStatus.CANCELLED;
 
-  const canCancel = Boolean(isCreated || isReserved || isRejected);
-  const canEdit = Boolean((isCreated && !order?.confirmedAt) || isRejected);
-  const canConfirm = Boolean(isCreated && !order?.confirmedAt);
+  const canCancel = Boolean(isCreated || isReserved || isRejected || isExpired);
+  const canEdit = Boolean((isCreated && !order?.confirmedAt) || isRejected || isExpired);
+  const canConfirm = Boolean((isCreated && !order?.confirmedAt) || isExpired);
+  const canResetToNew = Boolean(isCancelled || isExpired);
+
+  const handleResetToNewOrder = () => {
+    setActiveOrderId(undefined);
+    setDraftItems([]);
+    setIsEditing(true);
+    onCreateNewOrder?.();
+  };
 
   const rejectionDetailsParsed = order ? parseRejectionDetails(order.rejectionDetails) : null;
-  const alertMessage = order ? getOrderAlert(order.status) : '';
+  const alertMessage = order ? getOrderAlert(order.status, entityNounLower) : '';
   const connectionMessage = getRealtimeStatusMessage(
     WEBSOCKET_STATUS_TRANSLATIONS[connectionStatus],
   );
@@ -1216,6 +1349,7 @@ function OrderTicket({
           order={order}
           orderId={activeOrderId}
           diningSessionId={propDiningSessionId}
+          entityNoun={entityNoun}
         />
       ) : (
         <OrderDraftHeader
@@ -1223,6 +1357,7 @@ function OrderTicket({
           draftIsTakeaway={draftIsTakeaway}
           isMutating={isMutating}
           diningSessionId={effectiveDiningSessionId}
+          entityNoun={entityNoun}
           onTableNumberChange={setDraftTableNumber}
           onTakeawayChange={setDraftIsTakeaway}
         />
@@ -1241,9 +1376,13 @@ function OrderTicket({
       {alertMessage && (
         <div className="order-ticket__alert" role="status" aria-live="assertive">
           <p>{alertMessage}</p>
-          {order?.status === OrderStatus.EXPIRED && (
-            <button type="button" onClick={onCreateNewOrder}>
-              Crear una nueva comanda
+          {(order?.status === OrderStatus.EXPIRED || order?.status === OrderStatus.CANCELLED) && (
+            <button
+              type="button"
+              className="order-ticket__button-secondary"
+              onClick={handleResetToNewOrder}
+            >
+              Crear una nueva {entityNounLower}
             </button>
           )}
         </div>
@@ -1259,6 +1398,8 @@ function OrderTicket({
         isMutating={isMutating}
         canRedo={order?.status === OrderStatus.DELIVERED}
         draftItems={draftItems}
+        emptyMessage={emptyItemsMessage}
+        canRemoveItem={Boolean(allowRemoveAllItems || entityLabelProp === 'orden')}
         onUpdateDraftItem={updateDraftItem}
         onRemoveDraftItem={removeDraftItem}
         onRedoItem={setSelectedRedoItem}
@@ -1310,11 +1451,13 @@ function OrderTicket({
           canConfirm={canConfirm}
           canCancel={canCancel}
           canEdit={canEdit}
+          canResetToNew={canResetToNew}
           onConfirm={() => runMutation(() => confirmMutation.mutate())}
           onCancel={() => runMutation(() => cancelMutation.mutate())}
           onStartEditing={startEditing}
           onSubmitEdits={submitEdits}
           onDiscardEdits={handleDiscard}
+          onResetToNew={handleResetToNewOrder}
         />
       )}
 
