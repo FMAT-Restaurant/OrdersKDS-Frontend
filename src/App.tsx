@@ -5,7 +5,7 @@ import { ReadyOrdersAlert } from './ReadyOrdersAlert.tsx';
 import { queryClient } from './shared/api/queryClient.ts';
 import { OrderStatus, ItemStatus } from './shared/types/order.ts';
 import type { Order } from './shared/api/schemas.ts';
-import type { FederatedModuleProps, ShellUser, TokenProvider } from './shared/types/auth.ts';
+import { UserRole, type FederatedModuleProps, type ShellUser, type TokenProvider } from './shared/types/auth.ts';
 import { getStoredSessionUser, resolveUserRole } from './shared/types/auth.ts';
 import { getStoredSessionToken } from './shared/api/client.ts';
 
@@ -13,12 +13,12 @@ type ViewMode = 'kds' | 'ticket' | 'alerts';
 
 /**
  * Valid JWT accepted by orders-backend (ADR-0011).
- * Payload: { sub, user_id: '00000000-0000-0000-0000-000000000001', role: 'waiter', exp: 253370764800 }
+ * Payload: { sub, user_id, role: 'admin', roles: ['admin', 'chef', 'waiter'], permissions: ['*'], exp }
  */
-const DEV_WAITER_JWT =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VyX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwicm9sZSI6IndhaXRlciIsImV4cCI6MjUzMzcwNzY0ODAwfQ.signature';
+const DEV_AUTH_JWT =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VyX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwicm9sZSI6ImFkbWluIiwicm9sZXMiOlsiYWRtaW4iLCJjaGVmIiwid2FpdGVyIl0sInBlcm1pc3Npb25zIjpbIioiXSwiZXhwIjoyNTMzNzA3NjQ4MDB9.devsignature';
 
-const devTokenProvider = () => Promise.resolve(DEV_WAITER_JWT);
+const devTokenProvider = () => Promise.resolve(DEV_AUTH_JWT);
 
 const ORDER_ID_REGEX = /\/orders\/([^/]+)/;
 const REDO_ITEM_REGEX = /\/orders\/[^/]+\/items\/([^/]+)\/redo/;
@@ -694,7 +694,7 @@ function App({
     }
   }, [theme]);
 
-  const effectiveRole = resolveUserRole(activeUser);
+  const effectiveRole = resolveUserRole(activeUser) ?? UserRole.ADMIN;
   const hasKitchen = Boolean(
     activeUser?.userType === 'ADMIN' ||
       activeUser?.permissions?.some((p) => p.startsWith('kitchen:') || p === '*') ||
@@ -721,7 +721,7 @@ function App({
     if (token) return Promise.resolve(token);
     if (tokenProvider) return tokenProvider();
     const stored = getStoredSessionToken();
-    return Promise.resolve(stored || DEV_WAITER_JWT);
+    return Promise.resolve(stored || DEV_AUTH_JWT);
   }, [token, tokenProvider]);
 
   useEffect(() => {

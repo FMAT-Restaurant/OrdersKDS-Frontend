@@ -77,17 +77,24 @@ export class KdsWebSocketClient {
     return '/ws/kds';
   }
 
-  resolveFullUrl(): string {
+  resolveFullUrl(token?: string | null): string {
     const path = this.resolveEndpoint();
+    let url: string;
     if (this.options.baseUrl) {
       const cleanBase = this.options.baseUrl.replace(/\/+$/, '');
-      return `${cleanBase}${path}`;
-    }
-    if (typeof window !== 'undefined' && window.location) {
+      url = `${cleanBase}${path}`;
+    } else if (typeof window !== 'undefined' && window.location) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}${path}`;
+      url = `${protocol}//${window.location.host}${path}`;
+    } else {
+      url = `ws://localhost:8000${path}`;
     }
-    return `ws://localhost:8000${path}`;
+
+    if (token) {
+      const separator = url.includes('?') ? '&' : '?';
+      url = `${url}${separator}token=${encodeURIComponent(token)}`;
+    }
+    return url;
   }
 
   /**
@@ -114,14 +121,18 @@ export class KdsWebSocketClient {
       console.warn('Failed to obtain token for WebSocket connection:', err);
     }
 
-    const url = this.resolveFullUrl();
+    const url = this.resolveFullUrl(token);
 
     try {
-      // In browser environment, passing token via subprotocol if available
+      // Passing token via query param AND subprotocol for maximum resilience across browsers/proxies
       this.ws = token ? new this.WebSocketClass(url, ['bearer', token]) : new this.WebSocketClass(url);
-    } catch (err) {
-      this.handleConnectionError(err);
-      return;
+    } catch {
+      try {
+        this.ws = new this.WebSocketClass(url);
+      } catch (err) {
+        this.handleConnectionError(err);
+        return;
+      }
     }
 
     this.ws.onopen = this.handleOpen.bind(this);
