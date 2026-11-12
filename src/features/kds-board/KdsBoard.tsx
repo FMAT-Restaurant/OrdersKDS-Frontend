@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
 import {
@@ -25,6 +25,7 @@ import {
   type PendingUndoRefEntry,
   registerGracePeriodCountdown,
 } from './kdsGracePeriod.ts';
+import { getOrderTtlStatus } from './kdsTtl.ts';
 
 const BASE_TAB_CLASS =
   'min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98]';
@@ -177,6 +178,127 @@ function extractAvailableStations(data: Order[] | undefined): string[] {
     .filter((s) => s !== 'general')
     .sort((a, b) => a.localeCompare(b));
   return ['general', ...sortedStations];
+}
+
+function clearRefEntryTimers(entry: PendingUndoRefEntry | undefined): void {
+  if (!entry) return;
+  if (entry.timerId) clearTimeout(entry.timerId);
+  if (entry.intervalId) clearInterval(entry.intervalId);
+}
+
+function extractPendingItemUndos(
+  refs: Map<string, PendingUndoRefEntry>,
+): { key: string; execute: () => Promise<void> }[] {
+  const itemEntries: { key: string; execute: () => Promise<void> }[] = [];
+  for (const [key, entry] of refs.entries()) {
+    if (entry.type === 'item') {
+      clearRefEntryTimers(entry);
+      refs.delete(key);
+      itemEntries.push({ key, execute: entry.execute });
+    }
+  }
+  return itemEntries;
+}
+
+function clearAllPendingTimers(
+  refs: Map<string, PendingUndoRefEntry>,
+  executePending: boolean,
+): void {
+  for (const entry of refs.values()) {
+    clearRefEntryTimers(entry);
+    if (executePending) {
+      void entry.execute();
+    }
+  }
+  if (executePending) {
+    refs.clear();
+  }
+}
+
+function cancelExistingOrderUndoEntry(
+  refs: Map<string, PendingUndoRefEntry>,
+  orderId: string,
+): (() => Promise<void>) | null {
+  const existingEntry = refs.get(orderId);
+  if (!existingEntry) return null;
+  clearRefEntryTimers(existingEntry);
+  refs.delete(orderId);
+  return existingEntry.type === 'item' ? existingEntry.execute : null;
+}
+
+interface BumpBarNavContext {
+  availableStations: string[];
+  effectiveStation: string;
+  currentPage: number;
+  totalPages: number;
+  setSelectedStation: (station: string) => void;
+  setPage: Dispatch<SetStateAction<number>>;
+  handleUndoReady: () => void;
+}
+
+function handleBumpBarNavigationAction(action: string, ctx: BumpBarNavContext): void {
+  if (action === 'UNDO_LAST_READY') {
+    ctx.handleUndoReady();
+    return;
+  }
+  const currentIndex = ctx.availableStations.indexOf(ctx.effectiveStation.toLowerCase());
+  if (action === 'PREVIOUS_STATION' && currentIndex > 0) {
+    ctx.setSelectedStation(ctx.availableStations[currentIndex - 1]);
+    ctx.setPage(1);
+    return;
+  }
+  if (
+    action === 'NEXT_STATION' &&
+    currentIndex >= 0 &&
+    currentIndex < ctx.availableStations.length - 1
+  ) {
+    ctx.setSelectedStation(ctx.availableStations[currentIndex + 1]);
+    ctx.setPage(1);
+    return;
+  }
+  if (action === 'FOCUS_PREVIOUS_ORDER' && ctx.currentPage > 1) {
+    ctx.setPage((prev) => Math.max(1, prev - 1));
+    return;
+  }
+  if (action === 'FOCUS_NEXT_ORDER' && ctx.currentPage < ctx.totalPages) {
+    ctx.setPage((prev) => Math.min(ctx.totalPages, prev + 1));
+  }
+}
+
+function formatUndoFeedbackMessage(
+  current: PendingUndoRefEntry,
+): { text: string; type: 'info' } {
+  if (current.type === 'order') {
+    const orderNumberDisplay = getOrderNumberDisplay(
+      current.order.orderNumber,
+      getOrderKey(current.order) || 'unknown',
+    );
+    const triggeringItemName = current.item?.name;
+    return {
+      text: triggeringItemName
+        ? `Envío cancelado. ${triggeringItemName} se mantiene pendiente y la comanda #${orderNumberDisplay} sigue en preparación.`
+        : `Envío cancelado. Comanda #${orderNumberDisplay} se mantiene en preparación.`,
+      type: 'info',
+    };
+  }
+  const itemName = current.item?.name ?? 'Platillo';
+  return {
+    text: `Envío cancelado. ${itemName} se mantiene pendiente.`,
+    type: 'info',
+  };
+}
+
+function countRemainingPendingItems(
+  order: Order,
+  targetItemId: string,
+  optimisticReadyIds: Set<string>,
+): number {
+  return order.items.filter((i) => {
+    const id = getItemKey(i);
+    if (id === targetItemId) return false;
+    if (optimisticReadyIds.has(id)) return false;
+    return i.status === 'PENDING';
+  }).length;
 }
 
 function KdsBoardContent({
@@ -409,19 +531,7 @@ function KdsBoardContent({
   const pendingUndoRefs = useRef<Map<string, PendingUndoRefEntry>>(new Map());
 
   const flushPendingItemUndos = useCallback(async () => {
-    const itemEntries: {
-      key: string;
-      execute: () => Promise<void>;
-    }[] = [];
-
-    for (const [key, entry] of pendingUndoRefs.current.entries()) {
-      if (entry.type === 'item') {
-        if (entry.timerId) clearTimeout(entry.timerId);
-        if (entry.intervalId) clearInterval(entry.intervalId);
-        pendingUndoRefs.current.delete(key);
-        itemEntries.push({ key, execute: entry.execute });
-      }
-    }
+    const itemEntries = extractPendingItemUndos(pendingUndoRefs.current);
 
     if (itemEntries.length > 0) {
       setPendingUndoMap((prev) => {
@@ -443,9 +553,7 @@ function KdsBoardContent({
     const current = pendingUndoRefs.current.get(orderKey);
     if (!current) return;
 
-    if (current.timerId) clearTimeout(current.timerId);
-    if (current.intervalId) clearInterval(current.intervalId);
-
+    clearRefEntryTimers(current);
     pendingUndoRefs.current.delete(orderKey);
     setPendingUndoMap((prev) => {
       const next = { ...prev };
@@ -459,26 +567,7 @@ function KdsBoardContent({
       setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
     }
 
-    if (current.type === 'order') {
-      const orderNumberDisplay = getOrderNumberDisplay(
-        current.order.orderNumber,
-        getOrderKey(current.order) || 'unknown',
-      );
-      const triggeringItemName = current.item?.name;
-      setFeedbackMessage({
-        text: triggeringItemName
-          ? `Envío cancelado. ${triggeringItemName} se mantiene pendiente y la comanda #${orderNumberDisplay} sigue en preparación.`
-          : `Envío cancelado. Comanda #${orderNumberDisplay} se mantiene en preparación.`,
-        type: 'info',
-      });
-      return;
-    }
-
-    const itemName = current.item?.name ?? 'Platillo';
-    setFeedbackMessage({
-      text: `Envío cancelado. ${itemName} se mantiene pendiente.`,
-      type: 'info',
-    });
+    setFeedbackMessage(formatUndoFeedbackMessage(current));
   }, []);
 
   const executeMarkItemReady = useCallback(
@@ -542,16 +631,15 @@ function KdsBoardContent({
         return;
       }
       const targetItemId = getItemKey(item);
-      const remainingPending = order.items.filter((i) => {
-        const id = getItemKey(i);
-        if (id === targetItemId) return false;
-        if (optimisticReadyItemIdsRef.current.has(id)) return false;
-        return i.status === 'PENDING';
-      });
+      const remainingCount = countRemainingPendingItems(
+        order,
+        targetItemId,
+        optimisticReadyItemIdsRef.current,
+      );
       // Flush any pending item countdowns across the board
       void flushPendingItemUndos();
 
-      if (remainingPending.length === 0) {
+      if (remainingCount === 0) {
         setConfirmReadyTarget({ order, item });
         return;
       }
@@ -564,21 +652,13 @@ function KdsBoardContent({
   useEffect(() => {
     const activeRefs = pendingUndoRefs.current;
     const handleBeforeUnload = () => {
-      for (const entry of activeRefs.values()) {
-        if (entry.timerId) clearTimeout(entry.timerId);
-        if (entry.intervalId) clearInterval(entry.intervalId);
-        void entry.execute();
-      }
-      activeRefs.clear();
+      clearAllPendingTimers(activeRefs, true);
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      for (const entry of activeRefs.values()) {
-        if (entry.timerId) clearTimeout(entry.timerId);
-        if (entry.intervalId) clearInterval(entry.intervalId);
-      }
+      clearAllPendingTimers(activeRefs, false);
     };
   }, []);
 
@@ -603,14 +683,12 @@ function KdsBoardContent({
       if (!orderId) return;
 
       // Clear any pending undo for this order (e.g. an individual item on this order)
-      const existingEntry = pendingUndoRefs.current.get(orderId);
-      if (existingEntry) {
-        if (existingEntry.timerId) clearTimeout(existingEntry.timerId);
-        if (existingEntry.intervalId) clearInterval(existingEntry.intervalId);
-        pendingUndoRefs.current.delete(orderId);
-        if (existingEntry.type === 'item') {
-          void existingEntry.execute();
-        }
+      const pendingItemExecution = cancelExistingOrderUndoEntry(
+        pendingUndoRefs.current,
+        orderId,
+      );
+      if (pendingItemExecution) {
+        void pendingItemExecution();
       }
 
       if (triggeringItem) {
@@ -681,10 +759,12 @@ function KdsBoardContent({
     ? selectedStation
     : 'general';
 
-  // Filter orders by active sub-tab (Punto 2)
+  // Filter orders by active sub-tab (Punto 2) and purge TTL-eliminated orders
   const tabOrders = useMemo<Order[]>(() => {
     if (!data) return [];
-    return data.filter((order) => matchesKdsTab(order, tab));
+    return data
+      .filter((order) => !getOrderTtlStatus(order).isCompletelyEliminated)
+      .filter((order) => matchesKdsTab(order, tab));
   }, [data, tab]);
 
   // Filter orders by station locally (OP-09, RF-08)
@@ -731,42 +811,15 @@ function KdsBoardContent({
   useBumpBar(
     useCallback(
       (action: string) => {
-        switch (action) {
-          case 'UNDO_LAST_READY': {
-            handleUndoReady();
-            break;
-          }
-          case 'PREVIOUS_STATION': {
-            const currentIndex = availableStations.indexOf(effectiveStation.toLowerCase());
-            if (currentIndex > 0) {
-              setSelectedStation(availableStations[currentIndex - 1]);
-              setPage(1);
-            }
-            break;
-          }
-          case 'NEXT_STATION': {
-            const currentIndex = availableStations.indexOf(effectiveStation.toLowerCase());
-            if (currentIndex >= 0 && currentIndex < availableStations.length - 1) {
-              setSelectedStation(availableStations[currentIndex + 1]);
-              setPage(1);
-            }
-            break;
-          }
-          case 'FOCUS_PREVIOUS_ORDER': {
-            if (currentPage > 1) {
-              setPage((prev) => Math.max(1, prev - 1));
-            }
-            break;
-          }
-          case 'FOCUS_NEXT_ORDER': {
-            if (currentPage < totalPages) {
-              setPage((prev) => Math.min(totalPages, prev + 1));
-            }
-            break;
-          }
-          default:
-            break;
-        }
+        handleBumpBarNavigationAction(action, {
+          availableStations,
+          effectiveStation,
+          currentPage,
+          totalPages,
+          setSelectedStation,
+          setPage,
+          handleUndoReady,
+        });
       },
       [availableStations, effectiveStation, currentPage, totalPages, handleUndoReady],
     ),

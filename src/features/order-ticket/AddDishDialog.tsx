@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 export interface NewDishData {
   readonly dishId?: string;
   readonly itemId?: string;
+  readonly sourceId?: string;
+  readonly offerId?: string;
   readonly name: string;
   readonly quantity: number;
   readonly modifiers: string[];
@@ -13,6 +15,8 @@ export interface NewDishData {
 export interface SelectedDishInfo {
   readonly dishId?: string;
   readonly itemId?: string;
+  readonly sourceId?: string;
+  readonly offerId?: string;
   readonly name: string;
   readonly unitPrice?: number;
 }
@@ -99,6 +103,8 @@ export function AddDishDialog({
     onAdd({
       dishId: dish?.dishId,
       itemId: dish?.itemId,
+      sourceId: dish?.sourceId,
+      offerId: dish?.offerId,
       name: trimmedName,
       quantity,
       modifiers,

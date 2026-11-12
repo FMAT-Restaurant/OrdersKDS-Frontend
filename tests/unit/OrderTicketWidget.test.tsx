@@ -914,6 +914,36 @@ describe('OrderTicketWidget', () => {
     expect(screen.getByText(/inventario insuficiente en almacén/i)).toBeInTheDocument();
   });
 
+  it('handles inventory rejection with Hector format containing reason and items with availableStock', async () => {
+    server.use(
+      http.get('*/orders/:orderId', () =>
+        HttpResponse.json({
+          ...order,
+          status: OrderStatus.REJECTED,
+          rejectionDetails: {
+            reason: 'Falta de carne y tocino en bodega',
+            items: [
+              {
+                itemId: 'dish-burger-bacon',
+                itemName: 'Hamburguesa con Tocino',
+                requestedQuantity: 4,
+                availableStock: 1,
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    renderTicket();
+
+    expect(await screen.findByText('Detalle de rechazo de inventario')).toBeInTheDocument();
+    expect(screen.getByTestId('rejection-reason-banner')).toHaveTextContent(
+      'Motivo: Falta de carne y tocino en bodega',
+    );
+    expect(screen.getByText('Hamburguesa con Tocino')).toBeInTheDocument();
+    expect(screen.getByText(/solicitados: 4, disponibles: 1/i)).toBeInTheDocument();
+  });
+
   it('allows adding a new dish via + Agregar platillo dialog in edit mode and persists via PATCH', async () => {
     let capturedPayload: unknown = null;
     server.use(
