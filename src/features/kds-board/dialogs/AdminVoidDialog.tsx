@@ -54,6 +54,46 @@ const ADMIN_QUICK_REASONS: readonly QuickReason[] = [
   },
 ];
 
+function getReasonButtonClass(isSelected: boolean, isContradictory: boolean): string {
+  if (isContradictory) {
+    return 'opacity-40 cursor-not-allowed bg-gray-100 text-muted border-border';
+  }
+  if (isSelected) {
+    return 'bg-fmat-primary text-white border-fmat-primary shadow-sm';
+  }
+  return 'bg-surface text-ink border-border hover:bg-gray-50';
+}
+
+function getChargeSwitchDescription(
+  hasQuickReasons: boolean,
+  customReasonActive: boolean,
+  chargeCustomer: boolean,
+): string {
+  if (hasQuickReasons) {
+    return 'Fijado automáticamente por los motivos predeterminados seleccionados.';
+  }
+  if (customReasonActive) {
+    if (chargeCustomer) {
+      return 'Se enviará el cargo a la cuenta de la mesa.';
+    }
+    return 'Se registrará como merma absorbida por el restaurante.';
+  }
+  return 'Activa una razón personalizada para habilitar la edición manual del cobro.';
+}
+
+function getChargeSwitchTitle(
+  hasQuickReasons: boolean,
+  customReasonActive: boolean,
+): string | undefined {
+  if (hasQuickReasons) {
+    return 'El cobro está determinado por los motivos seleccionados y no se puede alterar';
+  }
+  if (!customReasonActive) {
+    return 'Activa una razón personalizada para habilitar la edición manual del cobro';
+  }
+  return undefined;
+}
+
 /**
  * Administrative void dialog for orders in IN_PREPARATION (TASK-36, RF-26, RF-27, ADR-0012).
  * Enables Administrator to select quick administrative reasons, input notes,
@@ -69,7 +109,8 @@ export function AdminVoidDialog({
   onCancel,
 }: Readonly<AdminVoidDialogProps>) {
   const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
-  const [customNote, setCustomNote] = useState<string>('');
+  const [customReasonActive, setCustomReasonActive] = useState<boolean>(false);
+  const [customReason, setCustomReason] = useState<string>('');
   const [chargeCustomer, setChargeCustomer] = useState<boolean>(true);
   const [showKeyboard, setShowKeyboard] = useState<boolean>(false);
 
@@ -94,7 +135,38 @@ export function AdminVoidDialog({
     tableDisplay = 'Para llevar';
   }
 
+  const hasChargeReasonsSelected = selectedReasons.some((label) => {
+    const r = ADMIN_QUICK_REASONS.find((item) => item.label === label);
+    return r?.defaultCharge === true;
+  });
+
+  const hasNoChargeReasonsSelected = selectedReasons.some((label) => {
+    const r = ADMIN_QUICK_REASONS.find((item) => item.label === label);
+    return r?.defaultCharge === false;
+  });
+
+  const hasQuickReasons = selectedReasons.length > 0;
+  const isManualToggleAllowed = customReasonActive && !hasQuickReasons;
+  const isChargeToggleDisabled = !isOperable || isSubmitting || !isManualToggleAllowed;
+
+  const handleToggleCharge = () => {
+    if (isChargeToggleDisabled) {
+      return;
+    }
+    setChargeCustomer((prev) => !prev);
+  };
+
+  const isContradictoryReason = (reason: QuickReason) => {
+    if (reason.defaultCharge) {
+      return hasNoChargeReasonsSelected;
+    }
+    return hasChargeReasonsSelected;
+  };
+
   const toggleReason = (reason: QuickReason) => {
+    if (isContradictoryReason(reason)) {
+      return;
+    }
     setSelectedReasons((prev) => {
       const exists = prev.includes(reason.label);
       if (exists) {
@@ -106,10 +178,10 @@ export function AdminVoidDialog({
   };
 
   const handleConfirm = () => {
-    const trimmedNote = customNote.trim();
+    const trimmedReason = customReason.trim();
     const parts = [...selectedReasons];
-    if (trimmedNote.length > 0) {
-      parts.push(trimmedNote);
+    if (customReasonActive && trimmedReason.length > 0) {
+      parts.push(trimmedReason);
     }
     const finalReason = parts.length > 0 ? parts.join(' - ') : undefined;
     onConfirm(order, { reason: finalReason, chargeCustomer });
@@ -138,9 +210,7 @@ export function AdminVoidDialog({
               ¿Cobrar comanda mermada al comensal?
             </span>
             <span className="text-sm text-body">
-              {chargeCustomer
-                ? 'Se enviará el cargo a la cuenta de la mesa.'
-                : 'Se registrará como merma absorbida por el restaurante.'}
+              {getChargeSwitchDescription(hasQuickReasons, customReasonActive, chargeCustomer)}
             </span>
           </div>
           <button
@@ -150,12 +220,13 @@ export function AdminVoidDialog({
             aria-checked={chargeCustomer}
             aria-labelledby="admin-charge-label"
             data-testid="admin-void-charge-toggle"
-            disabled={!isOperable || isSubmitting}
-            {...pointerAction(() => setChargeCustomer((prev) => !prev))}
+            disabled={isChargeToggleDisabled}
+            title={getChargeSwitchTitle(hasQuickReasons, customReasonActive)}
+            {...pointerAction(handleToggleCharge)}
             style={{ minHeight: 48, minWidth: 48 }}
-            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-fmat-primary items-center p-1 ${
-              chargeCustomer ? 'bg-fmat-primary' : 'bg-gray-300'
-            }`}
+            className={`relative inline-flex h-8 w-14 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-fmat-primary items-center p-1 ${
+              isChargeToggleDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+            } ${chargeCustomer ? 'bg-fmat-primary' : 'bg-gray-300'}`}
           >
             <span
               aria-hidden="true"
@@ -164,6 +235,16 @@ export function AdminVoidDialog({
               }`}
             />
           </button>
+        </div>
+
+        {/* Instructions banner for UI/UX clarity */}
+        <div className="p-3 bg-gray-50 border border-border rounded-control text-xs text-body leading-relaxed flex flex-col gap-1">
+          <span className="font-bold text-ink">
+            Instrucciones para la anulación:
+          </span>
+          <span>
+            Los motivos predeterminados establecen automáticamente si la comanda se cobra o se registra como merma. Para definir manualmente el tipo de cobro, activa una razón personalizada con el botón "+ Razón personalizada". No se permiten contradicciones entre opciones de cobro y merma.
+          </span>
         </div>
 
         <div
@@ -190,28 +271,41 @@ export function AdminVoidDialog({
 
         {/* Quick Reasons Selection */}
         <section aria-label="Motivos administrativos rápidos" className="flex flex-col gap-2">
-          <span className="text-sm font-semibold uppercase tracking-wider text-body">
-            Motivo administrativo:
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold uppercase tracking-wider text-body">
+              Motivo administrativo:
+            </span>
+            <span className="text-xs text-muted">
+              {chargeCustomer ? '(Opciones con cobro)' : '(Opciones de merma pura)'}
+            </span>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {ADMIN_QUICK_REASONS.map((item) => {
               const isSelected = selectedReasons.includes(item.label);
+              const isContradictory = isContradictoryReason(item);
               return (
                 <button
                   key={item.label}
                   type="button"
                   data-testid={`admin-void-reason-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                   aria-pressed={isSelected}
-                  disabled={!isOperable || isSubmitting}
+                  disabled={!isOperable || isSubmitting || isContradictory}
+                  title={isContradictory ? 'Incompatible con la selección actual' : undefined}
                   {...pointerAction(() => toggleReason(item))}
                   style={{ minHeight: 48 }}
-                  className={`min-h-[48px] px-3 py-2 rounded-control text-left border transition-all text-sm font-semibold flex flex-col justify-center cursor-pointer ${
-                    isSelected
-                      ? 'bg-fmat-primary text-white border-fmat-primary shadow-sm'
-                      : 'bg-surface text-ink border-border hover:bg-gray-50'
-                  }`}
+                  className={`min-h-[48px] px-3 py-2 rounded-control text-left border transition-all text-sm font-semibold flex flex-col justify-center cursor-pointer ${getReasonButtonClass(
+                    isSelected,
+                    isContradictory,
+                  )}`}
                 >
-                  <span className="font-bold">{item.label}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold">{item.label}</span>
+                    {isContradictory && (
+                      <span className="text-[10px] uppercase font-normal text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                        Incompatible
+                      </span>
+                    )}
+                  </div>
                   <span className={`text-xs ${isSelected ? 'text-white/80' : 'text-muted'}`}>
                     {item.description}
                   </span>
@@ -221,38 +315,65 @@ export function AdminVoidDialog({
           </div>
         </section>
 
-        {/* Custom note & virtual keyboard */}
-        <section aria-label="Nota adicional" className="flex flex-col gap-2">
+        {/* Custom reason & virtual keyboard */}
+        <section aria-label="Razón personalizada" className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <label htmlFor="admin-void-note-input" className="text-sm font-semibold uppercase tracking-wider text-body">
-              Nota personalizada (opcional):
-            </label>
+            <span className="text-sm font-semibold uppercase tracking-wider text-body">
+              Razón personalizada:
+            </span>
             <button
               type="button"
-              data-testid="admin-void-toggle-keyboard"
+              data-testid="admin-void-toggle-custom-reason"
               disabled={!isOperable || isSubmitting}
-              {...pointerAction(() => setShowKeyboard((prev) => !prev))}
-              className="text-xs font-bold text-fmat-primary hover:underline px-2 py-1 cursor-pointer"
+              {...pointerAction(() => {
+                setCustomReasonActive((prev) => {
+                  const nextVal = !prev;
+                  if (!nextVal) {
+                    setCustomReason('');
+                    setShowKeyboard(false);
+                  }
+                  return nextVal;
+                });
+              })}
+              className="text-xs font-bold px-2 py-1 rounded border border-border text-fmat-primary hover:bg-gray-50 cursor-pointer disabled:opacity-40"
             >
-              {showKeyboard ? 'Ocultar teclado' : 'Teclado en pantalla'}
+              {customReasonActive ? 'Quitar razón personalizada' : '+ Razón personalizada'}
             </button>
           </div>
-          <input
-            id="admin-void-note-input"
-            type="text"
-            value={customNote}
-            disabled={!isOperable || isSubmitting}
-            onChange={(event) => setCustomNote(event.target.value)}
-            placeholder="Observaciones adicionales..."
-            data-testid="admin-void-note-input"
-            className="w-full min-h-[48px] px-4 py-2 rounded-md bg-surface border border-border text-ink placeholder:text-muted text-base font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
-          />
-          {showKeyboard && (
-            <VirtualKeyboard
-              value={customNote}
-              onChange={setCustomNote}
-              disabled={!isOperable || isSubmitting}
-            />
+          {customReasonActive && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label htmlFor="admin-void-custom-reason-input" className="text-xs text-muted">
+                  Describe el motivo de anulación:
+                </label>
+                <button
+                  type="button"
+                  data-testid="admin-void-toggle-keyboard"
+                  disabled={!isOperable || isSubmitting}
+                  {...pointerAction(() => setShowKeyboard((prev) => !prev))}
+                  className="text-xs font-bold text-fmat-primary hover:underline px-2 py-1 cursor-pointer"
+                >
+                  {showKeyboard ? 'Ocultar teclado' : 'Teclado en pantalla'}
+                </button>
+              </div>
+              <input
+                id="admin-void-custom-reason-input"
+                type="text"
+                value={customReason}
+                disabled={!isOperable || isSubmitting}
+                onChange={(event) => setCustomReason(event.target.value)}
+                placeholder="Observaciones o motivo específico..."
+                data-testid="admin-void-custom-reason-input"
+                className="w-full min-h-[48px] px-4 py-2 rounded-md bg-surface border border-border text-ink placeholder:text-muted text-base font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
+              />
+              {showKeyboard && (
+                <VirtualKeyboard
+                  value={customReason}
+                  onChange={setCustomReason}
+                  disabled={!isOperable || isSubmitting}
+                />
+              )}
+            </div>
           )}
         </section>
 

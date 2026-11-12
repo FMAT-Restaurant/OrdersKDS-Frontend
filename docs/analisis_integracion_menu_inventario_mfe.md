@@ -40,6 +40,7 @@ En la experiencia de atención en sala de FMAT Restaurant, el mesero interactúa
 
 ---
 
+
 ## 3. Contrato de Inyección de `OrderTicketWidget` en `Menu-Frontend`
 
 ### 3.1 Declaración del Remote en `Menu-Frontend/vite.config.ts`
