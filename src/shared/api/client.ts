@@ -25,6 +25,17 @@ export interface ApiClientConfig {
   fetchFn?: typeof fetch;
 }
 
+export function getStoredSessionToken(): string | null {
+  try {
+    const raw = localStorage.getItem('fmat_restaurant_auth_session');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed.accessToken || parsed.token || null;
+  } catch {
+    return null;
+  }
+}
+
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly tokenProvider?: TokenProvider;
@@ -51,15 +62,19 @@ export class ApiClient {
       headers.set('Content-Type', 'application/json');
     }
 
+    let token: string | null = null;
     if (this.tokenProvider) {
       try {
-        const token = await this.tokenProvider();
-        if (token) {
-          headers.set('Authorization', `Bearer ${token}`);
-        }
+        token = await this.tokenProvider();
       } catch (err) {
         console.warn('Failed to obtain token from tokenProvider:', err);
       }
+    } else {
+      token = getStoredSessionToken();
+    }
+
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
     }
 
     return headers;
@@ -246,5 +261,8 @@ const localDevToken = import.meta.env.VITE_API_TOKEN || generateLocalDevToken('a
 
 export const apiClient = createApiClient({
   baseUrl: localApiBaseUrl,
-  tokenProvider: () => Promise.resolve(localDevToken),
+  tokenProvider: () => {
+    const stored = getStoredSessionToken();
+    return Promise.resolve(stored || localDevToken);
+  },
 });

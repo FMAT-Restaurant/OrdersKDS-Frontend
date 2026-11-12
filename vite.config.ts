@@ -13,9 +13,10 @@ export default defineConfig({
   plugins: [
     react(),
     federation({
-      name: 'ordersKds',
+      name: 'ordenes_app',
       filename: 'remoteEntry.js',
       exposes: {
+        './App': './src/App.tsx',
         './KdsApp': './src/KdsApp.tsx',
         './IntermediateDishesApp': './src/IntermediateDishesApp.tsx',
         './OrderTicketWidget': './src/OrderTicketWidget.tsx',
@@ -49,6 +50,9 @@ export default defineConfig({
     cssCodeSplit: false,
   },
   server: {
+    port: 5177,
+    strictPort: true,
+    cors: true,
     headers: {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
@@ -72,7 +76,8 @@ export default defineConfig({
   },
   preview: {
     cors: true,
-    port: 4173,
+    port: 5177,
+    strictPort: true,
     headers: {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',

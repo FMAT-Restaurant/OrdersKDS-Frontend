@@ -5,6 +5,9 @@ import { ReadyOrdersAlert } from './ReadyOrdersAlert.tsx';
 import { queryClient } from './shared/api/queryClient.ts';
 import { OrderStatus, ItemStatus } from './shared/types/order.ts';
 import type { Order } from './shared/api/schemas.ts';
+import type { FederatedModuleProps, ShellUser, TokenProvider } from './shared/types/auth.ts';
+import { getStoredSessionUser, resolveUserRole } from './shared/types/auth.ts';
+import { getStoredSessionToken } from './shared/api/client.ts';
 
 type ViewMode = 'kds' | 'ticket' | 'alerts';
 
@@ -611,12 +614,115 @@ function AlertsViewContent() {
   );
 }
 
-function App() {
-  const [view, setView] = useState<ViewMode>('kds');
+function getInitialView(user: ShellUser | null): ViewMode {
+  if (user) {
+    const hasKitchen = Boolean(
+      user.userType === 'ADMIN' ||
+        user.permissions?.some((p) => p.startsWith('kitchen:') || p === '*') ||
+        user.roles?.some((r) =>
+          ['admin', 'administrador', 'chef', 'chef_master', 'kitchen', 'cocinero'].includes(
+            r.toLowerCase(),
+          ),
+        ),
+    );
+    const hasOrders = Boolean(
+      user.userType === 'ADMIN' ||
+        user.permissions?.some((p) => p.startsWith('orders:') || p === '*') ||
+        user.roles?.some((r) =>
+          ['admin', 'administrador', 'waiter', 'mesero'].includes(r.toLowerCase()),
+        ),
+    );
+    if (!hasKitchen && hasOrders) return 'ticket';
+  }
+  return 'kds';
+}
+
+function ShellNavbar({
+  view,
+  onViewChange,
+}: Readonly<{
+  view: ViewMode;
+  onViewChange: (view: ViewMode) => void;
+}>) {
+  return (
+    <header className="flex items-center justify-between px-6 py-2 bg-slate-950 border-b border-slate-800 text-xs shrink-0 z-50">
+      <span className="font-semibold text-slate-200">Módulo Órdenes & Cocina</span>
+      <div className="flex gap-2 bg-slate-900 p-1 rounded-lg border border-slate-700">
+        <button
+          type="button"
+          onClick={() => onViewChange('kds')}
+          className={`px-3 py-1 rounded font-medium transition-colors cursor-pointer ${
+            view === 'kds'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-slate-300 hover:text-white'
+          }`}
+        >
+          Pantalla Cocina (KDS)
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewChange('ticket')}
+          className={`px-3 py-1 rounded font-medium transition-colors cursor-pointer ${
+            view === 'ticket'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-300 hover:text-white'
+          }`}
+        >
+          Gestión de Comandas
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function App({
+  token,
+  tokenProvider,
+  currentUser,
+  theme,
+}: Readonly<FederatedModuleProps> = {}) {
+  const activeUser = currentUser ?? getStoredSessionUser();
+  const [view, setView] = useState<ViewMode>(() => getInitialView(activeUser));
   const [selectedOrderId, setSelectedOrderId] = useState<string>('ord-mesa-4');
   const [customOrderId, setCustomOrderId] = useState<string>('');
-  const [isBackendMode, setIsBackendMode] = useState<boolean>(false);
+  const [isBackendMode, setIsBackendMode] = useState<boolean>(Boolean(token || currentUser));
   const presetsRef = useRef<Record<string, Order>>({ ...PRESETS });
+
+  useEffect(() => {
+    if (theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  }, [theme]);
+
+  const effectiveRole = resolveUserRole(activeUser);
+  const hasKitchen = Boolean(
+    activeUser?.userType === 'ADMIN' ||
+      activeUser?.permissions?.some((p) => p.startsWith('kitchen:') || p === '*') ||
+      activeUser?.roles?.some((r) =>
+        ['admin', 'administrador', 'chef', 'chef_master', 'kitchen', 'cocinero'].includes(
+          r.toLowerCase(),
+        ),
+      ),
+  );
+  const hasOrders = Boolean(
+    activeUser?.userType === 'ADMIN' ||
+      activeUser?.permissions?.some((p) => p.startsWith('orders:') || p === '*') ||
+      activeUser?.roles?.some((r) =>
+        ['admin', 'administrador', 'waiter', 'mesero'].includes(r.toLowerCase()),
+      ),
+  );
+  const isAdmin = Boolean(
+    activeUser?.userType === 'ADMIN' ||
+      activeUser?.permissions?.includes('*') ||
+      activeUser?.roles?.some((r) => ['admin', 'administrador'].includes(r.toLowerCase())),
+  );
+
+  const effectiveTokenProvider: TokenProvider = useCallback(() => {
+    if (token) return Promise.resolve(token);
+    if (tokenProvider) return tokenProvider();
+    const stored = getStoredSessionToken();
+    return Promise.resolve(stored || DEV_WAITER_JWT);
+  }, [token, tokenProvider]);
 
   useEffect(() => {
     Object.values(PRESETS).forEach((order) => {
@@ -651,35 +757,55 @@ function App() {
     [selectedOrderId],
   );
 
+  const isShellMode = Boolean(activeUser);
+
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-slate-900 text-slate-100">
-      {/* Dev Switcher Bar */}
-      <header className="flex flex-wrap items-center justify-between px-4 py-2 bg-slate-950 border-b border-slate-800 text-xs gap-2 shrink-0 z-50">
-        <DevNavbar view={view} onViewChange={setView} />
+      {isShellMode ? (
+        (isAdmin || (hasKitchen && hasOrders)) && (
+          <ShellNavbar view={view} onViewChange={setView} />
+        )
+      ) : (
+        <header className="flex flex-wrap items-center justify-between px-4 py-2 bg-slate-950 border-b border-slate-800 text-xs gap-2 shrink-0 z-50">
+          <DevNavbar view={view} onViewChange={setView} />
 
-        {view === 'ticket' && (
-          <TicketSimulationBar
-            isBackendMode={isBackendMode}
-            selectedOrderId={selectedOrderId}
-            customOrderId={customOrderId}
-            onSelectPreset={handleSelectPreset}
-            onSelectSeedOrder={handleSelectSeedOrder}
-            onCustomOrderIdChange={setCustomOrderId}
-            onApplyCustomOrder={handleApplyCustomOrder}
-          />
-        )}
-      </header>
+          {view === 'ticket' && (
+            <TicketSimulationBar
+              isBackendMode={isBackendMode}
+              selectedOrderId={selectedOrderId}
+              customOrderId={customOrderId}
+              onSelectPreset={handleSelectPreset}
+              onSelectSeedOrder={handleSelectSeedOrder}
+              onCustomOrderIdChange={setCustomOrderId}
+              onApplyCustomOrder={handleApplyCustomOrder}
+            />
+          )}
+        </header>
+      )}
 
       {/* Main View Area */}
       <main className="flex-1 w-full h-full overflow-auto">
-        {view === 'kds' && <KdsApp />}
+        {view === 'kds' && (
+          <KdsApp userRole={effectiveRole} tokenProvider={effectiveTokenProvider} />
+        )}
         {view === 'ticket' && (
-          <TicketViewContent
-            selectedOrderId={selectedOrderId}
-            isBackendMode={isBackendMode}
-            mockFetch={mockFetch}
-            onSelectPreset={handleSelectPreset}
-          />
+          isShellMode ? (
+            <div className="p-6 flex flex-col items-center justify-start min-h-full bg-slate-100 text-slate-900">
+              <div className="orders-kds-root w-full max-w-4xl">
+                <OrderTicketWidget
+                  tokenProvider={effectiveTokenProvider}
+                  userId={activeUser?.id || activeUser?.sub || '00000000-0000-0000-0000-000000000001'}
+                />
+              </div>
+            </div>
+          ) : (
+            <TicketViewContent
+              selectedOrderId={selectedOrderId}
+              isBackendMode={isBackendMode}
+              mockFetch={mockFetch}
+              onSelectPreset={handleSelectPreset}
+            />
+          )
         )}
         {view === 'alerts' && <AlertsViewContent />}
       </main>
