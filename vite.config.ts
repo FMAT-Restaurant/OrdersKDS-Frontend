@@ -68,6 +68,14 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
+      '/kds': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
       '/ws': {
         target: 'ws://127.0.0.1:8000',
         ws: true,
@@ -90,6 +98,14 @@ export default defineConfig({
     },
     proxy: {
       '/orders': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/kds': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },

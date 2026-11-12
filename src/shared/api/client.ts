@@ -244,13 +244,15 @@ function toBase64Url(obj: unknown): string {
   return unpadded.replaceAll('+', '-').replaceAll('/', '_');
 }
 
-function generateLocalDevToken(role = 'admin'): string {
+export function generateLocalDevToken(role = 'admin'): string {
   const header = toBase64Url({ alg: 'HS256', typ: 'JWT' });
   const exp = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
   const claims = toBase64Url({
     sub: '00000000-0000-0000-0000-000000000001',
     user_id: '00000000-0000-0000-0000-000000000001',
     role,
+    roles: [role, 'chef', 'waiter'],
+    permissions: ['*'],
     exp,
   });
   return `${header}.${claims}.devsignature`;
