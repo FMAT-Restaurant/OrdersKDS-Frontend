@@ -362,9 +362,8 @@ function KdsHeader({
           {pendingCount > 0 && (
             <span
               data-testid="pending-badge"
-              className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${
-                isPendingSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
-              }`}
+              className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${isPendingSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+                }`}
             >
               {pendingCount}
             </span>
@@ -386,9 +385,8 @@ function KdsHeader({
           {inPrepCount > 0 && (
             <span
               data-testid="in-prep-badge"
-              className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${
-                isInPrepSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
-              }`}
+              className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${isInPrepSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+                }`}
             >
               {inPrepCount}
             </span>
@@ -466,17 +464,15 @@ function KdsActionToasts({
         <output
           aria-live="polite"
           data-testid="kds-action-feedback"
-          className={`pointer-events-auto rounded-control border px-4 py-2.5 text-sm sm:text-base font-semibold flex items-center justify-between shadow-lg backdrop-blur-sm transition-all ${
-            isFeedbackSuccess
+          className={`pointer-events-auto rounded-control border px-4 py-2.5 text-sm sm:text-base font-semibold flex items-center justify-between shadow-lg backdrop-blur-sm transition-all ${isFeedbackSuccess
               ? 'bg-emerald-50/95 border-emerald-300 text-emerald-950'
               : 'bg-blue-50/95 border-blue-300 text-blue-950'
-          }`}
+            }`}
         >
           <div className="flex items-center gap-2">
             <span
-              className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
-                isFeedbackSuccess ? 'bg-emerald-600' : 'bg-blue-600'
-              }`}
+              className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${isFeedbackSuccess ? 'bg-emerald-600' : 'bg-blue-600'
+                }`}
             />
             <span>{feedbackMessage.text}</span>
           </div>
