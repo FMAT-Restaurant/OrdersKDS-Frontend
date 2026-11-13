@@ -28,7 +28,7 @@ import {
 import { getOrderTtlStatus } from './kdsTtl.ts';
 
 const BASE_TAB_CLASS =
-  'min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98]';
+  'min-h-[48px] sm:min-h-[52px] xl:min-h-[56px] px-2.5 sm:px-3 xl:px-3.5 py-1.5 sm:py-2 rounded-control font-bold text-xs sm:text-sm xl:text-base whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98]';
 
 function isRedoOrder(order: Order): boolean {
   return (
@@ -37,9 +37,18 @@ function isRedoOrder(order: Order): boolean {
   );
 }
 
-function matchesKdsTab(order: Order, currentTab: KdsTabType): boolean {
+function matchesKdsTab(order: Order, currentTab: KdsTabType, nowMs?: number): boolean {
   if (currentTab === 'pending') {
-    return order.status === OrderStatus.RESERVED;
+    return (
+      order.status === OrderStatus.RESERVED &&
+      !getOrderTtlStatus(order, nowMs).isCompletelyEliminated
+    );
+  }
+  if (currentTab === 'expired') {
+    return (
+      order.status === OrderStatus.EXPIRED ||
+      (order.status === OrderStatus.RESERVED && getOrderTtlStatus(order, nowMs).isExpired)
+    );
   }
   if (currentTab === 'in_preparation') {
     return order.status === OrderStatus.IN_PREPARATION;
@@ -52,6 +61,19 @@ function matchesKdsTab(order: Order, currentTab: KdsTabType): boolean {
   }
   // 'active' (default / backward-compatible queue view)
   return order.status !== OrderStatus.DELIVERED || isRedoOrder(order);
+}
+
+function getExpiredTabClass(isSelected: boolean, count: number): string {
+  if (count > 0) {
+    if (isSelected) {
+      return `${BASE_TAB_CLASS} bg-amber-700 text-white shadow-md border border-amber-800 ring-2 ring-amber-400 font-extrabold`;
+    }
+    return `${BASE_TAB_CLASS} bg-surface text-amber-800 hover:bg-amber-50 border border-amber-300 shadow hover:shadow-md font-bold`;
+  }
+  if (isSelected) {
+    return `${BASE_TAB_CLASS} bg-fmat-primary text-white shadow-md border border-fmat-primary`;
+  }
+  return `${BASE_TAB_CLASS} bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md`;
 }
 
 function getRedoTabClass(isSelected: boolean, count: number): string {
@@ -310,6 +332,7 @@ interface KdsHeaderProps {
   readonly pendingCount: number;
   readonly inPrepCount: number;
   readonly redoCount: number;
+  readonly expiredCount: number;
 }
 
 function KdsHeader({
@@ -321,11 +344,13 @@ function KdsHeader({
   pendingCount,
   inPrepCount,
   redoCount,
+  expiredCount,
 }: Readonly<KdsHeaderProps>) {
   const isPendingSelected = tab === 'pending';
   const isInPrepSelected = tab === 'in_preparation' || tab === 'active';
   const isRedoSelected = tab === 'redo';
   const isDeliveredSelected = tab === 'delivered';
+  const isExpiredSelected = tab === 'expired';
 
   const pendingTabClass = isPendingSelected
     ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
@@ -340,11 +365,11 @@ function KdsHeader({
     : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md';
 
   return (
-    <header className="px-4 sm:px-6 md:px-8 py-3 sm:py-4 bg-surface border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 shadow-sm">
+    <header className="px-3 sm:px-4 xl:px-6 py-2.5 sm:py-3 bg-surface border-b border-border flex flex-col lg:flex-row lg:items-center justify-between gap-2 xl:gap-3 shadow-sm">
       <div
         role="tablist"
         aria-label="Vistas KDS"
-        className="flex items-center gap-1.5 sm:gap-2 bg-gray-100 p-1.5 rounded-lg border border-border shrink-0 overflow-x-auto max-w-full"
+        className="flex flex-wrap items-center gap-1 sm:gap-1.5 bg-gray-100 p-1 sm:p-1.5 rounded-lg border border-border max-w-full"
       >
         <button
           type="button"
@@ -355,14 +380,13 @@ function KdsHeader({
           tabIndex={0}
           data-testid="tab-pending"
           {...pointerAction(() => onTabChange('pending'))}
-          style={{ minHeight: 64 }}
-          className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${pendingTabClass}`}
+          className={`${BASE_TAB_CLASS} ${pendingTabClass}`}
         >
           <span>Pendientes</span>
           {pendingCount > 0 && (
             <span
               data-testid="pending-badge"
-              className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${isPendingSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${isPendingSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
                 }`}
             >
               {pendingCount}
@@ -378,14 +402,13 @@ function KdsHeader({
           tabIndex={0}
           data-testid="tab-active-view"
           {...pointerAction(() => onTabChange('in_preparation'))}
-          style={{ minHeight: 64 }}
-          className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${inPrepTabClass}`}
+          className={`${BASE_TAB_CLASS} ${inPrepTabClass}`}
         >
           <span>En Preparación</span>
           {inPrepCount > 0 && (
             <span
               data-testid="in-prep-badge"
-              className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${isInPrepSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${isInPrepSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
                 }`}
             >
               {inPrepCount}
@@ -401,14 +424,13 @@ function KdsHeader({
           tabIndex={0}
           data-testid="tab-redo-view"
           {...pointerAction(() => onTabChange('redo'))}
-          style={{ minHeight: 64 }}
           className={getRedoTabClass(isRedoSelected, redoCount)}
         >
           <span>Rehechuras</span>
           {redoCount > 0 && (
             <span
               data-testid="redo-badge"
-              className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-black rounded-full bg-white text-red-700 shadow-sm"
+              className="ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-black rounded-full bg-white text-red-700 shadow-sm"
             >
               {redoCount}
             </span>
@@ -423,10 +445,32 @@ function KdsHeader({
           tabIndex={0}
           data-testid="tab-delivered"
           {...pointerAction(() => onTabChange('delivered'))}
-          style={{ minHeight: 64 }}
-          className={`min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98] ${deliveredTabClass}`}
+          className={`${BASE_TAB_CLASS} ${deliveredTabClass}`}
         >
           Entregadas
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-expired"
+          aria-controls="panel-kds-grid"
+          aria-selected={isExpiredSelected}
+          tabIndex={0}
+          data-testid="tab-expired"
+          {...pointerAction(() => onTabChange('expired'))}
+          className={getExpiredTabClass(isExpiredSelected, expiredCount)}
+        >
+          <span>Caducados</span>
+          {expiredCount > 0 && (
+            <span
+              data-testid="expired-badge"
+              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${
+                isExpiredSelected ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800'
+              }`}
+            >
+              {expiredCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -555,7 +599,15 @@ function KdsFooter({
   );
 }
 
+function getEmptyQueueMessage(tab?: KdsTabType): string {
+  if (tab === 'expired') return 'No hay comandas caducadas';
+  if (tab === 'delivered') return 'No hay comandas entregadas';
+  if (tab === 'redo') return 'No hay rehechuras';
+  return 'No hay comandas pendientes';
+}
+
 interface KdsGridContentProps {
+  readonly currentTab?: KdsTabType;
   readonly isLoading: boolean;
   readonly isError: boolean;
   readonly error: Error | null;
@@ -575,6 +627,7 @@ interface KdsGridContentProps {
 }
 
 function KdsGridContent({
+  currentTab,
   isLoading,
   isError,
   error,
@@ -622,7 +675,7 @@ function KdsGridContent({
         data-testid="kds-empty"
         className="flex items-center justify-center h-full text-2xl font-semibold text-muted"
       >
-        <span>No hay comandas pendientes</span>
+        <span>{getEmptyQueueMessage(currentTab)}</span>
         <span className="sr-only">No hay órdenes en esta vista</span>
       </div>
     );
@@ -665,6 +718,7 @@ function KdsGridContent({
             onChefVoid={onOpenChefVoid}
             userRole={userRole}
             pendingAction={pendingAction ?? undefined}
+            isExpiredTab={currentTab === 'expired'}
           />
         );
       })}
@@ -700,6 +754,7 @@ interface KdsDialogsProps {
   readonly onMarkOrderReady: (order: Order, triggeringItem?: Order['items'][number]) => void;
   readonly onOpenAdminVoid: (order: Order) => void;
   readonly onOpenChefVoid: (order: Order) => void;
+  readonly isExpiredTab?: boolean;
 }
 
 function KdsDialogs({
@@ -727,6 +782,7 @@ function KdsDialogs({
   onMarkOrderReady,
   onOpenAdminVoid,
   onOpenChefVoid,
+  isExpiredTab = false,
 }: Readonly<KdsDialogsProps>) {
   const modalOrderKey = selectedModalOrder ? getOrderKey(selectedModalOrder) : '';
   const modalPendingUndo = modalOrderKey ? pendingUndoMap[modalOrderKey] : undefined;
@@ -754,6 +810,7 @@ function KdsDialogs({
           undoOrderSecondsLeft={isModalPendingUndoOrder ? modalPendingUndo?.secondsLeft : undefined}
           pendingOrderTriggeringItemId={isModalPendingUndoOrder ? modalPendingUndo?.itemId : undefined}
           optimisticReadyItemIds={optimisticReadyItemIds}
+          isExpiredTab={isExpiredTab}
         />
       )}
 
@@ -802,6 +859,23 @@ function KdsDialogs({
       )}
     </>
   );
+}
+
+function useReservedTtlNowMs(orders: Order[]): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const hasTimestampedReserved = orders.some(
+    (o) => o.status === OrderStatus.RESERVED && Boolean(o.stock_reserved_at ?? o.stockReservedAt),
+  );
+
+  useEffect(() => {
+    if (!hasTimestampedReserved) return;
+    const intervalId = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, [hasTimestampedReserved]);
+
+  return nowMs;
 }
 
 function KdsBoardContent({
@@ -863,14 +937,21 @@ function KdsBoardContent({
     return data ?? [];
   }, [tab, data, queryClient]);
 
+  const ttlNowMs = useReservedTtlNowMs(activeQueueData);
+
   const redoCount = useMemo(
     () => activeQueueData.filter((o) => isRedoOrder(o)).length,
     [activeQueueData],
   );
 
   const pendingCount = useMemo(
-    () => activeQueueData.filter((o) => o.status === OrderStatus.RESERVED).length,
-    [activeQueueData],
+    () => activeQueueData.filter((o) => matchesKdsTab(o, 'pending', ttlNowMs)).length,
+    [activeQueueData, ttlNowMs],
+  );
+
+  const expiredCount = useMemo(
+    () => activeQueueData.filter((o) => matchesKdsTab(o, 'expired', ttlNowMs)).length,
+    [activeQueueData, ttlNowMs],
   );
 
   const inPrepCount = useMemo(
@@ -1262,13 +1343,11 @@ function KdsBoardContent({
     ? selectedStation
     : 'general';
 
-  // Filter orders by active sub-tab (Punto 2) and purge TTL-eliminated orders
+  // Filter orders by active sub-tab (Punto 2)
   const tabOrders = useMemo<Order[]>(() => {
     if (!data) return [];
-    return data
-      .filter((order) => !getOrderTtlStatus(order).isCompletelyEliminated)
-      .filter((order) => matchesKdsTab(order, tab));
-  }, [data, tab]);
+    return data.filter((order) => matchesKdsTab(order, tab, ttlNowMs));
+  }, [data, tab, ttlNowMs]);
 
   // Filter orders by station locally (OP-09, RF-08)
   const filteredOrders = useMemo<Order[]>(() => {
@@ -1343,6 +1422,7 @@ function KdsBoardContent({
         pendingCount={pendingCount}
         inPrepCount={inPrepCount}
         redoCount={redoCount}
+        expiredCount={expiredCount}
       />
 
       <section
@@ -1357,6 +1437,7 @@ function KdsBoardContent({
           onClearError={() => setActionError(null)}
         />
         <KdsGridContent
+          currentTab={tab}
           isLoading={isLoading}
           isError={isError}
           error={error}
@@ -1410,6 +1491,7 @@ function KdsBoardContent({
         onMarkOrderReady={startOrderReadyGracePeriod}
         onOpenAdminVoid={handleOpenAdminVoid}
         onOpenChefVoid={handleOpenChefVoid}
+        isExpiredTab={tab === 'expired'}
       />
     </div>
   );

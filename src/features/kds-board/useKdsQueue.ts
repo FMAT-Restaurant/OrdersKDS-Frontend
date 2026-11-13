@@ -5,7 +5,7 @@ import { KdsQueueResponseSchema, type Order } from '../../shared/api/schemas.ts'
 import type { TokenProvider } from '../../shared/types/auth.ts';
 
 export type KdsViewType = 'active' | 'delivered';
-export type KdsTabType = 'pending' | 'in_preparation' | 'active' | 'redo' | 'delivered';
+export type KdsTabType = 'pending' | 'in_preparation' | 'active' | 'redo' | 'delivered' | 'expired';
 
 export interface UseKdsQueueOptions {
   readonly view?: KdsViewType;
