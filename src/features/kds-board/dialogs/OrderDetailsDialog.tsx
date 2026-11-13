@@ -12,6 +12,7 @@ import { useElapsedTime } from '../useElapsedTime.ts';
 import { pointerAction } from '../pointerAction.ts';
 import { getItemKey, getOrderKey, getOrderNumberDisplay } from '../orderNumberDisplay.ts';
 import type { PendingUndoItem } from '../OrderCard.tsx';
+import { getOrderTtlStatus } from '../kdsTtl.ts';
 
 export interface OrderDetailsDialogProps {
   readonly order: Order | null;
@@ -32,6 +33,7 @@ export interface OrderDetailsDialogProps {
   readonly undoOrderSecondsLeft?: number;
   readonly pendingOrderTriggeringItemId?: string;
   readonly optimisticReadyItemIds?: Set<string>;
+  readonly isExpiredTab?: boolean;
 }
 
 function handleButtonKey(
@@ -75,6 +77,7 @@ function OrderDetailsItemRow({
   isPendingUndo,
   isOptimisticallyReady,
   undoSecondsLeft = 15,
+  isReadOnlyExpired = false,
 }: Readonly<{
   order: Order;
   item: OrderItem;
@@ -86,6 +89,7 @@ function OrderDetailsItemRow({
   isPendingUndo: boolean;
   isOptimisticallyReady: boolean;
   undoSecondsLeft?: number;
+  isReadOnlyExpired?: boolean;
 }>) {
   const itemId = getItemKey(item, index);
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
@@ -128,7 +132,7 @@ function OrderDetailsItemRow({
             </span>
           )}
 
-          {!isPendingUndo && (
+          {!isPendingUndo && !isReadOnlyExpired && (
             <button
               type="button"
               data-testid={`order-details-item-action-${itemId}`}
@@ -305,6 +309,7 @@ interface OrderDetailsActionsProps {
   readonly onMarkOrderReady?: (order: Order) => void;
   readonly onUndoOrderReady?: (order: Order) => void;
   readonly onClose: () => void;
+  readonly isOrderExpired?: boolean;
 }
 
 function OrderDetailsReservedActions({
@@ -555,7 +560,54 @@ function OrderDetailsRedoActions({
   );
 }
 
+function OrderDetailsExpiredActions({
+  order,
+  orderNumberDisplay,
+  pendingAction,
+  onRejectSupplies,
+  onClose,
+}: Readonly<{
+  order: Order;
+  orderNumberDisplay: string;
+  pendingAction?: string;
+  onRejectSupplies?: (order: Order, item?: OrderItem) => void;
+  onClose: () => void;
+}>) {
+  if (order.status !== 'RESERVED' && order.status !== 'EXPIRED') return null;
+
+  return (
+    <button
+      type="button"
+      data-testid="order-details-action-reject"
+      aria-label={`Rechazar insumo para #${orderNumberDisplay}`}
+      disabled={pendingAction === 'reject'}
+      {...pointerAction(() => {
+        onRejectSupplies?.(order);
+        onClose();
+      })}
+      onKeyDown={(e) =>
+        handleButtonKey(e, () => {
+          onRejectSupplies?.(order);
+          onClose();
+        })
+      }
+      style={{ minHeight: 48 }}
+      className="min-h-[48px] px-4 py-2 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
+    >
+      Rechazar insumo
+    </button>
+  );
+}
+
 function OrderDetailsActions(props: Readonly<OrderDetailsActionsProps>) {
+  if (props.isOrderExpired) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap flex-1">
+        <OrderDetailsExpiredActions {...props} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2 flex-wrap flex-1">
       <OrderDetailsReservedActions {...props} />
@@ -588,6 +640,7 @@ export function OrderDetailsDialog({
   undoOrderSecondsLeft = 15,
   pendingOrderTriggeringItemId,
   optimisticReadyItemIds,
+  isExpiredTab = false,
 }: Readonly<OrderDetailsDialogProps>) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -596,6 +649,11 @@ export function OrderDetailsDialog({
       closeBtnRef.current?.focus();
     }
   }, [isOpen]);
+
+  const ttlStatus = order ? getOrderTtlStatus(order) : null;
+  const isOrderExpired = Boolean(
+    isExpiredTab || order?.status === 'EXPIRED' || ttlStatus?.isExpired,
+  );
 
   const { inPrepAt, stockReservedAt, isFinished } = getOrderStopwatchTiming(order);
 
@@ -717,6 +775,14 @@ export function OrderDetailsDialog({
           aria-label="Lista completa de platillos de la comanda"
           className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 bg-canvas scrollbar-thin scrollbar-thumb-gray-300"
         >
+          {isOrderExpired && (
+            <div
+              data-testid="order-details-ttl-expired-alert"
+              className="mb-3 p-2.5 rounded-control bg-red-100 border border-red-300 text-red-900 text-xs sm:text-sm font-bold text-center"
+            >
+              Comanda caducada por tiempo de reserva (TTL) — Solo consulta o rechazo por falta de insumos
+            </div>
+          )}
           <ul
             data-testid="order-details-items-list"
             className="list-none m-0 p-0 flex flex-col gap-3"
@@ -746,6 +812,7 @@ export function OrderDetailsDialog({
                   isOptimisticallyReady={isOptimisticallyReady}
                   undoSecondsLeft={pendingUndoItem?.secondsLeft}
                   onRejectSupplies={onRejectSupplies}
+                  isReadOnlyExpired={isOrderExpired}
                 />
               );
             })}
@@ -768,6 +835,7 @@ export function OrderDetailsDialog({
             onMarkOrderReady={onMarkOrderReady}
             onUndoOrderReady={onUndoOrderReady}
             onClose={onClose}
+            isOrderExpired={isOrderExpired}
           />
 
           <button

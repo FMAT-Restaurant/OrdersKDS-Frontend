@@ -5,7 +5,7 @@ import { StatusBadge } from './StatusBadge.tsx';
 import { useElapsedTime } from './useElapsedTime.ts';
 import { pointerAction } from './pointerAction.ts';
 import { getItemKey, getOrderKey, getOrderNumberDisplay } from './orderNumberDisplay.ts';
-import { getOrderTtlStatus, type OrderTtlStatus } from './kdsTtl.ts';
+import { formatGraceCountdown, getOrderTtlStatus, type OrderTtlStatus } from './kdsTtl.ts';
 
 export interface PendingUndoItem {
   readonly orderId: string;
@@ -34,6 +34,7 @@ export interface OrderCardProps {
   readonly onUndoOrderReady?: (order: Order) => void;
   readonly optimisticReadyItemIds?: Set<string>;
   readonly isCompact?: boolean;
+  readonly isExpiredTab?: boolean;
 }
 
 interface OrderItemUndoBannerProps {
@@ -209,6 +210,7 @@ function OrderCardItem({
   undoSecondsLeft = 15,
   isManyItems = false,
   isCompact = false,
+  isReadOnlyExpired = false,
 }: Readonly<{
   item: OrderItem;
   index: number;
@@ -222,6 +224,7 @@ function OrderCardItem({
   undoSecondsLeft?: number;
   isManyItems?: boolean;
   isCompact?: boolean;
+  isReadOnlyExpired?: boolean;
 }>) {
   const itemId = getItemKey(item, index);
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
@@ -288,7 +291,7 @@ function OrderCardItem({
             </span>
           )}
 
-          {!isPendingUndo && (
+          {!isPendingUndo && !isReadOnlyExpired && (
             <OrderItemReadyButton
               itemId={itemId}
               itemName={item.name}
@@ -417,6 +420,7 @@ interface OrderCardActionsProps {
   readonly undoOrderSecondsLeft?: number;
   readonly onUndoOrderReady?: (order: Order) => void;
   readonly ttlStatus?: OrderTtlStatus;
+  readonly isExpiredTab?: boolean;
 }
 
 function handleButtonKey(
@@ -469,23 +473,73 @@ function TableHeader({
   return null;
 }
 
-function OrderCardReservedActions({
+interface OrderCardReservedActionsProps {
+  readonly order: Order;
+  readonly displayId: string;
+  readonly pendingAction?: string;
+  readonly isCompact?: boolean;
+  readonly onStartPreparation?: (order: Order) => void;
+  readonly onRejectSupplies?: (order: Order) => void;
+  readonly ttlStatus?: OrderTtlStatus;
+  readonly isExpiredTab?: boolean;
+}
+
+function OrderCardExpiredTabActions({
   order,
   displayId,
   pendingAction,
   isCompact = false,
-  onStartPreparation,
   onRejectSupplies,
-  ttlStatus,
-}: Readonly<{
-  order: Order;
-  displayId: string;
-  pendingAction?: string;
-  isCompact?: boolean;
-  onStartPreparation?: (order: Order) => void;
-  onRejectSupplies?: (order: Order) => void;
-  ttlStatus?: OrderTtlStatus;
-}>) {
+}: Readonly<OrderCardReservedActionsProps>) {
+  return (
+    <div
+      data-testid={`order-actions-${displayId}`}
+      className={`shrink-0 ${
+        isCompact ? 'px-2.5 pb-2 pt-0.5' : 'px-4 pb-3 pt-1'
+      } flex flex-col items-center w-full bg-transparent`}
+    >
+      <div
+        data-testid={`order-ttl-expired-alert-${displayId}`}
+        className="w-full mb-1.5 p-1.5 rounded bg-red-100 border border-red-300 text-red-900 text-xs font-bold text-center"
+      >
+        Comanda caducada por tiempo de reserva (TTL)
+      </div>
+      <button
+        type="button"
+        data-testid={`order-action-reject-${displayId}`}
+        aria-label={`Rechazar insumo para la comanda ${displayId}`}
+        disabled={pendingAction === 'reject'}
+        {...pointerAction(() => onRejectSupplies?.(order))}
+        onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
+        style={{ minHeight: isCompact ? 48 : 64 }}
+        className={`${
+          isCompact
+            ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
+            : 'min-h-[64px] px-4 py-2.5 text-sm'
+        } w-full rounded-control font-bold bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0`}
+      >
+        Rechazar insumo
+      </button>
+    </div>
+  );
+}
+
+function OrderCardReservedActions(props: Readonly<OrderCardReservedActionsProps>) {
+  const {
+    order,
+    displayId,
+    pendingAction,
+    isCompact = false,
+    onStartPreparation,
+    onRejectSupplies,
+    ttlStatus,
+    isExpiredTab,
+  } = props;
+
+  if (order.status === 'EXPIRED' || isExpiredTab) {
+    return <OrderCardExpiredTabActions {...props} isCompact={isCompact} />;
+  }
+
   if (order.status !== 'RESERVED') return null;
 
   const isTtlExpired = Boolean(ttlStatus?.isExpired);
@@ -500,9 +554,10 @@ function OrderCardReservedActions({
       {isTtlExpired && (
         <div
           data-testid={`order-ttl-expired-alert-${displayId}`}
-          className="w-full mb-1.5 p-1 rounded bg-red-100 border border-red-300 text-red-900 text-xs font-bold text-center"
+          className="w-full mb-1.5 p-1 rounded bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold text-center"
         >
-          Tiempo límite agotado — Cocina no confirmó a tiempo (Ocultando en {ttlStatus?.secondsUntilRemoval}s)
+          Tiempo límite agotado — Cocina no confirmó a tiempo (Pasando a Caducados en{' '}
+          {formatGraceCountdown(ttlStatus?.secondsUntilRemoval ?? 0)})
         </div>
       )}
       <div className={`flex items-center w-full ${isCompact ? 'gap-2' : 'gap-3'}`}>
@@ -737,6 +792,10 @@ function OrderCardRedoActions({
 }
 
 function OrderCardActions(props: Readonly<OrderCardActionsProps>) {
+  if (props.isExpiredTab || props.order.status === 'EXPIRED') {
+    return <OrderCardExpiredTabActions {...props} isCompact={props.isCompact} />;
+  }
+
   return (
     <>
       <OrderCardReservedActions {...props} />
@@ -783,6 +842,7 @@ export function OrderCard({
   onUndoOrderReady,
   optimisticReadyItemIds,
   isCompact = false,
+  isExpiredTab = false,
 }: Readonly<OrderCardProps>) {
   const displayId = getOrderKey(order) || 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
@@ -791,6 +851,7 @@ export function OrderCard({
   const isManyItems = order.items.length >= 5;
 
   const ttlStatus = getOrderTtlStatus(order);
+  const isOrderExpired = isExpiredTab || ttlStatus.isExpired || order.status === 'EXPIRED';
 
   const { inPrepAt, stockReservedAt, isFinished } = getStopwatchState(order);
 
@@ -812,7 +873,7 @@ export function OrderCard({
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.code === 'NumpadEnter' || event.key === ' ') {
       event.preventDefault();
-      if (event.key === 'Enter' && order.status === 'RESERVED') {
+      if (event.key === 'Enter' && order.status === 'RESERVED' && !isOrderExpired) {
         onStartPreparation?.(order);
       } else {
         onClick?.(order);
@@ -942,6 +1003,7 @@ export function OrderCard({
               undoSecondsLeft={pendingUndoItem?.secondsLeft}
               isManyItems={isManyItems}
               isCompact={isCompact}
+              isReadOnlyExpired={isOrderExpired}
             />
           );
         })}
@@ -978,6 +1040,7 @@ export function OrderCard({
         undoOrderSecondsLeft={undoOrderSecondsLeft}
         onUndoOrderReady={onUndoOrderReady}
         ttlStatus={ttlStatus}
+        isExpiredTab={isExpiredTab}
       />
     </article>
   );
