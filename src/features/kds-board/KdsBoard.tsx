@@ -25,6 +25,7 @@ import {
   type PendingUndoRefEntry,
   registerGracePeriodCountdown,
 } from './kdsGracePeriod.ts';
+import { getOrderTtlStatus } from './kdsTtl.ts';
 
 const BASE_TAB_CLASS =
   'min-h-[48px] sm:min-h-[56px] md:min-h-[64px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-base sm:text-lg whitespace-nowrap transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer active:scale-[.98]';
@@ -1261,10 +1262,12 @@ function KdsBoardContent({
     ? selectedStation
     : 'general';
 
-  // Filter orders by active sub-tab (Punto 2)
+  // Filter orders by active sub-tab (Punto 2) and purge TTL-eliminated orders
   const tabOrders = useMemo<Order[]>(() => {
     if (!data) return [];
-    return data.filter((order) => matchesKdsTab(order, tab));
+    return data
+      .filter((order) => !getOrderTtlStatus(order).isCompletelyEliminated)
+      .filter((order) => matchesKdsTab(order, tab));
   }, [data, tab]);
 
   // Filter orders by station locally (OP-09, RF-08)
