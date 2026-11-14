@@ -119,9 +119,13 @@ export interface OrderTicketWidgetProps {
   diningSessionId?: string;
   /** Número o identificador visible de la mesa */
   tableNumber?: number | string;
-  /** ID del mesero autenticado en sesión */
+  /** ID del mesero autenticado en sesión (fallback automático a sesión almacenada si se omite) */
   waiterId?: string;
-  /** Función asíncrona provista por el host para obtener el JWT válido */
+  /** Etiqueta visible de entidad ('orden' en Menú; 'comanda' por defecto en KDS) */
+  entityLabel?: "orden" | "comanda";
+  /** JWT directo opcional si no se provee tokenProvider */
+  token?: string;
+  /** Función asíncrona opcional provista por el host para obtener el JWT válido (fallback: token -> localStorage) */
   tokenProvider?: () => Promise<string | null>;
   /** Callback opcional cuando la orden fue confirmada e ingresó a la saga */
   onOrderSubmitted?: (orderId: string) => void;
@@ -130,12 +134,14 @@ export interface OrderTicketWidgetProps {
 }
 ```
 
+> **Fallback de Sesión Automático:** Si el host o MFE padre omite `tokenProvider`, `OrderTicketWidget` resuelve el JWT usando `token` y luego `getStoredSessionToken()` / `getStoredSessionUser()` desde el almacenamiento de sesión (`localStorage`), evitando errores cuando Menú monta el widget sin pasar callbacks de autenticación.
+
 ### 4.2 Bus de Eventos DOM (`CustomEvent`)
 Para desacoplar por completo el microfrontend de Menú del microfrontend de Órdenes (evitando dependencias cíclicas de paquetes o manipulación de estado compartido), la integración se apoya en un bus de eventos en el navegador mediante `window.dispatchEvent` y `window.addEventListener`.
 
 Existen dos modalidades de eventos soportadas por `OrderTicketWidget`:
 
-#### 1. Apertura de Diálogo con Platillo Precargado (`fmat:comanda:open-add-dialog`) - **Flujo Recomendado**
+#### 1. Apertura de Diálogo con Platillo Precargado (`fmat:orden:open-add-dialog` / alias `fmat:comanda:open-add-dialog`) - **Flujo Recomendado**
 Permite que el mesero pulse "+ Agregar a comanda" en la tarjeta del platillo en Menú; esto abre en el widget de Órdenes el modal interactivo `AddDishDialog` con el nombre y precio bloqueados en solo lectura (para garantizar fidelidad con el menú), permitiendo al mesero seleccionar cantidad, notas especiales (ej. "sin cebolla") y modificadores antes de incorporarlo al ticket.
 
 * **Evento emitido desde Menú (`OfferCard.tsx`):**
@@ -145,10 +151,15 @@ const customerDishName =
     ? `${offer.entryName} (${offer.presentationTag})`
     : offer.entryName;
 
+const firstOption = offer.composition?.slots?.[0]?.options?.[0];
+const sourceId = firstOption?.recipeId ?? offer.sourceId ?? offer.id;
+
 window.dispatchEvent(
-  new CustomEvent("fmat:comanda:open-add-dialog", {
+  new CustomEvent("fmat:orden:open-add-dialog", {
     detail: {
-      dishId: offer.id,
+      dishId: sourceId,
+      sourceId,
+      offerId: offer.id,
       name: customerDishName,
       unitPrice: offer.basePrice,
     },
@@ -156,13 +167,15 @@ window.dispatchEvent(
 );
 ```
 
-#### 2. Inserción Directa al Ticket (`fmat:comanda:add-item`)
-Agrega directamente el platillo con cantidad y notas opcionales al borrador de la comanda sin pasar por el diálogo modal:
+#### 2. Inserción Directa al Ticket (`fmat:orden:add-item` / alias `fmat:comanda:add-item`)
+Agrega directamente el platillo con cantidad, precio (`unitPrice`), receta física (`sourceId`) y oferta comercial (`offerId`) al borrador de la orden sin pasar por el diálogo modal:
 ```javascript
 window.dispatchEvent(
-  new CustomEvent("fmat:comanda:add-item", {
+  new CustomEvent("fmat:orden:add-item", {
     detail: {
-      dishId: "b3e34b9f-6fa1-4a55-93df-520e5c8e312a",
+      dishId: "recipe-hamburguesa-01",
+      sourceId: "recipe-hamburguesa-01",
+      offerId: "b3e34b9f-6fa1-4a55-93df-520e5c8e312a",
       name: "Hamburguesa Clásica",
       unitPrice: 150.0,
       quantity: 1,
@@ -191,11 +204,16 @@ export function OfferCard({ offer, busy, returnTo, catalogReturnTo, onStatusChan
       ? `${offer.entryName} (${offer.presentationTag})`
       : offer.entryName;
 
+  const firstOption = offer.composition?.slots?.[0]?.options?.[0];
+  const sourceId = firstOption?.recipeId ?? offer.sourceId ?? offer.id;
+
   const handleAddToComanda = () => {
     window.dispatchEvent(
-      new CustomEvent("fmat:comanda:open-add-dialog", {
+      new CustomEvent("fmat:orden:open-add-dialog", {
         detail: {
-          dishId: offer.id,
+          dishId: sourceId,
+          sourceId,
+          offerId: offer.id,
           name: customerDishName,
           unitPrice: offer.basePrice,
         },
@@ -433,17 +451,24 @@ Si este repositorio es **`Menu-Frontend`**, debe permitir a los meseros enviar p
        ? `${offer.entryName} (${offer.presentationTag})`
        : offer.entryName;
 
+   const firstOption = offer.composition?.slots?.[0]?.options?.[0];
+   const sourceId = firstOption?.recipeId ?? offer.sourceId ?? offer.id;
+
    const handleAddToComanda = () => {
      window.dispatchEvent(
-       new CustomEvent("fmat:comanda:open-add-dialog", {
+       new CustomEvent("fmat:orden:open-add-dialog", {
          detail: {
-           dishId: offer.id,
+           dishId: sourceId,
+           sourceId,
+           offerId: offer.id,
            name: customerDishName,
            unitPrice: offer.basePrice,
          },
        })
      );
    };
+   ```
+   *(Nota: `OrderTicketWidget` escucha tanto `fmat:orden:open-add-dialog` / `fmat:orden:add-item` como los alias legacy `fmat:comanda:open-add-dialog` / `fmat:comanda:add-item`, propagando `sourceId`, `offerId` y `unitPrice`).*
 
    // Dentro del renderizado de la tarjeta:
    {active && (
@@ -533,8 +558,15 @@ flowchart LR
    `http://localhost:5177/` (o la ruta de demostración del widget).
 3. Simular la adición de platillos mediante la consola del navegador:
    ```javascript
-   window.dispatchEvent(new CustomEvent('fmat:comanda:add-item', {
-     detail: { dishId: 'test-1', name: 'Tacos al Pastor', unitPrice: 85.0, quantity: 2 }
+   window.dispatchEvent(new CustomEvent('fmat:orden:add-item', {
+     detail: {
+       dishId: 'recipe-tacos-pastor-1',
+       sourceId: 'recipe-tacos-pastor-1',
+       offerId: 'offer-tacos-pastor-1',
+       name: 'Tacos al Pastor',
+       unitPrice: 85.0,
+       quantity: 2,
+     }
    }));
    ```
 4. Verificar que el platillo aparezca en la comanda con su subtotal correcto ($170.00).

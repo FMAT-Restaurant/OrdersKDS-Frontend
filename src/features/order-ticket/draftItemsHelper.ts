@@ -6,6 +6,7 @@ export interface EditableOrderItem {
   readonly dishId?: string;
   readonly sourceId?: string;
   readonly offerId?: string;
+  readonly unitPrice?: number;
   readonly name: string;
   quantity: number | string;
   readonly modifiers: string[];
@@ -35,6 +36,12 @@ export function mergeDraftItem(
     .join(',');
 
   const existingIndex = currentItems.findIndex((item) => {
+    const offerMismatch = Boolean(newItem.offerId && item.offerId && newItem.offerId !== item.offerId);
+    const sourceMismatch = Boolean(newItem.sourceId && item.sourceId && newItem.sourceId !== item.sourceId);
+    if (offerMismatch || sourceMismatch) {
+      return false;
+    }
+
     const sameSourceId = newItem.sourceId && item.sourceId && newItem.sourceId === item.sourceId;
     const sameDishId = newItem.dishId && item.dishId && newItem.dishId === item.dishId;
     const sameName = item.name.trim().toLowerCase() === normalizedNewName;
@@ -59,7 +66,15 @@ export function mergeDraftItem(
 
     return currentItems.map((item, idx) =>
       idx === existingIndex
-        ? { ...item, quantity: existingQty + addQty }
+        ? {
+            ...item,
+            quantity: existingQty + addQty,
+            ...(item.sourceId || newItem.sourceId ? { sourceId: item.sourceId ?? newItem.sourceId } : {}),
+            ...(item.offerId || newItem.offerId ? { offerId: item.offerId ?? newItem.offerId } : {}),
+            ...(item.unitPrice !== undefined || newItem.unitPrice !== undefined
+              ? { unitPrice: item.unitPrice ?? newItem.unitPrice }
+              : {}),
+          }
         : item,
     );
   }
@@ -68,15 +83,19 @@ export function mergeDraftItem(
 }
 
 export function toEditableItems(items: readonly OrderItem[]): EditableOrderItem[] {
-  return items.map((item) => ({
-    id: item.id,
-    itemId: item.itemId,
-    dishId: item.dishId ?? undefined,
-    sourceId: item.dishId ?? undefined,
-    name: item.name,
-    quantity: item.quantity,
-    modifiers: item.modifiers ?? [],
-    notes: item.notes ?? '',
-  }));
+  return items.map((item) => {
+    const resolvedSourceId = item.sourceId ?? item.dishId ?? undefined;
+    return {
+      id: item.id,
+      itemId: item.itemId,
+      dishId: item.dishId ?? undefined,
+      ...(resolvedSourceId ? { sourceId: resolvedSourceId } : {}),
+      ...(item.offerId ? { offerId: item.offerId } : {}),
+      name: item.name,
+      quantity: item.quantity,
+      modifiers: item.modifiers ?? [],
+      notes: item.notes ?? '',
+    };
+  });
 }
 

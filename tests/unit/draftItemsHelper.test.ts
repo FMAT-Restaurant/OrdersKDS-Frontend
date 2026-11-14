@@ -135,5 +135,72 @@ describe('draftItemsHelper', () => {
     expect(result).toHaveLength(2);
     expect(result[1].name).toBe('Refresco Cola');
   });
+
+  it('preserves distinct offerId entries and propagates sourceId, offerId, and unitPrice', () => {
+    const current: EditableOrderItem[] = [
+      {
+        dishId: 'recipe-1',
+        sourceId: 'recipe-1',
+        offerId: 'offer-regular',
+        unitPrice: 120,
+        name: 'Tacos',
+        quantity: 1,
+        modifiers: [],
+        notes: '',
+      },
+    ];
+
+    const sameOffer = mergeDraftItem(current, {
+      dishId: 'recipe-1',
+      sourceId: 'recipe-1',
+      offerId: 'offer-regular',
+      unitPrice: 120,
+      name: 'Tacos',
+      quantity: 2,
+      modifiers: [],
+      notes: '',
+    });
+    expect(sameOffer).toHaveLength(1);
+    expect(sameOffer[0].quantity).toBe(3);
+    expect(sameOffer[0].unitPrice).toBe(120);
+
+    const differentOffer = mergeDraftItem(current, {
+      dishId: 'recipe-1',
+      sourceId: 'recipe-1',
+      offerId: 'offer-combo',
+      unitPrice: 180,
+      name: 'Tacos',
+      quantity: 1,
+      modifiers: [],
+      notes: '',
+    });
+    expect(differentOffer).toHaveLength(2);
+    expect(differentOffer[1].offerId).toBe('offer-combo');
+    expect(differentOffer[1].unitPrice).toBe(180);
+
+    const editable = toEditableItems([
+      {
+        id: 'item-with-ids',
+        dishId: 'recipe-1',
+        sourceId: 'recipe-1',
+        offerId: 'offer-combo',
+        name: 'Tacos Combo',
+        quantity: 1,
+        unitPrice: 180,
+        status: 'PENDING',
+      },
+    ]);
+    expect(editable[0]).toEqual({
+      id: 'item-with-ids',
+      itemId: undefined,
+      dishId: 'recipe-1',
+      sourceId: 'recipe-1',
+      offerId: 'offer-combo',
+      name: 'Tacos Combo',
+      quantity: 1,
+      modifiers: [],
+      notes: '',
+    });
+  });
 });
 
