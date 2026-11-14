@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ApiClient, apiClient as defaultApiClient } from '../../shared/api/client.ts';
+import { toDeveloperEndpointError } from '../../shared/api/devErrorLogger.ts';
 import { KdsQueueResponseSchema, type Order } from '../../shared/api/schemas.ts';
 import type { TokenProvider } from '../../shared/types/auth.ts';
 
 export type KdsViewType = 'active' | 'delivered';
+export type KdsTabType = 'pending' | 'in_preparation' | 'active' | 'redo' | 'delivered' | 'expired';
 
 export interface UseKdsQueueOptions {
   readonly view?: KdsViewType;
@@ -38,11 +40,19 @@ export function useKdsQueue({
 
   return useQuery<Order[], Error>({
     queryKey: ['kds', 'queue', view],
-    queryFn: () =>
-      effectiveClient.get<Order[]>(
-        `/kds/queue?view=${view}`,
-        KdsQueueResponseSchema,
-      ),
+    queryFn: async () => {
+      try {
+        return await effectiveClient.get<Order[]>(
+          `/kds/queue?view=${view}`,
+          KdsQueueResponseSchema,
+        );
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          throw toDeveloperEndpointError('KDS', `/kds/queue?view=${view}`, err);
+        }
+        throw err;
+      }
+    },
     enabled,
   });
 }

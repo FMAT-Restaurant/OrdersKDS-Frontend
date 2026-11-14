@@ -52,6 +52,7 @@ export const mockOrder2: Order = {
     {
       id: 'item-3',
       itemId: 'item-3',
+      dishId: undefined,
       name: 'Ensalada César',
       quantity: 1,
       unitPrice: 180.0,
@@ -77,6 +78,7 @@ export const mockDeliveredOrder: Order = {
     {
       id: 'item-4',
       itemId: 'item-4',
+      dishId: 'dish-tacos-1',
       name: 'Tacos de Pastor',
       quantity: 3,
       unitPrice: 60.0,

@@ -7,6 +7,7 @@
   display: grid;
   gap: 1rem;
   max-width: 48rem;
+  width: 100%;
   padding: 1rem;
   color: #172033;
   background: #fff;
@@ -32,6 +33,8 @@
 
 .orders-kds-root .order-ticket__header h2 {
   font-size: 1.25rem;
+  font-weight: 800;
+  color: #172033;
 }
 
 .orders-kds-root .order-ticket__session {
@@ -54,6 +57,11 @@
 .orders-kds-root .order-ticket__status[data-status='RESERVED'] {
   color: #14532d;
   background: #dcfce7;
+}
+
+.orders-kds-root .order-ticket__status[data-status='DRAFT'] {
+  color: #334155;
+  background: #e2e8f0;
 }
 
 .orders-kds-root .order-ticket__status[data-status='REJECTED'] {
@@ -79,6 +87,7 @@
   color: #7f1d1d;
   background: #fef2f2;
   border-inline-start: 0.25rem solid #b91c1c;
+  border-radius: 0.375rem;
 }
 
 .orders-kds-root .order-ticket__rejection-breakdown {
@@ -154,13 +163,54 @@
   font-weight: 600;
 }
 
+/* Tablet-friendly Touch Stepper for quantities */
+.orders-kds-root .order-ticket__stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__stepper-button {
+  min-width: 3rem;
+  width: 3rem;
+  height: 3rem;
+  min-height: 3rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #172033;
+  background: #f1f5f9;
+  border: 1px solid #94a3b8;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__stepper-button:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.orders-kds-root .order-ticket input.order-ticket__stepper-input {
+  max-width: 5.5rem;
+  height: 3rem;
+  min-height: 3rem;
+  text-align: center;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
 .orders-kds-root .order-ticket input,
 .orders-kds-root .order-ticket textarea {
   box-sizing: border-box;
   width: 100%;
-  min-height: 2.75rem;
+  min-height: 3rem;
   padding: 0.5rem;
-  color: inherit;
+  color: #172033;
   background: #fff;
   border: 1px solid #94a3b8;
   border-radius: 0.375rem;
@@ -175,13 +225,13 @@
 .orders-kds-root .order-ticket__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .orders-kds-root .order-ticket button {
   min-width: 7rem;
-  min-height: 2.75rem;
-  padding: 0.625rem 0.875rem;
+  min-height: 3rem;
+  padding: 0.625rem 1rem;
   color: #fff;
   background: #166534;
   border: 1px solid transparent;
@@ -189,6 +239,7 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .orders-kds-root .order-ticket button.order-ticket__button-secondary {
@@ -197,13 +248,142 @@
   border-color: #94a3b8;
 }
 
+.orders-kds-root .order-ticket button.order-ticket__button-secondary:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
 .orders-kds-root .order-ticket button.order-ticket__item-remove {
   width: fit-content;
-  min-width: 5rem;
-  min-height: 2.5rem;
+  min-width: 6rem;
+  min-height: 2.75rem;
   color: #b91c1c;
   border-color: #fca5a5;
   font-size: 0.875rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__item-remove:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+/* Prevent generic ticket button styles from clobbering RedoItemDialog buttons */
+.orders-kds-root .order-ticket dialog button.order-ticket__redo-cancel {
+  min-width: 7rem;
+  min-height: 3rem;
+  color: #1f2937;
+  background: #fff;
+  border: 1px solid #9ca3af;
+  border-radius: 0.375rem;
+}
+
+.orders-kds-root .order-ticket dialog button.order-ticket__redo-cancel:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.orders-kds-root .order-ticket dialog button.order-ticket__redo-submit {
+  min-width: 7rem;
+  min-height: 3rem;
+  color: #fff;
+  background: #92400e;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+}
+
+.orders-kds-root .order-ticket dialog button.order-ticket__redo-submit:hover:not(:disabled) {
+  background: #78350f;
+}
+
+.orders-kds-root .order-ticket__draft-table-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.25rem;
+  font-size: 0.9375rem;
+}
+
+.orders-kds-root .order-ticket__draft-table-controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+}
+
+.orders-kds-root .order-ticket__table-input {
+  width: 4.5rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  font-size: 0.9375rem;
+}
+
+.orders-kds-root .order-ticket .order-ticket__add-item-container {
+  display: flex;
+  margin-top: 0.75rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__add-item-btn {
+  width: 100%;
+  min-height: 3rem;
+  font-weight: 700;
+  border: 2px dashed #94a3b8;
+  color: #1e40af;
+  background: #f8fafc;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__add-item-btn:hover:not(:disabled) {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.orders-kds-root .order-ticket .order-ticket__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__chip {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  cursor: pointer;
+  min-height: 2rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__chip:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.orders-kds-root .order-ticket input.order-ticket__dish-name-readonly {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  font-weight: 700;
+  cursor: default;
+}
+
+.orders-kds-root .order-ticket dialog button.order-ticket__add-submit {
+  min-width: 7rem;
+  min-height: 3rem;
+  color: #fff;
+  background: #15803d;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  font-weight: 700;
+}
+
+.orders-kds-root .order-ticket dialog button.order-ticket__add-submit:hover:not(:disabled) {
+  background: #14532d;
 }
 
 .orders-kds-root .order-ticket button:disabled {
@@ -223,6 +403,158 @@
   font-weight: 600;
 }
 
+.orders-kds-root .order-ticket__table-groups-collapsed {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.orders-kds-root .order-ticket__table-groups {
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+}
+
+.orders-kds-root .order-ticket__table-groups-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #1e293b;
+}
+
+.orders-kds-root .order-ticket__table-group-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.orders-kds-root .order-ticket__table-group {
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+}
+
+.orders-kds-root .order-ticket__table-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.orders-kds-root .order-ticket__table-order-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__table-order-chip {
+  min-width: unset;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1e293b;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+}
+
+.orders-kds-root .order-ticket button.order-ticket__table-order-chip[data-active='true'] {
+  color: #fff;
+  background: #1d4ed8;
+  border-color: #1e40af;
+}
+
+.orders-kds-root .order-ticket__add-order-row {
+  display: flex;
+  margin-top: 0.25rem;
+}
+
+@keyframes order-ticket-add-btn-pop {
+  0% {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.orders-kds-root .order-ticket button.order-ticket__chip.order-ticket__chip--add-order {
+  color: #fff;
+  background: #15803d;
+  border-color: #166534;
+  transition:
+    background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  animation: order-ticket-add-btn-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.orders-kds-root .order-ticket button.order-ticket__chip.order-ticket__chip--add-order:hover:not(:disabled) {
+  background: #14532d;
+  border-color: #14532d;
+  transform: translateY(-1.5px) scale(1.02);
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.28);
+}
+
+.orders-kds-root .order-ticket button.order-ticket__chip.order-ticket__chip--add-order:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 1px 4px rgba(21, 128, 61, 0.2);
+}
+
+.orders-kds-root .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn {
+  color: #fff;
+  background: #15803d;
+  border: 2px solid #166534;
+  transition:
+    background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  animation: order-ticket-add-btn-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.orders-kds-root .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn:hover:not(:disabled) {
+  background: #14532d;
+  border-color: #14532d;
+  transform: translateY(-1.5px) scale(1.02);
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.28);
+}
+
+.orders-kds-root .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 1px 4px rgba(21, 128, 61, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orders-kds-root .order-ticket button.order-ticket__chip.order-ticket__chip--add-order,
+  .orders-kds-root .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn {
+    animation: none;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .orders-kds-root .order-ticket button.order-ticket__chip.order-ticket__chip--add-order:hover:not(:disabled),
+  .orders-kds-root .order-ticket button.order-ticket__chip.order-ticket__chip--add-order:active:not(:disabled),
+  .orders-kds-root .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn:hover:not(:disabled),
+  .orders-kds-root .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Container query responsiveness */
 @container order-ticket (min-width: 38rem) {
   .orders-kds-root .order-ticket {
     padding: 1.5rem;
@@ -234,5 +566,18 @@
 
   .orders-kds-root .order-ticket__item-editor strong {
     grid-column: 1 / -1;
+  }
+}
+
+/* Responsive adjustment for mobile screens */
+@media (max-width: 480px) {
+  .orders-kds-root .order-ticket {
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+  }
+
+  .orders-kds-root .order-ticket__actions button {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: unset;
   }
 }

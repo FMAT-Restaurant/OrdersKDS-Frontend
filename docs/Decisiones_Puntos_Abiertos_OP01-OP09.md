@@ -29,7 +29,7 @@
 | **OP-10** Topología y credenciales broker | `[x]` con URL expuesta | `[ ]` **En curso**: homologar exchange/colas en staging; credenciales exclusivas vía secretos (`RABBITMQ_URL`) | OP-10 (§3.2) | Infra / Broker + Backend | S5 (`TASK-38`) |
 | **OP-11** Prioridad en cola KDS y `RESERVED` | No existía | `[x]` **Aceptado**: incluye `RESERVED` e `IN_PREPARATION`, ordena por `COALESCE(in_preparation_at, stock_reserved_at, created_at) ASC` | ADR-0009 y ADR-0013 | Backend + Frontend | S4 / Cerrado |
 | **OP-12** Rehacer ítem con orden `DELIVERED` | No existía | `[ ]` **Pendiente S5**: orden conserva `DELIVERED`, ítem pasa a `PENDING` (diseño listo para `TASK-32` y `TASK-23`) | ADR-0010 (`Puntos_Abiertos_Pendientes.md`) | Backend + Frontend + Inventario | S5 (`TASK-32`, `TASK-23`) |
-| **OP-13** Aviso `DELIVERED` al mesero | No existía | `[ ]` **Pendiente**: monitor de Sala vs. componente flotante propio en frontend | OP-13 (§3.3) | Frontend + Sala | INT-03 (S6 · `TASK-42`) |
+| **OP-13** Aviso `DELIVERED` al mesero | No existía | `[x]` **Opción B seleccionada**: componente federado `ReadyOrdersAlert`; montaje e integración pendientes con Sala | OP-13 (§3.3) | Frontend + Sala | INT-03 (S6 · `TASK-42`) |
 | **TASK-27** Platillos intermedios (chef) | `[ ]` sin marcar | `[x]` **Aceptado (NO-GO)**: excluido del horizonte de 7 sprints (`INTERMEDIATE_DISHES_ENABLED=false`) | ADR-0011 | Arquitectura | S1 / Cerrado |
 
 ---

@@ -70,7 +70,7 @@ Las decisiones tomadas por el equipo sobre los puntos abiertos (sesión de decis
 | OP-09 | Estación y tiempo de preparación | **Resuelto** (texto de referencia `string` en catálogo, no numérico) | ERS §3; Arquitectura §3.2 | ADR-0008 |
 | OP-11 | Prioridad en cola KDS | **Propuesto** (mayor tiempo en cocina primero desde `in_preparation_at`; desempate por ingreso) | ERS §2; Arquitectura §3.2 | ADR-0009 |
 | OP-12 | Rehacer platillo con orden `DELIVERED` | **Propuesto** (la orden conserva `DELIVERED`; solo el ítem pasa a `PENDING`) | ERS §1.2; Arquitectura §3.2 | ADR-0010 |
-| OP-13 | Recepción de aviso `DELIVERED` al mesero | **Pendiente** (monitor de Sala vs. componente propio en frontend; decidir en INT-03) | Plan Sprints S2–S6 | Condiciona creación de TASK-42 |
+| OP-13 | Recepción de aviso `DELIVERED` al mesero | **Opción B seleccionada** (componente `ReadyOrdersAlert`; integración con Sala en INT-03) | TASK-42; Plan Sprints S2–S6 | Export federado y contrato de eventos |
 
 ---
 

@@ -250,6 +250,12 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
       expect(client.getSubscribedChannels()).toEqual(['kds:station:plancha']);
       expect(MockWebSocket.instances).toHaveLength(1); // No reconnection
 
+      // Raw backend error envelope without discriminator {"error": "FORBIDDEN_CHANNEL"}
+      ws.simulateMessage({
+        error: 'FORBIDDEN_CHANNEL',
+      });
+      expect(onForbiddenChannel).toHaveBeenCalledWith('', 'FORBIDDEN_CHANNEL');
+
       client.disconnect();
     });
   });
@@ -303,6 +309,7 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
         orderId: 'order-1',
         status: OrderStatus.DELIVERED,
         version: 3,
+        responsibleWaiterId: 'waiter-1',
       });
       expect(orderListener).toHaveBeenCalledTimes(1);
       expect(orderListener).toHaveBeenCalledWith(
@@ -310,6 +317,7 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
           orderId: 'order-1',
           status: OrderStatus.DELIVERED,
           version: 3,
+          responsibleWaiterId: 'waiter-1',
         }),
       );
 
@@ -561,5 +569,122 @@ describe('KDS WebSocket Client (UT-FE-25, UT-FE-26, IT-FE-02..05)', () => {
       expect(client.getStatus()).toBe(WebSocketStatus.DISCONNECTED);
     });
   });
-});
 
+  describe('input sanitization and URL validation', () => {
+    it.each(['http://localhost:8000', 'javascript:alert(1)', 'ws://user:pass@localhost:8000'])(
+      'rejects unsafe baseUrl %s',
+      (unsafeBaseUrl) => {
+        const client = new KdsWebSocketClient(
+          {
+            role: UserRole.KITCHEN,
+            tokenProvider: mockTokenProvider,
+            baseUrl: unsafeBaseUrl,
+            WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+          },
+          tracker,
+        );
+
+        expect(() => client.resolveFullUrl('jwt-token-123')).toThrow();
+      },
+    );
+
+    it.each(['//evil.com/ws', '/ws/../admin'])(
+      'rejects unsafe wsPath %s',
+      (unsafeWsPath) => {
+        const client = new KdsWebSocketClient(
+          {
+            role: UserRole.KITCHEN,
+            tokenProvider: mockTokenProvider,
+            baseUrl: 'ws://localhost:8000',
+            wsPath: unsafeWsPath,
+            WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+          },
+          tracker,
+        );
+
+        expect(() => client.resolveEndpoint()).toThrow();
+        expect(() => client.resolveFullUrl('jwt-token-123')).toThrow();
+      },
+    );
+
+    it('reports connection error and skips socket creation when baseUrl is unsafe during connect()', async () => {
+      const onError = vi.fn();
+      const client = new KdsWebSocketClient(
+        {
+          role: UserRole.KITCHEN,
+          tokenProvider: mockTokenProvider,
+          baseUrl: 'http://localhost:8000',
+          onError,
+          WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        tracker,
+      );
+
+      await client.connect();
+
+      expect(MockWebSocket.instances).toHaveLength(0);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(client.getStatus()).toBe(WebSocketStatus.RECONNECTING);
+      client.disconnect();
+    });
+
+    it('strips malformed tokens while allowing valid JWT characters', async () => {
+      const injectedToken = 'bad token\r\n&redirect=https://evil.com';
+      const malformedClient = new KdsWebSocketClient(
+        {
+          role: UserRole.WAITER,
+          tokenProvider: async () => injectedToken,
+          baseUrl: 'ws://localhost:8000',
+          WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        tracker,
+      );
+
+      expect(malformedClient.resolveFullUrl(injectedToken)).toBe('ws://localhost:8000/ws/waiter');
+      await malformedClient.connect();
+      const malformedWs = MockWebSocket.instances[0];
+      expect(malformedWs.url).toBe('ws://localhost:8000/ws/waiter');
+      expect(malformedWs.protocols).toBeUndefined();
+      malformedClient.disconnect();
+
+      const encodeBase64Url = (payload: Record<string, string>): string =>
+        btoa(JSON.stringify(payload)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+      const validJwt = [
+        encodeBase64Url({ alg: 'none', typ: 'JWT' }),
+        encodeBase64Url({ sub: 'user-1' }),
+        'sig_123-abc==',
+      ].join('.');
+      const validClient = new KdsWebSocketClient(
+        {
+          role: UserRole.WAITER,
+          tokenProvider: async () => validJwt,
+          baseUrl: 'ws://localhost:8000',
+          WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        tracker,
+      );
+
+      await validClient.connect();
+      const validWs = MockWebSocket.instances[1];
+      expect(validWs.url).toBe(`ws://localhost:8000/ws/waiter?token=${encodeURIComponent(validJwt)}`);
+      expect(validWs.protocols).toEqual(['bearer', validJwt]);
+      validClient.disconnect();
+    });
+
+    it('preserves baseUrl query parameter names and values when appending token', () => {
+      const client = new KdsWebSocketClient(
+        {
+          role: UserRole.KITCHEN,
+          tokenProvider: mockTokenProvider,
+          baseUrl: 'ws://localhost:8000?cluster=main&v=2',
+          WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        tracker,
+      );
+
+      expect(client.resolveFullUrl('jwt-token-123')).toBe(
+        'ws://localhost:8000/ws/kds?cluster=main&v=2&token=jwt-token-123',
+      );
+    });
+  });
+});

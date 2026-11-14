@@ -6,3 +6,6 @@ export * from './StationSelector.tsx';
 export * from './StatusBadge.tsx';
 export * from './useElapsedTime.ts';
 export * from './useKdsQueue.ts';
+export * from './dialogs/VirtualKeyboard.tsx';
+export * from './dialogs/AdminVoidDialog.tsx';
+export * from './dialogs/ChefVoidDialog.tsx';

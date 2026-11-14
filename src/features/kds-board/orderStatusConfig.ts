@@ -2,6 +2,7 @@ import type { OrderStatus } from '../../shared/types/order.ts';
 
 export interface StatusConfig {
   readonly label: string;
+  readonly englishLabel?: string;
   readonly token: string;
   readonly className: string;
 }
@@ -12,52 +13,62 @@ export interface StatusConfig {
  */
 export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
   CREATED: {
-    label: 'Created',
+    label: 'Creada',
+    englishLabel: 'Created',
     token: 'var(--color-warning)',
     className: 'bg-warning text-white',
   },
   RESERVED: {
-    label: 'Reservado / Por iniciar',
+    label: 'Por iniciar',
+    englishLabel: 'Por iniciar',
     token: 'var(--color-info)',
     className: 'bg-info text-white',
   },
   IN_PREPARATION: {
-    label: 'In Preparation',
+    label: 'En preparación',
+    englishLabel: 'In Preparation',
     token: 'var(--color-info)',
     className: 'bg-info text-white',
   },
   DELIVERED: {
-    label: 'Delivered',
+    label: 'Entregada',
+    englishLabel: 'Delivered',
     token: 'var(--color-success)',
     className: 'bg-success text-white',
   },
   PAID: {
-    label: 'Paid',
+    label: 'Pagada',
+    englishLabel: 'Paid',
     token: 'var(--color-success)',
     className: 'bg-success text-white',
   },
   CANCELLED: {
-    label: 'Cancelled',
+    label: 'Cancelada',
+    englishLabel: 'Cancelled',
     token: 'var(--color-error)',
     className: 'bg-error text-white',
   },
   REJECTED: {
-    label: 'Rejected',
+    label: 'Rechazada',
+    englishLabel: 'Rejected',
     token: 'var(--color-error)',
     className: 'bg-error text-white',
   },
   WASTED: {
-    label: 'Wasted',
+    label: 'Mermada',
+    englishLabel: 'Wasted',
     token: 'var(--color-error)',
     className: 'bg-error text-white',
   },
   VOIDED: {
-    label: 'Voided',
+    label: 'Anulada',
+    englishLabel: 'Voided',
     token: 'var(--color-error)',
     className: 'bg-error text-white',
   },
   EXPIRED: {
-    label: 'Expired',
+    label: 'Expirada',
+    englishLabel: 'Expired',
     token: 'var(--color-error)',
     className: 'bg-error text-white',
   },

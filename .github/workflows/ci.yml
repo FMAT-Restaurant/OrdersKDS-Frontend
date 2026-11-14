@@ -50,7 +50,7 @@ jobs:
             exit 0
           fi
           if [[ ! "$BRANCH_NAME" =~ ^[a-z0-9]+-[a-z]+$ ]]; then
-            echo "Error: Branch name '$BRANCH_NAME' does not match pattern ^[a-z0-9]+-[a-z]+$"
+            echo "Error: Branch name '$BRANCH_NAME' does not match pattern ^[a-z0-9]+-[a-z]+$" >&2
             exit 1
           fi
       - name: Validate PR title (Conventional Commits)
@@ -242,10 +242,13 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-v2
+
+      - name: Install Playwright OS dependencies
+        run: pnpm exec playwright install-deps chromium webkit
 
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium webkit
+        run: pnpm exec playwright install chromium webkit
 
       - name: Run Playwright E2E tests
         run: pnpm run test:e2e
@@ -347,10 +350,13 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-v2
+
+      - name: Install Playwright OS dependencies
+        run: pnpm exec playwright install-deps chromium webkit
 
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium webkit
+        run: pnpm exec playwright install chromium webkit
 
       - name: Run Accessibility Tests
         run: pnpm run test:a11y

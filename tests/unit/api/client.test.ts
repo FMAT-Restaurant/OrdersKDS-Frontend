@@ -1,5 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ApiClient, ApiError, apiClient, createApiClient } from '../../../src/shared/api/client.ts';
+import {
+  ApiClient,
+  ApiError,
+  apiClient,
+  createApiClient,
+  resolveDefaultApiBaseUrl,
+} from '../../../src/shared/api/client.ts';
 import { ErrorCode } from '../../../src/shared/api/errorCodes.ts';
 import { KdsQueueResponseSchema, OrderSchema } from '../../../src/shared/api/schemas.ts';
 import { OrderStatus } from '../../../src/shared/types/order.ts';
@@ -388,6 +394,32 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
         tokenProvider: () => Promise.resolve('test-token'),
       });
       expect(customClient).toBeInstanceOf(ApiClient);
+    });
+
+    it('resolves gateway baseUrl per build mode and honors VITE_API_URL fallback', async () => {
+      vi.stubEnv('VITE_API_URL', '');
+      vi.stubEnv('VITE_API_BASE_URL', '');
+      try {
+        expect(resolveDefaultApiBaseUrl('development')).toBe('http://localhost:8000');
+        expect(resolveDefaultApiBaseUrl('cocina')).toBe('http://localhost:8000/api/v1/kitchen');
+
+        vi.stubEnv('VITE_API_URL', 'http://gateway.local:8000/api/v1/orders');
+        expect(resolveDefaultApiBaseUrl('cocina')).toBe('http://gateway.local:8000/api/v1/orders');
+        const mockFetch = vi.fn().mockImplementation((url: string) => {
+          expect(url).toBe('http://gateway.local:8000/api/v1/orders/kds/queue');
+          return Promise.resolve(
+            new Response(JSON.stringify([]), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        });
+        const envClient = new ApiClient({ fetchFn: mockFetch });
+        const queue = await envClient.get<unknown[]>('/kds/queue');
+        expect(queue).toEqual([]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
   });
 });
