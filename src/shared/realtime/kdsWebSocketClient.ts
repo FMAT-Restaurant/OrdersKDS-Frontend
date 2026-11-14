@@ -7,9 +7,90 @@ import {
   WebSocketStatus,
 } from './types.ts';
 import { versionTracker, type VersionTracker } from './versionTracker.ts';
+import { logDeveloperWebSocketClose } from '../api/devErrorLogger.ts';
 
 export const WS_CLOSE_UNAUTHENTICATED = 4401;
 export const WS_CLOSE_FORBIDDEN_ROLE = 4403;
+
+const SAFE_ENDPOINT_SEGMENT_RE = /^[A-Za-z0-9_-]+$/;
+const SAFE_HOSTNAME_LABEL_RE = /^[A-Za-z0-9-]+$/;
+const SAFE_IPV6_HOST_RE = /^\[[0-9a-fA-F:]+\]$/;
+const SAFE_BEARER_TOKEN_RE = /^[A-Za-z0-9._-]+={0,2}$/;
+const MAX_TOKEN_LENGTH = 8192;
+
+function sanitizeWsToken(rawToken?: string | null): string | null {
+  if (typeof rawToken !== 'string') {
+    return null;
+  }
+  const trimmed = rawToken.trim();
+  if (!trimmed || trimmed.length > MAX_TOKEN_LENGTH) {
+    return null;
+  }
+  const match = SAFE_BEARER_TOKEN_RE.exec(trimmed);
+  return match ? match[0] : null;
+}
+
+function sanitizeWsPath(rawPath: string): string {
+  if (!rawPath.startsWith('/') || rawPath.startsWith('//') || rawPath.includes('..')) {
+    throw new Error('Invalid WebSocket endpoint path');
+  }
+  const segments = rawPath.split('/').filter((segment) => segment.length > 0);
+  if (segments.length === 0 || segments.some((segment) => !SAFE_ENDPOINT_SEGMENT_RE.test(segment))) {
+    throw new Error('Invalid WebSocket endpoint path');
+  }
+  return `/${segments.join('/')}`;
+}
+
+function isValidHostname(hostname: string): boolean {
+  if (!hostname) {
+    return false;
+  }
+  if (hostname.startsWith('[')) {
+    return SAFE_IPV6_HOST_RE.test(hostname);
+  }
+  return hostname
+    .split('.')
+    .every((label) => label.length > 0 && SAFE_HOSTNAME_LABEL_RE.test(label));
+}
+
+function parseSafeWsPort(rawPort: string): string {
+  if (!rawPort) {
+    return '';
+  }
+  const portNum = Number.parseInt(rawPort, 10);
+  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535 || String(portNum) !== rawPort) {
+    throw new Error('Invalid WebSocket port');
+  }
+  return `:${portNum}`;
+}
+
+function buildValidatedWsUrl(rawBase: string, safeEndpoint: string): URL {
+  const parsed = new URL(rawBase);
+  if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
+    throw new Error(`Unsupported WebSocket protocol: ${parsed.protocol}`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('WebSocket URL must not contain embedded credentials');
+  }
+  if (!isValidHostname(parsed.hostname)) {
+    throw new Error('Invalid WebSocket hostname');
+  }
+
+  const safeProtocol = parsed.protocol === 'wss:' ? 'wss:' : 'ws:';
+  const portSuffix = parseSafeWsPort(parsed.port);
+  const basePath = parsed.pathname && parsed.pathname !== '/' ? sanitizeWsPath(parsed.pathname) : '';
+
+  const target = new URL(`${safeProtocol}//${parsed.hostname}${portSuffix}`);
+  target.pathname = `${basePath}${safeEndpoint}`;
+  parsed.searchParams.forEach((value, key) => {
+    target.searchParams.append(key, value);
+  });
+
+  if (target.protocol !== safeProtocol || target.hostname !== parsed.hostname) {
+    throw new Error('WebSocket URL failed origin integrity check');
+  }
+  return target;
+}
 
 type EventListener<T> = (event: T) => void;
 
@@ -68,26 +149,47 @@ export class KdsWebSocketClient {
    */
   resolveEndpoint(): string {
     if (this.options.wsPath) {
-      return this.options.wsPath;
+      return sanitizeWsPath(this.options.wsPath);
     }
-    const role = this.options.role;
-    if (role === UserRole.WAITER) {
-      return '/ws/waiter';
-    }
-    return '/ws/kds';
+    return this.options.role === UserRole.WAITER ? '/ws/waiter' : '/ws/kds';
   }
 
-  resolveFullUrl(): string {
-    const path = this.resolveEndpoint();
+  private resolveRawBaseUrl(): string {
     if (this.options.baseUrl) {
-      const cleanBase = this.options.baseUrl.replace(/\/+$/, '');
-      return `${cleanBase}${path}`;
+      return this.options.baseUrl;
     }
     if (typeof window !== 'undefined' && window.location) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}${path}`;
+      return `${protocol}//${window.location.host}`;
     }
-    return `ws://localhost:8000${path}`;
+    return 'ws://localhost:8000';
+  }
+
+  resolveFullUrl(token?: string | null): string {
+    const endpoint = this.resolveEndpoint();
+    const targetUrl = buildValidatedWsUrl(this.resolveRawBaseUrl(), endpoint);
+    const safeToken = sanitizeWsToken(token);
+
+    if (safeToken) {
+      targetUrl.searchParams.set('token', safeToken);
+    }
+    return targetUrl.toString();
+  }
+
+  private openSocket(
+    WebSocketCtor: typeof WebSocket,
+    safeUrl: string,
+    safeToken: string | null,
+  ): WebSocket {
+    if (!safeToken) {
+      return new WebSocketCtor(safeUrl);
+    }
+    try {
+      // Passing token via query param AND subprotocol for maximum resilience across browsers/proxies
+      return new WebSocketCtor(safeUrl, ['bearer', safeToken]);
+    } catch {
+      return new WebSocketCtor(safeUrl);
+    }
   }
 
   /**
@@ -98,7 +200,8 @@ export class KdsWebSocketClient {
       return;
     }
 
-    if (!this.WebSocketClass) {
+    const WebSocketCtor = this.WebSocketClass;
+    if (!WebSocketCtor) {
       console.warn('WebSocket API is not available in the current environment.');
       return;
     }
@@ -114,11 +217,11 @@ export class KdsWebSocketClient {
       console.warn('Failed to obtain token for WebSocket connection:', err);
     }
 
-    const url = this.resolveFullUrl();
+    const safeToken = sanitizeWsToken(token);
 
     try {
-      // In browser environment, passing token via subprotocol if available
-      this.ws = token ? new this.WebSocketClass(url, ['bearer', token]) : new this.WebSocketClass(url);
+      const safeUrl = this.resolveFullUrl(safeToken);
+      this.ws = this.openSocket(WebSocketCtor, safeUrl, safeToken);
     } catch (err) {
       this.handleConnectionError(err);
       return;
@@ -274,6 +377,7 @@ export class KdsWebSocketClient {
 
     // Close code 4403: Forbidden role -> Terminate without retry (DoD #5)
     if (event.code === WS_CLOSE_FORBIDDEN_ROLE) {
+      logDeveloperWebSocketClose(this.resolveEndpoint(), event.code, this.wasReconnecting);
       this.setStatus(WebSocketStatus.TERMINATED);
       this.options.onForbiddenRole?.();
       return;
@@ -281,6 +385,7 @@ export class KdsWebSocketClient {
 
     // Close code 4401: Unauthenticated / expired token -> refresh token and reconnect
     if (event.code === WS_CLOSE_UNAUTHENTICATED) {
+      logDeveloperWebSocketClose(this.resolveEndpoint(), event.code, this.wasReconnecting);
       this.wasReconnecting = true;
       this.options.onTokenExpired?.();
       this.scheduleReconnect();
@@ -288,6 +393,7 @@ export class KdsWebSocketClient {
     }
 
     // Transient network drop / other closure -> schedule backoff reconnect
+    logDeveloperWebSocketClose(this.resolveEndpoint(), event.code, this.wasReconnecting);
     this.wasReconnecting = true;
     this.scheduleReconnect();
   }
@@ -322,7 +428,7 @@ export class KdsWebSocketClient {
     const delay = Math.min(this.currentReconnectDelay + jitter, maxDelay);
 
     this.reconnectTimer = setTimeout(() => {
-      void this.connect();
+      this.connect().catch(() => undefined);
     }, delay);
 
     // Compute next delay for exponential backoff

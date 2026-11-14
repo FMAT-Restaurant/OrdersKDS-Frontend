@@ -49,6 +49,8 @@ export const OrderItemSchema = z.object({
   publicId: z.string().optional(),
   itemId: z.string().optional(),
   dishId: z.preprocess((val) => (val === null ? undefined : val), z.string().optional()),
+  sourceId: z.preprocess((val) => (val === null ? undefined : val), z.string().optional()),
+  offerId: z.preprocess((val) => (val === null ? undefined : val), z.string().optional()),
   name: z.string().min(1),
   quantity: z.number().int().positive(),
   unitPrice: z.union([z.number(), z.string()]),

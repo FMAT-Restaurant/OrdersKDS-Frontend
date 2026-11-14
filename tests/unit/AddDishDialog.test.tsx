@@ -12,7 +12,7 @@ describe('AddDishDialog', () => {
 
     rerender(<AddDishDialog isOpen onClose={vi.fn()} onAdd={vi.fn()} />);
     expect(screen.getByTestId('add-dish-dialog')).toBeInTheDocument();
-    expect(screen.getByText('Agregar Platillo a la Comanda')).toBeInTheDocument();
+    expect(screen.getByText('Agregar Platillo a la Orden')).toBeInTheDocument();
   });
 
   it('renders dish name as locked and read-only without suggestion chips', () => {

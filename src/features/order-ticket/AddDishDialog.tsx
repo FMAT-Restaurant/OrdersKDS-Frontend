@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 export interface NewDishData {
   readonly dishId?: string;
   readonly itemId?: string;
+  readonly sourceId?: string;
+  readonly offerId?: string;
   readonly name: string;
   readonly quantity: number;
   readonly modifiers: string[];
@@ -13,6 +15,8 @@ export interface NewDishData {
 export interface SelectedDishInfo {
   readonly dishId?: string;
   readonly itemId?: string;
+  readonly sourceId?: string;
+  readonly offerId?: string;
   readonly name: string;
   readonly unitPrice?: number;
 }
@@ -22,6 +26,7 @@ export interface AddDishDialogProps {
   readonly isPending?: boolean;
   readonly dish?: SelectedDishInfo | null;
   readonly initialDishName?: string;
+  readonly entityNoun?: string;
   readonly onClose: () => void;
   readonly onAdd: (dish: NewDishData) => void;
 }
@@ -31,6 +36,7 @@ export function AddDishDialog({
   isPending = false,
   dish,
   initialDishName,
+  entityNoun = 'Orden',
   onClose,
   onAdd,
 }: Readonly<AddDishDialogProps>) {
@@ -99,6 +105,8 @@ export function AddDishDialog({
     onAdd({
       dishId: dish?.dishId,
       itemId: dish?.itemId,
+      sourceId: dish?.sourceId,
+      offerId: dish?.offerId,
       name: trimmedName,
       quantity,
       modifiers,
@@ -118,7 +126,7 @@ export function AddDishDialog({
       aria-modal="true"
     >
       <form onSubmit={handleSubmit} className="order-ticket__add-dish-form">
-        <h3 id="add-dish-dialog-title">Agregar Platillo a la Comanda</h3>
+        <h3 id="add-dish-dialog-title">{`Agregar Platillo a la ${entityNoun}`}</h3>
         <p className="order-ticket__dialog-subtitle">
           Personaliza la porción, modificadores y notas para cocina:
         </p>

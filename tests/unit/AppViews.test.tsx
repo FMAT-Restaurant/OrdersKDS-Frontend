@@ -1,17 +1,34 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../../src/App.tsx';
+import { buildInitialPresets } from '../../src/features/dev-sandbox/mockSandboxFetch.ts';
+import { OrderCard } from '../../src/features/kds-board/OrderCard.tsx';
+import { UserRole } from '../../src/shared/types/auth.ts';
 
 let capturedProps: {
   orderId?: string;
   onCreateNewOrder?: () => void;
+  onOrderSubmitted?: (id: string) => void;
   fetchFn?: typeof fetch;
   WebSocketClass?: typeof WebSocket;
 } = {};
 
+let capturedKdsClient: { get: (path: string) => Promise<unknown> } | undefined;
+
 // Mock sub-applications to isolate App view switcher and test injected mocks
 vi.mock('../../src/KdsApp.tsx', () => ({
-  default: () => <div data-testid="mock-kds-app">KdsApp Screen</div>,
+  default: (props: { userRole?: UserRole; client?: { get: (path: string) => Promise<unknown> } }) => {
+    capturedKdsClient = props.client;
+    return (
+      <div
+        data-testid="mock-kds-app"
+        data-user-role={props.userRole ?? 'none'}
+        data-has-mock-client={props.client ? 'true' : 'false'}
+      >
+        KdsApp Screen
+      </div>
+    );
+  },
 }));
 
 vi.mock('../../src/OrderTicketWidget.tsx', () => ({
@@ -19,13 +36,20 @@ vi.mock('../../src/OrderTicketWidget.tsx', () => ({
     capturedProps = props;
     return (
       <div data-testid="mock-order-ticket-widget">
-        <span>OrderTicketWidget Active Order: {props.orderId}</span>
+        <span>OrderTicketWidget Active Order: {props.orderId ?? 'draft'}</span>
         <button
           type="button"
           onClick={props.onCreateNewOrder}
           data-testid="mock-create-new-order-btn"
         >
           Create New Order
+        </button>
+        <button
+          type="button"
+          onClick={() => props.onOrderSubmitted?.('ord-sim-created')}
+          data-testid="mock-submit-new-order-btn"
+        >
+          Submit Order
         </button>
       </div>
     );
@@ -38,15 +62,23 @@ vi.mock('../../src/ReadyOrdersAlert.tsx', () => ({
   ),
 }));
 
-describe('App Dev View Switcher and Presets (AppViews)', () => {
-  it('navigates between KDS, Ticket, and Alerts views', () => {
+describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
+  it('navigates between KDS, Ticket, and Alerts views and toggles KDS memory simulator', () => {
     render(<App />);
 
-    // Default view: KDS
-    expect(screen.getByTestId('mock-kds-app')).toBeInTheDocument();
+    // Default view: KDS using backend client initially for E2E route compatibility
+    const kds = screen.getByTestId('mock-kds-app');
+    expect(kds).toBeInTheDocument();
+    expect(kds).toHaveAttribute('data-has-mock-client', 'false');
+
+    // Toggle KDS memory simulator manually
+    const toggleMockBtn = screen.getByRole('button', { name: /kds: backend/i });
+    fireEvent.click(toggleMockBtn);
+    expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-has-mock-client', 'true');
+    expect(capturedKdsClient).toBeDefined();
 
     // Switch to Ticket view
-    const ticketTab = screen.getByRole('button', { name: /comanda mesero/i });
+    const ticketTab = screen.getByRole('button', { name: /orden mesero/i });
     fireEvent.click(ticketTab);
 
     expect(screen.getByTestId('mock-order-ticket-widget')).toBeInTheDocument();
@@ -65,150 +97,263 @@ describe('App Dev View Switcher and Presets (AppViews)', () => {
     expect(screen.getByTestId('mock-kds-app')).toBeInTheDocument();
   });
 
-  it('cycles through preset orders and triggers onCreateNewOrder in Ticket view', () => {
+  it('cycles through all lifecycle presets, blank draft mode, and quick controls', () => {
     render(<App />);
 
-    // Switch to Ticket view
-    fireEvent.click(screen.getByRole('button', { name: /comanda mesero/i }));
+    fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
 
-    // Click Presets
+    // Blank draft mode
+    fireEvent.click(screen.getByRole('button', { name: /borrador blanco/i }));
+    expect(screen.getByText(/OrderTicketWidget Active Order: draft/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('mock-submit-new-order-btn'));
+    expect(screen.getByText(/ord-sim-created/)).toBeInTheDocument();
+
+    // Stock rejected preset
     const rejectedPresetBtn = screen.getByText('⚠️ Rechazo Stock (Inventario)');
     fireEvent.click(rejectedPresetBtn);
     expect(rejectedPresetBtn).toHaveClass('bg-red-600');
     expect(screen.getByText(/ord-rechazada-stock/)).toBeInTheDocument();
 
+    // Reserved preset
     const reservedPresetBtn = screen.getByText('Mesa 12 (Reservada)');
     fireEvent.click(reservedPresetBtn);
     expect(reservedPresetBtn).toHaveClass('bg-emerald-600');
     expect(screen.getByText(/ord-reservada-kds/)).toBeInTheDocument();
 
+    // Expired TTL >15m preset
+    const expiredPresetBtn = screen.getByText('⏱️ Mesa 11 (Caducada >15m)');
+    fireEvent.click(expiredPresetBtn);
+    expect(expiredPresetBtn).toHaveClass('bg-amber-600');
+    expect(screen.getByText(/ord-caducada-ttl/)).toBeInTheDocument();
+
+    // In Preparation preset
+    const prepPresetBtn = screen.getByText('🍳 Mesa 6 (En Prep)');
+    fireEvent.click(prepPresetBtn);
+    expect(prepPresetBtn).toHaveClass('bg-orange-600');
+    expect(screen.getByText(/ord-en-preparacion/)).toBeInTheDocument();
+
+    // Delivered / Redo preset
     const redoPresetBtn = screen.getByText('Mesa 3 (Rehacer)');
     fireEvent.click(redoPresetBtn);
     expect(redoPresetBtn).toHaveClass('bg-purple-600');
     expect(screen.getByText(/ord-entregada-rehacer/)).toBeInTheDocument();
 
-    const createdPresetBtn = screen.getByText('Mesa 4 (Creada)');
-    fireEvent.click(createdPresetBtn);
-    expect(createdPresetBtn).toHaveClass('bg-blue-500');
-    expect(screen.getByText(/ord-mesa-4/)).toBeInTheDocument();
+    // Quick simulation controls & Menu DOM dispatch
+    const eventListener = vi.fn();
+    window.addEventListener('fmat:orden:add-item', eventListener);
+    fireEvent.click(screen.getByRole('button', { name: '+ Menú: Tacos al Pastor' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Menú: Hamburguesa' }));
+    expect(eventListener).toHaveBeenCalledTimes(2);
+    window.removeEventListener('fmat:orden:add-item', eventListener);
 
-    // Trigger onCreateNewOrder callback
-    const createNewOrderBtn = screen.getByTestId('mock-create-new-order-btn');
-    fireEvent.click(createNewOrderBtn);
-    expect(screen.getByText(/ord-mesa-4/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Mesa 12 (Reservada)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cocina: Iniciar Prep' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cocina: Entregar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Simular Rechazo Stock' }));
+    fireEvent.click(screen.getByRole('button', { name: /caducar ttl/i }));
+
+    // Trigger onCreateNewOrder callback -> transitions to blank draft mode
+    fireEvent.click(screen.getByTestId('mock-create-new-order-btn'));
+    expect(screen.getByText(/OrderTicketWidget Active Order: draft/)).toBeInTheDocument();
+
+    // Shortcut to jump to KDS view
+    fireEvent.click(screen.getByRole('button', { name: /ver en kds cocina/i }));
+    expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-has-mock-client', 'true');
   });
 
-  it('selects live seed orders and applies custom UUIDs in Ticket view', () => {
+  it('selects live seed orders including REJECTED and expired TTL and applies custom UUIDs', () => {
     render(<App />);
 
-    // Switch to Ticket view
-    fireEvent.click(screen.getByRole('button', { name: /comanda mesero/i }));
+    fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
 
-    // Click Live Seed Creada
-    const seedCreatedBtn = screen.getByText('Seed Creada');
-    fireEvent.click(seedCreatedBtn);
+    fireEvent.click(screen.getByText('Seed Creada'));
     expect(screen.getByText('Live Backend')).toBeInTheDocument();
     expect(screen.getByText(/44444444-4444-4444-4444-444444444444/)).toBeInTheDocument();
 
-    // Click Live Seed Reservada
-    const seedReservedBtn = screen.getByText('Seed Reservada');
-    fireEvent.click(seedReservedBtn);
-    expect(screen.getByText('Live Backend')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Seed Reservada'));
     expect(screen.getByText(/11111111-1111-1111-1111-111111111111/)).toBeInTheDocument();
 
-    // Click Live Seed En Prep
-    const seedInPrepBtn = screen.getByText('Seed En Prep');
-    fireEvent.click(seedInPrepBtn);
+    fireEvent.click(screen.getByText('Seed En Prep'));
     expect(screen.getByText(/22222222-2222-2222-2222-222222222222/)).toBeInTheDocument();
 
-    // Click Live Seed Entregada
-    const seedDeliveredBtn = screen.getByText('Seed Entregada (Rehacer Real)');
-    fireEvent.click(seedDeliveredBtn);
+    fireEvent.click(screen.getByText('Seed Entregada (Rehacer Real)'));
     expect(screen.getByText(/33333333-3333-3333-3333-333333333333/)).toBeInTheDocument();
 
-    // Custom UUID input
+    fireEvent.click(screen.getByText('Seed Rechazada'));
+    expect(screen.getByText(/77777777-7777-7777-7777-777777777777/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Seed Caducada (>15m)'));
+    expect(screen.getByText(/88888888-8888-8888-8888-888888888888/)).toBeInTheDocument();
+
     const input = screen.getByPlaceholderText('UUID de Orden...');
     const loadBtn = screen.getByRole('button', { name: 'Cargar' });
 
-    // Empty input should not crash or change
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.click(loadBtn);
 
-    // Valid UUID input
     fireEvent.change(input, { target: { value: '12345678-1234-1234-1234-123456789abc' } });
     fireEvent.click(loadBtn);
     expect(screen.getByText('Live Backend')).toBeInTheDocument();
     expect(screen.getByText(/12345678-1234-1234-1234-123456789abc/)).toBeInTheDocument();
   });
 
-  describe('In-memory MockWebSocket and mockFetch coverage', () => {
-    it('exercises mockFetch operations for ticket simulation mode', async () => {
+  describe('Shared Waiter <-> KDS mockFetch and MockWebSocket lifecycle', () => {
+    it('executes full end-to-end Waiter and KDS lifecycle transitions against shared state', async () => {
       render(<App />);
 
-      // Switch to Ticket view so mockFetch is generated
-      fireEvent.click(screen.getByRole('button', { name: /comanda mesero/i }));
-      // Select preset to ensure in-memory mode
+      fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
       fireEvent.click(screen.getByText('Mesa 4 (Creada)'));
 
       const fetchFn = capturedProps.fetchFn;
       expect(fetchFn).toBeDefined();
       if (!fetchFn) return;
 
-      // GET order
-      const getRes = await fetchFn('http://localhost/orders/ord-mesa-4');
-      expect(getRes.status).toBe(200);
-      const getData = await getRes.json();
-      expect(getData.id).toBe('ord-mesa-4');
+      // 1. POST /orders creates a new blank CREATED order in shared store
+      const postRes = await fetchFn('http://localhost/orders', {
+        method: 'POST',
+        body: JSON.stringify({ tableNumber: 15, isTakeaway: false, diningSessionId: 'ses-15' }),
+      });
+      expect(postRes.status).toBe(201);
+      const createdOrder = await postRes.json();
+      expect(createdOrder.status).toBe('CREATED');
+      const createdId = createdOrder.id as string;
 
-      // POST /confirm
-      const confirmRes = await fetchFn('http://localhost/orders/ord-mesa-4/confirm', {
+      // 2. PATCH /orders/:id/items populates dishes (including original prep note)
+      const patchItemsRes = await fetchFn(`http://localhost/orders/${createdId}/items`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          items: [
+            { id: 'itm-a', name: 'Sopa Azteca', quantity: 2, unitPrice: 90, notes: 'BIEN COCIDO' },
+            { id: 'itm-b', name: 'Flan Napolitano', quantity: 1, unitPrice: 70 },
+          ],
+        }),
+      });
+      expect(patchItemsRes.status).toBe(200);
+      const withItems = await patchItemsRes.json();
+      expect(withItems.items).toHaveLength(2);
+      expect(withItems.totalAmount).toBe(250);
+
+      // 3. POST /orders/:id/confirm moves order to RESERVED and exposes it in KDS active queue
+      const confirmRes = await fetchFn(`http://localhost/orders/${createdId}/confirm`, {
         method: 'POST',
       });
       expect(confirmRes.status).toBe(200);
-      const confirmData = await confirmRes.json();
-      expect(confirmData.status).toBe('RESERVED');
+      expect((await confirmRes.json()).status).toBe('RESERVED');
 
-      // PATCH /cancel
-      const cancelRes = await fetchFn('http://localhost/orders/ord-mesa-4/cancel', {
+      const kdsActiveRes = await fetchFn('http://localhost/kds/queue?view=active');
+      const kdsActiveOrders = (await kdsActiveRes.json()) as Array<{ id: string }>;
+      expect(kdsActiveOrders.some((o) => o.id === createdId)).toBe(true);
+
+      // 4. PATCH /orders/:id/start-preparation transitions to IN_PREPARATION
+      const startRes = await fetchFn(`http://localhost/orders/${createdId}/start-preparation`, {
         method: 'PATCH',
       });
-      expect(cancelRes.status).toBe(200);
-      const cancelData = await cancelRes.json();
-      expect(cancelData.status).toBe('CANCELLED');
+      expect((await startRes.json()).status).toBe('IN_PREPARATION');
 
-      // PATCH /items replace
-      const itemsRes = await fetchFn('http://localhost/orders/ord-mesa-4/items', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          items: [{ name: 'Hamburguesa Doble', quantity: 3 }],
-        }),
-      });
-      expect(itemsRes.status).toBe(200);
-      const itemsData = await itemsRes.json();
-      expect(itemsData.items[0].name).toBe('Hamburguesa Doble');
+      // 5. Mark individual items READY -> auto transitions order to DELIVERED when all ready
+      const readyFirst = await fetchFn(
+        `http://localhost/orders/${createdId}/items/itm-a/ready`,
+        { method: 'PATCH' },
+      );
+      expect((await readyFirst.json()).status).toBe('IN_PREPARATION');
 
-      // Select delivered preset for redo
-      fireEvent.click(screen.getByText('Mesa 3 (Rehacer)'));
+      const readySecond = await fetchFn(
+        `http://localhost/orders/${createdId}/items/itm-b/ready`,
+        { method: 'PATCH' },
+      );
+      expect((await readySecond.json()).status).toBe('DELIVERED');
+
+      const kdsDeliveredRes = await fetchFn('http://localhost/kds/queue?view=delivered');
+      const kdsDelivered = (await kdsDeliveredRes.json()) as Array<{ id: string }>;
+      expect(kdsDelivered.some((o) => o.id === createdId)).toBe(true);
+
+      // 6. Waiter requests redo -> item returns to PENDING with redo note; completing redo restores original note
       const redoRes = await fetchFn(
-        'http://localhost/orders/ord-entregada-rehacer/items/item-30/redo',
+        `http://localhost/orders/${createdId}/items/itm-a/redo`,
         {
           method: 'PATCH',
-          body: JSON.stringify({ note: 'Cliente solicitó carne bien cocida' }),
+          body: JSON.stringify({ note: 'Sopa llegó tibia' }),
         },
       );
-      expect(redoRes.status).toBe(200);
-      const redoData = await redoRes.json();
-      expect(redoData.items[0].status).toBe('PENDING');
+      const redoOrder = await redoRes.json();
+      expect(redoOrder.items[0].status).toBe('PENDING');
+      expect(redoOrder.items[0].notes).toBe('Sopa llegó tibia');
 
-      // 404 for unknown order
-      const notFoundRes = await fetchFn('http://localhost/orders/unknown-order-404');
-      expect(notFoundRes.status).toBe(404);
+      const redoReadyRes = await fetchFn(
+        `http://localhost/orders/${createdId}/items/itm-a/ready`,
+        { method: 'PATCH' },
+      );
+      const redoReadyOrder = await redoReadyRes.json();
+      expect(redoReadyOrder.items[0].status).toBe('DELIVERED');
+      expect(redoReadyOrder.items[0].notes).toBe('BIEN COCIDO');
+
+      // Re-open redo item to test kitchen reject partial availability + request-bill
+      await fetchFn(`http://localhost/orders/${createdId}/items/itm-a/redo`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note: 'Repetir prueba' }),
+      });
+
+      // 7. Kitchen reject with partial availableQuantity + reopen draft on PATCH /items
+      const rejectRes = await fetchFn(
+        `http://localhost/orders/${createdId}/items/itm-a/kitchen-reject`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ reason: 'Sin tortilla frita', availableQuantity: 1 }),
+        },
+      );
+      const rejectedOrder = await rejectRes.json();
+      expect(rejectedOrder.status).toBe('REJECTED');
+      expect(rejectedOrder.rejectionDetails.rejectedItems[0].availableQuantity).toBe(1);
+      expect(rejectedOrder.rejectionDetails.reservedItems[0].reservedQuantity).toBe(1);
+
+      const reopenRes = await fetchFn(`http://localhost/orders/${createdId}/items`, {
+        method: 'PATCH',
+        body: JSON.stringify({ items: [{ id: 'itm-b', name: 'Flan Napolitano', quantity: 1 }] }),
+      });
+      expect((await reopenRes.json()).status).toBe('CREATED');
+
+      // 8. Whole order ready, request-bill, GET /orders, void, void-kitchen-error, cancel, and 404
+      expect(
+        (await (await fetchFn(`http://localhost/orders/${createdId}/ready`, { method: 'PATCH' })).json())
+          .status,
+      ).toBe('DELIVERED');
+      expect(
+        (
+          await (
+            await fetchFn(`http://localhost/orders/${createdId}/request-bill`, { method: 'POST' })
+          ).json()
+        ).status,
+      ).toBe('PAID');
+      const allOrdersRes = await fetchFn('http://localhost/orders');
+      expect(allOrdersRes.status).toBe(200);
+      expect((await allOrdersRes.json()).length).toBeGreaterThan(0);
+      expect(
+        (await (await fetchFn(`http://localhost/orders/${createdId}/void`, { method: 'PATCH' })).json())
+          .status,
+      ).toBe('VOIDED');
+      expect(
+        (
+          await (
+            await fetchFn(`http://localhost/orders/${createdId}/void-kitchen-error`, {
+              method: 'PATCH',
+            })
+          ).json()
+        ).status,
+      ).toBe('WASTED');
+      expect(
+        (
+          await (
+            await fetchFn('http://localhost/orders/ord-mesa-4/cancel', { method: 'PATCH' })
+          ).json()
+        ).status,
+      ).toBe('CANCELLED');
+      expect((await fetchFn('http://localhost/orders/unknown-order-404')).status).toBe(404);
     });
 
     it('exercises MockWebSocket lifecycle', async () => {
       render(<App />);
 
-      fireEvent.click(screen.getByRole('button', { name: /comanda mesero/i }));
+      fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
       fireEvent.click(screen.getByText('Mesa 4 (Creada)'));
 
       const WebSocketClass = capturedProps.WebSocketClass;
@@ -223,18 +368,67 @@ describe('App Dev View Switcher and Presets (AppViews)', () => {
       ws.onopen = openSpy;
       ws.onclose = closeSpy;
 
-      // Let timer fire for onopen
       await waitFor(() => {
         expect(openSpy).toHaveBeenCalled();
       });
 
-      // Send should be safe noop
       ws.send('ping');
-
-      // Close should update readyState and fire onclose
       ws.close();
       expect(ws.readyState).toBe(3);
       expect(closeSpy).toHaveBeenCalled();
+    });
+
+    it('switches between Admin, Chef, Cocinero, and Mesero roles in DevSandboxApp and toggles role-specific KDS void buttons', () => {
+      render(<App />);
+
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'admin');
+
+      fireEvent.click(screen.getByTestId('dev-role-chef'));
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'chef');
+
+      fireEvent.click(screen.getByTestId('dev-role-kitchen'));
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'kitchen');
+
+      fireEvent.click(screen.getByTestId('dev-role-waiter'));
+      expect(screen.getByTestId('mock-order-ticket-widget')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('dev-role-admin'));
+      fireEvent.click(screen.getByRole('button', { name: '🍳 KDS Cocina' }));
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'admin');
+
+      const inPrepOrder = buildInitialPresets()['ord-en-preparacion'];
+      const { rerender } = render(
+        <OrderCard
+          order={inPrepOrder}
+          userRole={UserRole.ADMIN}
+          onAdminVoid={vi.fn()}
+          onChefVoid={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole('button', { name: /anulación administrativa/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /anulación por error de cocina/i })).toBeInTheDocument();
+
+      rerender(
+        <OrderCard
+          order={inPrepOrder}
+          userRole={UserRole.CHEF}
+          onAdminVoid={vi.fn()}
+          onChefVoid={vi.fn()}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: /anulación administrativa/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /anulación por error de cocina/i })).toBeInTheDocument();
+
+      rerender(
+        <OrderCard
+          order={inPrepOrder}
+          userRole={UserRole.KITCHEN}
+          onAdminVoid={vi.fn()}
+          onChefVoid={vi.fn()}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: /anulación administrativa/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /anulación por error de cocina/i })).not.toBeInTheDocument();
     });
   });
 });

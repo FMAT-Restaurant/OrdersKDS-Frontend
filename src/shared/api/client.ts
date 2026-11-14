@@ -25,13 +25,24 @@ export interface ApiClientConfig {
   fetchFn?: typeof fetch;
 }
 
+export function getStoredSessionToken(): string | null {
+  try {
+    const raw = localStorage.getItem('fmat_restaurant_auth_session');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed.accessToken || parsed.token || null;
+  } catch {
+    return null;
+  }
+}
+
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly tokenProvider?: TokenProvider;
   private readonly customFetch: typeof fetch;
 
   constructor(config: ApiClientConfig = {}) {
-    this.baseUrl = config.baseUrl ?? '';
+    this.baseUrl = config.baseUrl ?? import.meta.env.VITE_API_URL ?? '';
     this.tokenProvider = config.tokenProvider;
     this.customFetch = config.fetchFn ?? globalThis.fetch.bind(globalThis);
   }
@@ -51,15 +62,19 @@ export class ApiClient {
       headers.set('Content-Type', 'application/json');
     }
 
+    let token: string | null = null;
     if (this.tokenProvider) {
       try {
-        const token = await this.tokenProvider();
-        if (token) {
-          headers.set('Authorization', `Bearer ${token}`);
-        }
+        token = await this.tokenProvider();
       } catch (err) {
         console.warn('Failed to obtain token from tokenProvider:', err);
       }
+    } else {
+      token = getStoredSessionToken();
+    }
+
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
     }
 
     return headers;
@@ -229,22 +244,36 @@ function toBase64Url(obj: unknown): string {
   return unpadded.replaceAll('+', '-').replaceAll('/', '_');
 }
 
-function generateLocalDevToken(role = 'admin'): string {
+export function generateLocalDevToken(role = 'admin'): string {
   const header = toBase64Url({ alg: 'HS256', typ: 'JWT' });
   const exp = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
   const claims = toBase64Url({
     sub: '00000000-0000-0000-0000-000000000001',
     user_id: '00000000-0000-0000-0000-000000000001',
     role,
+    roles: [role, 'chef', 'waiter'],
+    permissions: ['*'],
     exp,
   });
   return `${header}.${claims}.devsignature`;
 }
 
-const localApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+/** Resolve the default REST gateway URL for the active build mode. */
+export function resolveDefaultApiBaseUrl(mode: string = import.meta.env.MODE): string {
+  return (
+    import.meta.env.VITE_API_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    (mode === 'cocina' ? 'http://localhost:8000/api/v1/kitchen' : 'http://localhost:8000')
+  );
+}
+
+const localApiBaseUrl = resolveDefaultApiBaseUrl();
 const localDevToken = import.meta.env.VITE_API_TOKEN || generateLocalDevToken('admin');
 
 export const apiClient = createApiClient({
   baseUrl: localApiBaseUrl,
-  tokenProvider: () => Promise.resolve(localDevToken),
+  tokenProvider: () => {
+    const stored = getStoredSessionToken();
+    return Promise.resolve(stored || localDevToken);
+  },
 });

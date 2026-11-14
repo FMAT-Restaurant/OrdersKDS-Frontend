@@ -35,12 +35,25 @@ describe('OrderTicketWidget Creation and Event Bus Suite', () => {
     );
 
     // Draft header rendered
-    expect(screen.getByText('Nueva Comanda')).toBeInTheDocument();
-    expect(screen.getByTestId('draft-table-input')).toHaveValue(5);
+    const tableInput = screen.getByTestId('draft-table-input');
+    const takeawayCheckbox = screen.getByTestId('draft-takeaway-checkbox');
+    expect(screen.getByText('Nueva Orden')).toBeInTheDocument();
+    expect(tableInput).toHaveValue(5);
     expect(screen.getByText(/Borrador/)).toBeInTheDocument();
 
+    // Verify table number editing and takeaway toggling in OrderDraftHeader
+    fireEvent.change(tableInput, { target: { value: '7' } });
+    expect(tableInput).toHaveValue(7);
+    fireEvent.change(tableInput, { target: { value: '' } });
+    expect(tableInput).toHaveValue(null);
+    fireEvent.change(tableInput, { target: { value: '5' } });
+    fireEvent.click(takeawayCheckbox);
+    expect(screen.queryByTestId('draft-table-input')).not.toBeInTheDocument();
+    fireEvent.click(takeawayCheckbox);
+    expect(screen.getByTestId('draft-table-input')).toHaveValue(5);
+
     // Empty state
-    expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
+    expect(screen.getByText('Esta orden todavía no tiene platillos.')).toBeInTheDocument();
 
     // Click "+ Agregar platillo"
     const addDishBtn = screen.getByTestId('order-ticket-add-dish-btn');
@@ -355,7 +368,110 @@ describe('OrderTicketWidget Creation and Event Bus Suite', () => {
     fireEvent.click(discardBtn);
 
     expect(screen.queryByText('Item a descartar')).not.toBeInTheDocument();
-    expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
+    expect(screen.getByText('Esta orden todavía no tiene platillos.')).toBeInTheDocument();
+  });
+
+  it('works without tokenProvider using stored session token and propagates sourceId, offerId and unitPrice on PATCH items', async () => {
+    let capturedAuthHeader: string | null = null;
+    let capturedPatchBody: unknown = null;
+
+    localStorage.setItem(
+      'fmat_restaurant_auth_session',
+      JSON.stringify({
+        accessToken: 'stored-session-jwt-123',
+        user: { id: 'waiter-from-storage' },
+      }),
+    );
+
+    server.use(
+      http.post('*/orders', async ({ request }) => {
+        capturedAuthHeader = request.headers.get('authorization');
+        return HttpResponse.json({
+          id: 'ord-session-1',
+          orderId: 'ord-session-1',
+          orderNumber: 301,
+          status: OrderStatus.CREATED,
+          version: 1,
+          tableNumber: 3,
+          isTakeaway: false,
+          totalAmount: 0,
+          createdAt: '2026-11-12T00:00:00Z',
+          items: [],
+        });
+      }),
+      http.patch('*/orders/ord-session-1/items', async ({ request }) => {
+        capturedPatchBody = await request.json();
+        return HttpResponse.json({
+          id: 'ord-session-1',
+          orderId: 'ord-session-1',
+          orderNumber: 301,
+          status: OrderStatus.CREATED,
+          version: 2,
+          tableNumber: 3,
+          isTakeaway: false,
+          totalAmount: 360,
+          createdAt: '2026-11-12T00:00:00Z',
+          items: [
+            {
+              id: 'item-301',
+              dishId: 'recipe-cochinita',
+              sourceId: 'recipe-cochinita',
+              offerId: 'offer-cochinita-promo',
+              name: 'Cochinita Promo',
+              quantity: 2,
+              unitPrice: 180,
+              status: 'PENDING',
+            },
+          ],
+        });
+      }),
+    );
+
+    try {
+      render(
+        <OrderTicketWidget
+          tableNumber={3}
+          apiBaseUrl="http://localhost"
+        />,
+      );
+
+      act(() => {
+        window.dispatchEvent(
+          new CustomEvent('fmat:orden:add-item', {
+            detail: {
+              sourceId: 'recipe-cochinita',
+              offerId: 'offer-cochinita-promo',
+              name: 'Cochinita Promo',
+              quantity: 2,
+              unitPrice: 180,
+            },
+          }),
+        );
+      });
+
+      const saveDraftBtn = await screen.findByTestId('order-ticket-create-draft-btn');
+      fireEvent.click(saveDraftBtn);
+
+      await waitFor(() => {
+        expect(capturedAuthHeader).toBe('Bearer stored-session-jwt-123');
+        expect(capturedPatchBody).toEqual({
+          items: [
+            {
+              dishId: 'recipe-cochinita',
+              sourceId: 'recipe-cochinita',
+              offerId: 'offer-cochinita-promo',
+              unitPrice: 180,
+              name: 'Cochinita Promo',
+              quantity: 2,
+              modifiers: [],
+              notes: '',
+            },
+          ],
+        });
+      });
+    } finally {
+      localStorage.removeItem('fmat_restaurant_auth_session');
+    }
   });
 });
 

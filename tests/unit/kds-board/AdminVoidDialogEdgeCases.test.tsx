@@ -159,5 +159,32 @@ describe('AdminVoidDialog Edge Cases Suite', () => {
     expect(errorBtn).toBeDisabled();
     expect(errorBtn).toHaveTextContent('Incompatible');
   });
+
+  it('toggles admin-void-charge-toggle switch state and animation classes in custom reason mode', () => {
+    render(
+      <AdminVoidDialog
+        order={TAKEAWAY_ORDER}
+        isOpen={true}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const toggleCustomBtn = screen.getByTestId('admin-void-toggle-custom-reason');
+    resetPointerActionForTest();
+    fireEvent.click(toggleCustomBtn);
+
+    const switchBtn = screen.getByTestId('admin-void-charge-toggle');
+    expect(switchBtn).toBeEnabled();
+    expect(switchBtn).toHaveAttribute('aria-checked', 'true');
+    expect(switchBtn).toHaveClass('admin-void-switch');
+    expect(switchBtn.querySelector('.admin-void-switch__thumb')).toHaveClass('translate-x-6');
+
+    resetPointerActionForTest();
+    fireEvent.click(switchBtn);
+
+    expect(switchBtn).toHaveAttribute('aria-checked', 'false');
+    expect(switchBtn.querySelector('.admin-void-switch__thumb')).toHaveClass('translate-x-0');
+  });
 });
 

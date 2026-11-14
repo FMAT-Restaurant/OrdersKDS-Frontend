@@ -157,5 +157,49 @@ describe('ConfirmRejectDialog', () => {
     fireEvent.click(screen.getByTestId('confirm-reject-submit-btn'));
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
+
+  it('allows selecting partial availableQuantity when requested quantity is greater than 1', () => {
+    const onConfirm = vi.fn();
+    const multiOrder: Order = {
+      ...mockOrder,
+      items: [
+        {
+          ...mockOrder.items[0],
+          quantity: 3,
+        },
+      ],
+    };
+
+    render(
+      <ConfirmRejectDialog
+        order={multiOrder}
+        item={multiOrder.items[0]}
+        isOpen={true}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const decBtn = screen.getByTestId('confirm-reject-available-dec');
+    const incBtn = screen.getByTestId('confirm-reject-available-inc');
+    const qtyInput = screen.getByTestId('confirm-reject-available-input');
+
+    expect(qtyInput).toHaveValue(0);
+    expect(decBtn).toBeDisabled();
+
+    fireEvent.click(incBtn);
+    fireEvent.click(incBtn);
+    expect(qtyInput).toHaveValue(2);
+    expect(incBtn).toBeDisabled();
+    expect(
+      screen.getByText('El mesero verá: Solicitados: 3, Disponibles: 2.'),
+    ).toBeInTheDocument();
+
+    fireEvent.change(qtyInput, { target: { value: '99' } });
+    expect(qtyInput).toHaveValue(2);
+
+    fireEvent.click(screen.getByTestId('confirm-reject-submit-btn'));
+    expect(onConfirm).toHaveBeenCalledWith({ availableQuantity: 2 });
+  });
 });
 

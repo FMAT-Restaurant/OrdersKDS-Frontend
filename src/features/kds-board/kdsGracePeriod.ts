@@ -76,10 +76,10 @@ export function registerGracePeriodCountdown({
   }, 1000);
 
   const timerId = setTimeout(async () => {
-    const currentRef = pendingUndoRefs.current.get(orderId);
+    const currentRef = pendingUndoRefs.current?.get(orderId);
     if (currentRef?.type === type) {
       clearInterval(intervalId);
-      pendingUndoRefs.current.delete(orderId);
+      pendingUndoRefs.current?.delete(orderId);
       setPendingUndoMap((prev) => {
         const next = { ...prev };
         delete next[orderId];
@@ -89,7 +89,7 @@ export function registerGracePeriodCountdown({
     }
   }, graceMs);
 
-  pendingUndoRefs.current.set(orderId, {
+  pendingUndoRefs.current?.set(orderId, {
     timerId,
     intervalId,
     type,
