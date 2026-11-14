@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryClient } from '../../src/shared/api/queryClient.ts';
+import type { Order } from '../../src/shared/api/schemas.ts';
 import type { UseOrderEventsOptions } from '../../src/shared/realtime/useOrderEvents.ts';
 import { OrderStatus } from '../../src/shared/types/order.ts';
 import { mockOrder2 } from '../mocks/fixtures/orderFixtures.ts';
@@ -1260,5 +1261,109 @@ describe('OrderTicketWidget', () => {
 
     fireEvent.click(screen.getByTestId('order-ticket-discard-btn'));
     expect(onCreateNewOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('groups active waiter orders by table, allows switching, requesting bill, and adding a new order', async () => {
+    const deliveredTable4: Order = {
+      ...order,
+      id: 'ord-t4-1',
+      orderId: 'ord-t4-1',
+      orderNumber: 201,
+      tableNumber: 4,
+      isTakeaway: false,
+      status: OrderStatus.DELIVERED,
+      items: order.items.map((item) => ({ ...item, status: 'DELIVERED' as const })),
+    };
+    const inPrepTable4: Order = {
+      ...order,
+      id: 'ord-t4-2',
+      orderId: 'ord-t4-2',
+      orderNumber: 202,
+      tableNumber: 4,
+      isTakeaway: false,
+      status: OrderStatus.IN_PREPARATION,
+    };
+    const table9Order: Order = {
+      ...order,
+      id: 'ord-t9-1',
+      orderId: 'ord-t9-1',
+      orderNumber: 203,
+      tableNumber: 9,
+      isTakeaway: false,
+      status: OrderStatus.CREATED,
+    };
+    const closedPaidOrder: Order = {
+      ...order,
+      id: 'ord-paid-hide',
+      orderId: 'ord-paid-hide',
+      orderNumber: 199,
+      tableNumber: 2,
+      isTakeaway: false,
+      status: OrderStatus.PAID,
+    };
+
+    let billRequestedForId = '';
+    const ordersById: Record<string, Order> = {
+      'ord-t4-1': deliveredTable4,
+      'ord-t4-2': inPrepTable4,
+      'ord-t9-1': table9Order,
+    };
+
+    server.use(
+      http.get('*/orders', () =>
+        HttpResponse.json([deliveredTable4, inPrepTable4, table9Order, closedPaidOrder]),
+      ),
+      http.get('*/orders/:orderId', ({ params }) => {
+        const found = ordersById[String(params.orderId)];
+        return found ? HttpResponse.json(found) : new HttpResponse(null, { status: 404 });
+      }),
+      http.post('*/orders/:orderId/request-bill', ({ params }) => {
+        billRequestedForId = String(params.orderId);
+        return HttpResponse.json(deliveredTable4);
+      }),
+    );
+
+    render(
+      <OrderTicketWidget
+        orderId="ord-t4-1"
+        userId="waiter-7"
+        tokenProvider={async () => 'test-token'}
+        apiBaseUrl="http://localhost"
+      />,
+    );
+
+    expect(await screen.findByTestId('waiter-table-orders-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('table-group-4')).toBeInTheDocument();
+    expect(screen.getByTestId('table-group-9')).toBeInTheDocument();
+    expect(screen.queryByTestId('table-group-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('new-order-for-table:9')).toHaveTextContent('Agregar Orden');
+
+    fireEvent.click(screen.getByTestId('order-ticket-request-bill-btn'));
+    await waitFor(() => expect(billRequestedForId).toBe('ord-t4-1'));
+    expect(await screen.findByTestId('order-ticket-bill-feedback')).toHaveTextContent(
+      'Cuenta solicitada para la mesa.',
+    );
+
+    // Clicking per-table "Agregar Orden" locks draft to Mesa 9 when active orders exist
+    fireEvent.click(screen.getByTestId('new-order-for-table:9'));
+    expect(await screen.findByRole('heading', { name: 'Nueva Orden' })).toBeInTheDocument();
+    const lockedTableInput = screen.getByTestId('draft-table-input');
+    expect(lockedTableInput).toHaveValue(9);
+    expect(lockedTableInput).toBeDisabled();
+    expect(screen.getByTestId('draft-takeaway-checkbox')).toBeDisabled();
+
+    // Clicking "Otra mesa" unlocks the table and takeaway selectors
+    fireEvent.click(screen.getByTestId('draft-unlock-table-btn'));
+    expect(screen.getByTestId('draft-table-input')).not.toBeDisabled();
+    expect(screen.getByTestId('draft-takeaway-checkbox')).not.toBeDisabled();
+    expect(screen.queryByTestId('draft-unlock-table-btn')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('table-order-chip-ord-t9-1'));
+    expect(await screen.findByRole('heading', { name: 'Orden #203' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('order-ticket-add-new-order-btn'));
+    expect(await screen.findByRole('heading', { name: 'Nueva Orden' })).toBeInTheDocument();
+    expect(screen.getByTestId('draft-table-input')).not.toBeDisabled();
+    expect(screen.getByTestId('draft-takeaway-checkbox')).not.toBeDisabled();
   });
 });

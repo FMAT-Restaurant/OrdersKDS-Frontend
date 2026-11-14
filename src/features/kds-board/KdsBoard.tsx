@@ -20,7 +20,10 @@ import { getItemKey, getOrderKey, getOrderNumberDisplay } from './orderNumberDis
 import { AdminVoidDialog } from './dialogs/AdminVoidDialog.tsx';
 import { ChefVoidDialog } from './dialogs/ChefVoidDialog.tsx';
 import { ConfirmReadyDialog } from './dialogs/ConfirmReadyDialog.tsx';
-import { ConfirmRejectDialog } from './dialogs/ConfirmRejectDialog.tsx';
+import {
+  ConfirmRejectDialog,
+  type ConfirmRejectOptions,
+} from './dialogs/ConfirmRejectDialog.tsx';
 import { OrderDetailsDialog } from './dialogs/OrderDetailsDialog.tsx';
 import {
   type PendingUndoRefEntry,
@@ -735,7 +738,7 @@ interface KdsDialogsProps {
   readonly onConfirmReady: () => void;
   readonly onKeepInPrep: () => void;
   readonly confirmRejectTarget: { order: Order; item?: OrderItem | null } | null;
-  readonly onConfirmReject: () => void;
+  readonly onConfirmReject: (options?: ConfirmRejectOptions) => void;
   readonly onCancelReject: () => void;
   readonly voidDialogOrder: Order | null;
   readonly voidDialogType: 'admin' | 'chef' | null;
@@ -1070,15 +1073,17 @@ function KdsBoardContent({
   } | null>(null);
 
   const executeRejectSupplies = useCallback(
-    (order: Order, targetItem?: OrderItem | null) => {
+    (order: Order, targetItem?: OrderItem | null, options?: ConfirmRejectOptions) => {
       const orderId = getOrderKey(order);
       const itemId = resolveRejectTargetItemId(order, targetItem);
+      const availableQuantity = options?.availableQuantity ?? 0;
       if (orderId && itemId) {
         void runAction(
           'reject',
           `/orders/${orderId}/items/${itemId}/kitchen-reject`,
           {
             reason: 'Insumo físico insuficiente en cocina',
+            ...(availableQuantity > 0 ? { availableQuantity } : {}),
           },
           {
             text: `Comanda #${order.orderNumber ?? orderId} rechazada por falta de insumos.`,
@@ -1101,12 +1106,15 @@ function KdsBoardContent({
     [onRejectSupplies],
   );
 
-  const handleConfirmRejectDialog = useCallback(() => {
-    if (!confirmRejectTarget) return;
-    const { order, item } = confirmRejectTarget;
-    setConfirmRejectTarget(null);
-    executeRejectSupplies(order, item);
-  }, [confirmRejectTarget, executeRejectSupplies]);
+  const handleConfirmRejectDialog = useCallback(
+    (options?: ConfirmRejectOptions) => {
+      if (!confirmRejectTarget) return;
+      const { order, item } = confirmRejectTarget;
+      setConfirmRejectTarget(null);
+      executeRejectSupplies(order, item, options);
+    },
+    [confirmRejectTarget, executeRejectSupplies],
+  );
 
   const [confirmReadyTarget, setConfirmReadyTarget] = useState<{
     order: Order;

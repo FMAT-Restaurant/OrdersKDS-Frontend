@@ -17,7 +17,9 @@ import {
   getOrderAlert,
   getTableOrTakeawayLabel,
   getValidUnitPrice,
+  groupActiveOrdersByTable,
   hasInvalidDraftItemQuantity,
+  isOrderActiveInShift,
   mapDraftItemToApiInput,
   parseRejectionDetails,
   parseTableNumber,
@@ -303,9 +305,26 @@ describe('orderTicketUtils', () => {
       canCancel: true,
       canEdit: true,
       canConfirm: true,
+      canRequestBill: false,
       canResetToNew: false,
       showTerminalResetButton: false,
     });
+    expect(
+      computeOrderActionPermissions(
+        makeOrder({
+          status: OrderStatus.DELIVERED,
+          items: [
+            {
+              id: 'i-deliv',
+              name: 'Tacos',
+              quantity: 1,
+              unitPrice: 100,
+              status: ItemStatus.DELIVERED,
+            },
+          ],
+        }),
+      ).canRequestBill,
+    ).toBe(true);
     expect(
       computeOrderActionPermissions(makeOrder({ status: OrderStatus.EXPIRED })),
     ).toMatchObject({
@@ -339,5 +358,28 @@ describe('orderTicketUtils', () => {
     expect(updated?.status).toBe(OrderStatus.REJECTED);
     expect(updated?.awaitingStockConfirmation).toBe(false);
     expect(updated?.rejectionDetails).toEqual({ reason: 'Sin stock' });
+  });
+
+  it('filters active shift orders and groups them by table number ascending with takeaway last', () => {
+    const activeOrders = [
+      makeOrder({ id: 'ord-tk', publicId: 'ord-tk', isTakeaway: true, tableNumber: null, orderNumber: 10, status: OrderStatus.CREATED }),
+      makeOrder({ id: 'ord-m8', publicId: 'ord-m8', isTakeaway: false, tableNumber: 8, orderNumber: 8, status: OrderStatus.DELIVERED }),
+      makeOrder({ id: 'ord-m2-b', publicId: 'ord-m2-b', isTakeaway: false, tableNumber: 2, orderNumber: 5, status: OrderStatus.IN_PREPARATION }),
+      makeOrder({ id: 'ord-m2-a', publicId: 'ord-m2-a', isTakeaway: false, tableNumber: 2, orderNumber: 2, status: OrderStatus.RESERVED }),
+      makeOrder({ id: 'ord-paid', publicId: 'ord-paid', isTakeaway: false, tableNumber: 2, orderNumber: 1, status: OrderStatus.PAID }),
+      makeOrder({ id: 'ord-un', publicId: 'ord-un', isTakeaway: false, tableNumber: null, orderNumber: 9, status: OrderStatus.CREATED }),
+    ];
+
+    expect(isOrderActiveInShift(activeOrders[0])).toBe(true);
+    expect(isOrderActiveInShift(activeOrders[4])).toBe(false);
+
+    const groups = groupActiveOrdersByTable([...activeOrders, activeOrders[3]]);
+    expect(groups.map((g) => g.label)).toEqual([
+      'Mesa 2',
+      'Mesa 8',
+      'Mesa sin asignar',
+      'Para llevar',
+    ]);
+    expect(groups[0].orders.map((o) => o.id)).toEqual(['ord-m2-a', 'ord-m2-b']);
   });
 });

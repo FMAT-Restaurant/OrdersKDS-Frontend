@@ -333,19 +333,23 @@ function TicketQuickLifecycleControls({
 }
 
 function TicketViewContent({
+  widgetInstanceKey,
   selectedOrderId,
   isBackendMode,
   mockFetch,
-  onSelectPreset,
   onOrderSubmitted,
+  onWidgetCreateNewOrder,
+  onWidgetSelectOrder,
   onSimulateEvent,
   onGoToKds,
 }: Readonly<{
+  widgetInstanceKey: number;
   selectedOrderId: string;
   isBackendMode: boolean;
   mockFetch: typeof fetch;
-  onSelectPreset: (id: string) => void;
   onOrderSubmitted: (newOrderId: string) => void;
+  onWidgetCreateNewOrder: () => void;
+  onWidgetSelectOrder: (orderId: string) => void;
   onSimulateEvent: (action: QuickSimAction) => void;
   onGoToKds: () => void;
 }>) {
@@ -379,7 +383,7 @@ function TicketViewContent({
 
       <div className="orders-kds-root w-full max-w-3xl">
         <OrderTicketWidget
-          key={selectedOrderId || 'blank-draft'}
+          key={widgetInstanceKey}
           orderId={selectedOrderId || undefined}
           userId={DEFAULT_WAITER_ID}
           tokenProvider={defaultDevTokenProvider}
@@ -393,7 +397,8 @@ function TicketViewContent({
           entityLabel="orden"
           allowRemoveAllItems
           onOrderSubmitted={onOrderSubmitted}
-          onCreateNewOrder={() => onSelectPreset('ord-mesa-4')}
+          onCreateNewOrder={onWidgetCreateNewOrder}
+          onSelectOrder={onWidgetSelectOrder}
         />
       </div>
     </div>
@@ -438,6 +443,7 @@ export function DevSandboxApp({
   const [view, setView] = useState<DevViewMode>('kds');
   const [selectedRole, setSelectedRole] = useState<UserRole>(effectiveRole ?? UserRole.ADMIN);
   const [selectedOrderId, setSelectedOrderId] = useState<string>('ord-mesa-4');
+  const [widgetInstanceKey, setWidgetInstanceKey] = useState<number>(0);
   const [customOrderId, setCustomOrderId] = useState<string>('');
   const [isBackendMode, setIsBackendMode] = useState<boolean>(false);
   const [isMockKds, setIsMockKds] = useState<boolean>(false);
@@ -479,6 +485,7 @@ export function DevSandboxApp({
       setIsBackendMode(false);
       setIsMockKds(true);
       setSelectedOrderId(orderId);
+      setWidgetInstanceKey((prev) => prev + 1);
       const freshOrder = sandbox.resetPreset(orderId);
       if (freshOrder) {
         queryClient.setQueryData(['order', orderId], freshOrder);
@@ -492,12 +499,14 @@ export function DevSandboxApp({
     setIsBackendMode(false);
     setIsMockKds(true);
     setSelectedOrderId('');
+    setWidgetInstanceKey((prev) => prev + 1);
   }, []);
 
   const handleSelectSeedOrder = useCallback((orderUuid: string) => {
     setIsBackendMode(true);
     setIsMockKds(false);
     setSelectedOrderId(orderUuid);
+    setWidgetInstanceKey((prev) => prev + 1);
     void queryClient.invalidateQueries({ queryKey: ['order', orderUuid] });
     void queryClient.invalidateQueries({ queryKey: ['kds'] });
   }, []);
@@ -508,9 +517,20 @@ export function DevSandboxApp({
       setIsBackendMode(true);
       setIsMockKds(false);
       setSelectedOrderId(trimmed);
+      setWidgetInstanceKey((prev) => prev + 1);
       void queryClient.invalidateQueries({ queryKey: ['order', trimmed] });
     }
   }, [customOrderId]);
+
+  const handleWidgetCreateNewOrder = useCallback(() => {
+    setIsBackendMode(false);
+    setIsMockKds(true);
+    setSelectedOrderId('');
+  }, []);
+
+  const handleWidgetSelectOrder = useCallback((orderId: string) => {
+    setSelectedOrderId(orderId);
+  }, []);
 
   const handleViewChange = useCallback((nextView: DevViewMode) => {
     setView(nextView);
@@ -590,11 +610,13 @@ export function DevSandboxApp({
         )}
         {view === 'ticket' && (
           <TicketViewContent
+            widgetInstanceKey={widgetInstanceKey}
             selectedOrderId={selectedOrderId}
             isBackendMode={isBackendMode}
             mockFetch={sandbox.mockFetch}
-            onSelectPreset={handleSelectPreset}
             onOrderSubmitted={handleOrderSubmitted}
+            onWidgetCreateNewOrder={handleWidgetCreateNewOrder}
+            onWidgetSelectOrder={handleWidgetSelectOrder}
             onSimulateEvent={handleSimulateEvent}
             onGoToKds={() => handleViewChange('kds')}
           />

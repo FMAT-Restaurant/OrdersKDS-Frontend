@@ -110,7 +110,7 @@ function AdminVoidWarningBanner({ chargeCustomer }: Readonly<{ chargeCustomer: b
       <div
         role="alert"
         data-testid="admin-void-warning"
-        className="rounded-control border px-4 py-3 font-bold text-center text-base bg-amber-50 border-amber-300 text-amber-900"
+        className="rounded-control border px-4 py-3 font-bold text-center text-base bg-amber-50 border-amber-300 text-amber-900 transition-all duration-300 ease-in-out"
       >
         <span>Se cobrará la comanda mermada al cliente</span>
         <span className="sr-only">Se cobrará la comanda mermada</span>
@@ -121,7 +121,7 @@ function AdminVoidWarningBanner({ chargeCustomer }: Readonly<{ chargeCustomer: b
     <div
       role="alert"
       data-testid="admin-void-warning"
-      className="rounded-control border px-4 py-3 font-bold text-center text-base bg-blue-50 border-blue-300 text-blue-900"
+      className="rounded-control border px-4 py-3 font-bold text-center text-base bg-blue-50 border-blue-300 text-blue-900 transition-all duration-300 ease-in-out"
     >
       <span>Merma pura asumida por el restaurante (sin cobro al cliente)</span>
       <span className="sr-only">Merma pura sin cobro</span>
@@ -404,13 +404,13 @@ export function AdminVoidDialog({
               disabled={isChargeToggleDisabled}
               title={getChargeSwitchTitle(hasQuickReasons, customReasonActive)}
               {...pointerAction(handleToggleCharge)}
-              className={`relative inline-flex h-8 w-14 shrink-0 rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-fmat-primary focus:ring-offset-2 items-center p-0.5 ${
+              className={`admin-void-switch relative inline-flex h-8 w-14 shrink-0 rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-fmat-primary focus:ring-offset-2 items-center p-0.5 ${
                 isChargeToggleDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
               } ${chargeCustomer ? 'bg-[#c87a55]' : 'bg-gray-300'}`}
             >
               <span
                 aria-hidden="true"
-                className={`pointer-events-none inline-block h-6 w-6 shrink-0 aspect-square transform rounded-full bg-white shadow-md ring-0 transition-transform duration-300 ease-in-out ${
+                className={`admin-void-switch__thumb pointer-events-none inline-block h-6 w-6 shrink-0 aspect-square transform rounded-full bg-white shadow-md ring-0 transition-transform duration-300 ease-in-out ${
                   chargeCustomer ? 'translate-x-6' : 'translate-x-0'
                 }`}
               />

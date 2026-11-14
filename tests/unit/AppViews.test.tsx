@@ -152,9 +152,9 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Simular Rechazo Stock' }));
     fireEvent.click(screen.getByRole('button', { name: /caducar ttl/i }));
 
-    // Trigger onCreateNewOrder callback -> returns to Mesa 4 draft
+    // Trigger onCreateNewOrder callback -> transitions to blank draft mode
     fireEvent.click(screen.getByTestId('mock-create-new-order-btn'));
-    expect(screen.getByText(/ord-mesa-4/)).toBeInTheDocument();
+    expect(screen.getByText(/OrderTicketWidget Active Order: draft/)).toBeInTheDocument();
 
     // Shortcut to jump to KDS view
     fireEvent.click(screen.getByRole('button', { name: /ver en kds cocina/i }));
@@ -218,12 +218,12 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
       expect(createdOrder.status).toBe('CREATED');
       const createdId = createdOrder.id as string;
 
-      // 2. PATCH /orders/:id/items populates dishes
+      // 2. PATCH /orders/:id/items populates dishes (including original prep note)
       const patchItemsRes = await fetchFn(`http://localhost/orders/${createdId}/items`, {
         method: 'PATCH',
         body: JSON.stringify({
           items: [
-            { id: 'itm-a', name: 'Sopa Azteca', quantity: 2, unitPrice: 90 },
+            { id: 'itm-a', name: 'Sopa Azteca', quantity: 2, unitPrice: 90, notes: 'BIEN COCIDO' },
             { id: 'itm-b', name: 'Flan Napolitano', quantity: 1, unitPrice: 70 },
           ],
         }),
@@ -267,7 +267,7 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
       const kdsDelivered = (await kdsDeliveredRes.json()) as Array<{ id: string }>;
       expect(kdsDelivered.some((o) => o.id === createdId)).toBe(true);
 
-      // 6. Waiter requests redo -> item returns to PENDING and order re-appears in active queue
+      // 6. Waiter requests redo -> item returns to PENDING with redo note; completing redo restores original note
       const redoRes = await fetchFn(
         `http://localhost/orders/${createdId}/items/itm-a/redo`,
         {
@@ -279,12 +279,32 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
       expect(redoOrder.items[0].status).toBe('PENDING');
       expect(redoOrder.items[0].notes).toBe('Sopa llegó tibia');
 
-      // 7. Kitchen reject + reopen draft on PATCH /items
+      const redoReadyRes = await fetchFn(
+        `http://localhost/orders/${createdId}/items/itm-a/ready`,
+        { method: 'PATCH' },
+      );
+      const redoReadyOrder = await redoReadyRes.json();
+      expect(redoReadyOrder.items[0].status).toBe('DELIVERED');
+      expect(redoReadyOrder.items[0].notes).toBe('BIEN COCIDO');
+
+      // Re-open redo item to test kitchen reject partial availability + request-bill
+      await fetchFn(`http://localhost/orders/${createdId}/items/itm-a/redo`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note: 'Repetir prueba' }),
+      });
+
+      // 7. Kitchen reject with partial availableQuantity + reopen draft on PATCH /items
       const rejectRes = await fetchFn(
         `http://localhost/orders/${createdId}/items/itm-a/kitchen-reject`,
-        { method: 'PATCH', body: JSON.stringify({ reason: 'Sin tortilla frita' }) },
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ reason: 'Sin tortilla frita', availableQuantity: 1 }),
+        },
       );
-      expect((await rejectRes.json()).status).toBe('REJECTED');
+      const rejectedOrder = await rejectRes.json();
+      expect(rejectedOrder.status).toBe('REJECTED');
+      expect(rejectedOrder.rejectionDetails.rejectedItems[0].availableQuantity).toBe(1);
+      expect(rejectedOrder.rejectionDetails.reservedItems[0].reservedQuantity).toBe(1);
 
       const reopenRes = await fetchFn(`http://localhost/orders/${createdId}/items`, {
         method: 'PATCH',
@@ -292,11 +312,21 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
       });
       expect((await reopenRes.json()).status).toBe('CREATED');
 
-      // 8. Whole order ready, void, void-kitchen-error, cancel, and 404
+      // 8. Whole order ready, request-bill, GET /orders, void, void-kitchen-error, cancel, and 404
       expect(
         (await (await fetchFn(`http://localhost/orders/${createdId}/ready`, { method: 'PATCH' })).json())
           .status,
       ).toBe('DELIVERED');
+      expect(
+        (
+          await (
+            await fetchFn(`http://localhost/orders/${createdId}/request-bill`, { method: 'POST' })
+          ).json()
+        ).status,
+      ).toBe('PAID');
+      const allOrdersRes = await fetchFn('http://localhost/orders');
+      expect(allOrdersRes.status).toBe(200);
+      expect((await allOrdersRes.json()).length).toBeGreaterThan(0);
       expect(
         (await (await fetchFn(`http://localhost/orders/${createdId}/void`, { method: 'PATCH' })).json())
           .status,

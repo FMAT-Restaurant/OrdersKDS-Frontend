@@ -44,6 +44,7 @@ export interface UseOrderTicketActionsParams {
   readonly onOrderCreated?: (order: Order) => void;
   readonly onOrderSubmitted?: (orderId: string) => void;
   readonly onOrderCancelled?: () => void;
+  readonly onBillRequested?: (order: Order) => void;
 }
 
 /** Create an order, attach its draft items, and optionally confirm it for stock reservation. */
@@ -104,6 +105,7 @@ export function useOrderTicketActions({
   onOrderCreated,
   onOrderSubmitted,
   onOrderCancelled,
+  onBillRequested,
 }: Readonly<UseOrderTicketActionsParams>) {
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -111,6 +113,10 @@ export function useOrderTicketActions({
 
   const releaseLock = () => {
     actionLock.current = false;
+  };
+
+  const invalidateShiftOrders = () => {
+    void client.invalidateQueries({ queryKey: [...ORDER_QUERY_PREFIX, 'shift-list'] });
   };
 
   const confirmMutation = useMutation({
@@ -125,6 +131,7 @@ export function useOrderTicketActions({
         ...updated,
         awaitingStockConfirmation: updated.status === OrderStatus.CREATED,
       });
+      invalidateShiftOrders();
       if (activeOrderId) {
         onOrderSubmitted?.(activeOrderId);
       }
@@ -148,6 +155,7 @@ export function useOrderTicketActions({
       ),
     onSuccess: (updated) => {
       client.setQueryData(queryKey, updated);
+      invalidateShiftOrders();
       onOrderCancelled?.();
     },
     onError: (err) => {
@@ -196,6 +204,7 @@ export function useOrderTicketActions({
     onSuccess: (updated) => {
       client.setQueryData(queryKey, updated);
       setIsEditing(false);
+      invalidateShiftOrders();
     },
     onError: (err) => {
       logDeveloperError(
@@ -207,11 +216,34 @@ export function useOrderTicketActions({
     onSettled: releaseLock,
   });
 
+  const requestBillMutation = useMutation({
+    mutationFn: () =>
+      api.post<Order>(
+        `/orders/${encodeURIComponent(activeOrderId!)}/request-bill`,
+        undefined,
+        OrderSchema,
+      ),
+    onSuccess: (updated) => {
+      client.setQueryData(queryKey, updated);
+      invalidateShiftOrders();
+      onBillRequested?.(updated);
+    },
+    onError: (err) => {
+      logDeveloperError(
+        'OrderTicket',
+        `POST /orders/${activeOrderId ?? 'unknown'}/request-bill`,
+        err,
+      );
+    },
+    onSettled: releaseLock,
+  });
+
   const isMutating =
     confirmMutation.isPending ||
     cancelMutation.isPending ||
     editMutation.isPending ||
     redoMutation.isPending ||
+    requestBillMutation.isPending ||
     isCreating;
 
   const runMutation = (action: () => void) => {
@@ -268,6 +300,7 @@ export function useOrderTicketActions({
         ...finalOrder,
         awaitingStockConfirmation: confirm && finalOrder.status === OrderStatus.CREATED,
       });
+      invalidateShiftOrders();
       onOrderCreated?.(finalOrder);
       if (confirm) {
         onOrderSubmitted?.(createdId);
@@ -289,6 +322,7 @@ export function useOrderTicketActions({
     cancelMutation,
     redoMutation,
     editMutation,
+    requestBillMutation,
     runMutation,
     submitEdits,
     submitRedo,

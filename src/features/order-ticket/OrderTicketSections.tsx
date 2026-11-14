@@ -3,6 +3,7 @@
  * @satisfies RF-12, RF-13, RF-14, RF-15, RF-17, RF-23
  */
 
+import { useState } from 'react';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
 import { getOrderNumberDisplay } from '../kds-board/orderNumberDisplay.ts';
 import {
@@ -12,6 +13,7 @@ import {
   getTableOrTakeawayLabel,
   resolveDishName,
   type ParsedRejectionDetails,
+  type TableOrderGroup,
 } from './orderTicketUtils.ts';
 
 /** Keyed UI alert banner entry. */
@@ -121,22 +123,26 @@ export function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBr
 export interface OrderDraftHeaderProps {
   readonly draftTableNumber: number | string;
   readonly draftIsTakeaway: boolean;
+  readonly isTableLocked?: boolean;
   readonly isMutating: boolean;
   readonly diningSessionId?: string;
   readonly entityNoun?: string;
   readonly onTableNumberChange: (table: number | string) => void;
   readonly onTakeawayChange: (takeaway: boolean) => void;
+  readonly onUnlockTable?: () => void;
 }
 
 /** Header for creating a new draft order/comanda with table and takeaway controls. */
 export function OrderDraftHeader({
   draftTableNumber,
   draftIsTakeaway,
+  isTableLocked = false,
   isMutating,
   diningSessionId,
   entityNoun = 'Orden',
   onTableNumberChange,
   onTakeawayChange,
+  onUnlockTable,
 }: Readonly<OrderDraftHeaderProps>) {
   return (
     <header className="order-ticket__header">
@@ -148,7 +154,7 @@ export function OrderDraftHeader({
               type="checkbox"
               data-testid="draft-takeaway-checkbox"
               checked={draftIsTakeaway}
-              disabled={isMutating}
+              disabled={isMutating || isTableLocked}
               onChange={(e) => onTakeawayChange(e.target.checked)}
             />
             <span>Para llevar</span>
@@ -162,13 +168,25 @@ export function OrderDraftHeader({
                 data-testid="draft-table-input"
                 className="order-ticket__table-input"
                 value={draftTableNumber}
-                disabled={isMutating}
+                disabled={isMutating || isTableLocked}
+                readOnly={isTableLocked}
                 onChange={(e) => {
                   const val = e.target.value;
                   onTableNumberChange(val === '' ? '' : Number.parseInt(val, 10) || 1);
                 }}
               />
             </label>
+          )}
+          {isTableLocked && onUnlockTable && (
+            <button
+              type="button"
+              className="order-ticket__chip"
+              data-testid="draft-unlock-table-btn"
+              disabled={isMutating}
+              onClick={onUnlockTable}
+            >
+              Otra mesa
+            </button>
           )}
           {diningSessionId && (
             <span className="order-ticket__session">
@@ -226,6 +244,113 @@ export function OrderExistingHeader({
   );
 }
 
+/** Props for WaiterActiveOrdersByTable. */
+export interface WaiterActiveOrdersByTableProps {
+  readonly groups: readonly TableOrderGroup[];
+  readonly activeOrderId?: string;
+  readonly isDraftMode: boolean;
+  readonly onSelectOrder: (orderId: string) => void;
+  readonly onStartOrderForTable: (tableNumber: number | null, isTakeaway: boolean) => void;
+}
+
+/** Groups active waiter shift orders by table so the waiter can switch orders or start new ones. */
+export function WaiterActiveOrdersByTable({
+  groups,
+  activeOrderId,
+  isDraftMode,
+  onSelectOrder,
+  onStartOrderForTable,
+}: Readonly<WaiterActiveOrdersByTableProps>) {
+  const totalOrders = groups.reduce((acc, g) => acc + g.orders.length, 0);
+  const [manualToggle, setManualToggle] = useState(false);
+
+  if (totalOrders === 0) {
+    return null;
+  }
+
+  const isExpanded = totalOrders > 1 || isDraftMode || manualToggle;
+
+  if (!isExpanded) {
+    return (
+      <div className="order-ticket__table-groups-collapsed">
+        <button
+          type="button"
+          className="order-ticket__chip"
+          data-testid="toggle-table-orders-panel-btn"
+          onClick={() => setManualToggle(true)}
+        >
+          Ver órdenes activas por mesa ({totalOrders})
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <section
+      className="order-ticket__table-groups"
+      aria-label="Órdenes activas del turno agrupadas por mesa"
+      data-testid="waiter-table-orders-panel"
+    >
+      <div className="order-ticket__table-groups-header">
+        <strong>Órdenes activas por mesa ({totalOrders})</strong>
+        {totalOrders === 1 && !isDraftMode && (
+          <button
+            type="button"
+            className="order-ticket__chip"
+            onClick={() => setManualToggle(false)}
+          >
+            Ocultar
+          </button>
+        )}
+      </div>
+      <div className="order-ticket__table-group-list">
+        {groups.map((group) => (
+          <div
+            key={group.groupKey}
+            className="order-ticket__table-group"
+            data-testid={
+              group.isTakeaway ? 'table-group-takeaway' : `table-group-${group.tableNumber ?? 'none'}`
+            }
+          >
+            <div className="order-ticket__table-group-title">
+              <span>{group.label}</span>
+              <button
+                type="button"
+                className="order-ticket__chip order-ticket__chip--add-order"
+                data-testid={`new-order-for-${group.groupKey}`}
+                onClick={() => onStartOrderForTable(group.tableNumber, group.isTakeaway)}
+              >
+                Agregar Orden
+              </button>
+            </div>
+            <div className="order-ticket__table-order-chips">
+              {group.orders.map((ord) => {
+                const ordId = ord.id ?? ord.orderId ?? ord.publicId ?? '';
+                const numDisplay = getOrderNumberDisplay(ord.orderNumber, ordId);
+                const isSelected = Boolean(activeOrderId && ordId === activeOrderId);
+                return (
+                  <button
+                    key={ordId}
+                    type="button"
+                    data-testid={`table-order-chip-${ordId}`}
+                    data-active={isSelected ? 'true' : 'false'}
+                    className="order-ticket__table-order-chip"
+                    onClick={() => onSelectOrder(ordId)}
+                  >
+                    <span>#{numDisplay}</span>
+                    <span> · {ORDER_STATUS_LABELS[ord.status]}</span>
+                    <span> ({ord.items.length})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** Props for OrderTicketExistingActions. */
 export interface OrderTicketExistingActionsProps {
   readonly isEditing: boolean;
@@ -233,16 +358,20 @@ export interface OrderTicketExistingActionsProps {
   readonly isEditPending: boolean;
   readonly isConfirmPending: boolean;
   readonly isCancelPending: boolean;
+  readonly isRequestBillPending?: boolean;
   readonly canConfirm: boolean;
   readonly canCancel: boolean;
   readonly canEdit: boolean;
+  readonly canRequestBill?: boolean;
   readonly canResetToNew?: boolean;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
   readonly onStartEditing: () => void;
   readonly onSubmitEdits: () => void;
   readonly onDiscardEdits: () => void;
+  readonly onRequestBill?: () => void;
   readonly onResetToNew?: () => void;
+  readonly onAddNewOrder?: () => void;
 }
 
 /** Footer action buttons for existing orders in read-only or edit mode. */
@@ -252,16 +381,20 @@ export function OrderTicketExistingActions({
   isEditPending,
   isConfirmPending,
   isCancelPending,
+  isRequestBillPending = false,
   canConfirm,
   canCancel,
   canEdit,
+  canRequestBill = false,
   canResetToNew,
   onConfirm,
   onCancel,
   onStartEditing,
   onSubmitEdits,
   onDiscardEdits,
+  onRequestBill,
   onResetToNew,
+  onAddNewOrder,
 }: Readonly<OrderTicketExistingActionsProps>) {
   if (isEditing) {
     return (
@@ -282,37 +415,64 @@ export function OrderTicketExistingActions({
   }
 
   return (
-    <footer className="order-ticket__actions">
-      <button type="button" onClick={onConfirm} disabled={!canConfirm || isMutating}>
-        {isConfirmPending ? 'Confirmando…' : 'Confirmar'}
-      </button>
-      <button
-        type="button"
-        className="order-ticket__button-secondary"
-        onClick={onCancel}
-        disabled={!canCancel || isMutating}
-      >
-        {isCancelPending ? 'Cancelando…' : 'Cancelar'}
-      </button>
-      <button
-        type="button"
-        className="order-ticket__button-secondary"
-        onClick={onStartEditing}
-        disabled={!canEdit || isMutating}
-      >
-        Modificar
-      </button>
-      {canResetToNew && onResetToNew && (
+    <>
+      <footer className="order-ticket__actions">
+        <button type="button" onClick={onConfirm} disabled={!canConfirm || isMutating}>
+          {isConfirmPending ? 'Confirmando…' : 'Confirmar'}
+        </button>
         <button
           type="button"
           className="order-ticket__button-secondary"
-          onClick={onResetToNew}
-          disabled={isMutating}
+          onClick={onCancel}
+          disabled={!canCancel || isMutating}
         >
-          Nueva orden
+          {isCancelPending ? 'Cancelando…' : 'Cancelar'}
         </button>
+        <button
+          type="button"
+          className="order-ticket__button-secondary"
+          onClick={onStartEditing}
+          disabled={!canEdit || isMutating}
+        >
+          Modificar
+        </button>
+        {canRequestBill && onRequestBill && (
+          <button
+            type="button"
+            data-testid="order-ticket-request-bill-btn"
+            className="order-ticket__button-secondary"
+            onClick={onRequestBill}
+            disabled={isMutating}
+          >
+            {isRequestBillPending ? 'Solicitando cuenta…' : 'Solicitar cuenta'}
+          </button>
+        )}
+        {canResetToNew && onResetToNew && (
+          <button
+            type="button"
+            className="order-ticket__button-secondary"
+            onClick={onResetToNew}
+            disabled={isMutating}
+          >
+            Nueva orden
+          </button>
+        )}
+      </footer>
+      {onAddNewOrder && (
+        <div className="order-ticket__add-order-row">
+          <button
+            type="button"
+            className="order-ticket__add-item-btn order-ticket__add-order-btn"
+            data-testid="order-ticket-add-new-order-btn"
+            aria-label="Agregar nueva Orden"
+            disabled={isMutating}
+            onClick={onAddNewOrder}
+          >
+            + Agregar nueva Orden
+          </button>
+        </div>
       )}
-    </footer>
+    </>
   );
 }
 

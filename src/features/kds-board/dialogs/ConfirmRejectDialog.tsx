@@ -1,14 +1,99 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { Order, OrderItem } from '../../../shared/api/schemas.ts';
 import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
+
+export interface ConfirmRejectOptions {
+  readonly availableQuantity?: number;
+}
 
 export interface ConfirmRejectDialogProps {
   readonly order: Order;
   readonly item?: OrderItem | null;
   readonly isOpen: boolean;
   readonly isSubmitting?: boolean;
-  readonly onConfirm: () => void;
+  readonly onConfirm: (options?: ConfirmRejectOptions) => void;
   readonly onCancel: () => void;
+}
+
+function PartialAvailabilitySelector({
+  targetItem,
+  requestedQuantity,
+  availableQuantity,
+  maxAvailable,
+  isSubmitting,
+  onChange,
+}: Readonly<{
+  targetItem: OrderItem;
+  requestedQuantity: number;
+  availableQuantity: number;
+  maxAvailable: number;
+  isSubmitting: boolean;
+  onChange: (nextQty: number) => void;
+}>) {
+  return (
+    <div
+      className="p-3 bg-amber-50 rounded-control border border-amber-200 text-amber-950 space-y-2"
+      data-testid="confirm-reject-partial-availability"
+    >
+      <p className="font-semibold text-xs sm:text-sm">
+        Disponibilidad física en cocina para «{targetItem.name}» (Solicitados: {requestedQuantity})
+      </p>
+      {maxAvailable > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="confirm-reject-available-input" className="text-xs font-medium">
+            Sí se pueden preparar (0 a {maxAvailable}):
+          </label>
+          <div className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="confirm-reject-available-dec"
+              aria-label="Disminuir cantidad disponible"
+              disabled={isSubmitting || availableQuantity <= 0}
+              onClick={() => onChange(Math.max(0, availableQuantity - 1))}
+              className="w-9 h-9 rounded border border-amber-400 bg-white font-bold text-base text-amber-900 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+            >
+              −
+            </button>
+            <input
+              id="confirm-reject-available-input"
+              data-testid="confirm-reject-available-input"
+              aria-label="Cantidad disponible en cocina"
+              type="number"
+              min={0}
+              max={maxAvailable}
+              disabled={isSubmitting}
+              value={availableQuantity}
+              onChange={(event) => {
+                const parsed = Number.parseInt(event.target.value, 10);
+                const clamped = Number.isNaN(parsed)
+                  ? 0
+                  : Math.max(0, Math.min(maxAvailable, parsed));
+                onChange(clamped);
+              }}
+              className="w-16 h-9 text-center font-bold border border-amber-400 rounded bg-white text-ink"
+            />
+            <button
+              type="button"
+              data-testid="confirm-reject-available-inc"
+              aria-label="Aumentar cantidad disponible"
+              disabled={isSubmitting || availableQuantity >= maxAvailable}
+              onClick={() => onChange(Math.min(maxAvailable, availableQuantity + 1))}
+              className="w-9 h-9 rounded border border-amber-400 bg-white font-bold text-base text-amber-900 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+            >
+              +
+            </button>
+          </div>
+          <p className="w-full text-xs text-amber-900">
+            El mesero verá: Solicitados: {requestedQuantity}, Disponibles: {availableQuantity}.
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-amber-900">
+          Se notificará al mesero: Solicitados: {requestedQuantity}, Disponibles: 0.
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function ConfirmRejectDialog({
@@ -20,6 +105,15 @@ export function ConfirmRejectDialog({
   onCancel,
 }: Readonly<ConfirmRejectDialogProps>) {
   const cancelBtnRef = useRef<HTMLButtonElement>(null);
+  const targetItem = item ?? order.items[0] ?? null;
+  const requestedQuantity = targetItem?.quantity ?? 1;
+  const maxAvailable = Math.max(0, requestedQuantity - 1);
+  const targetKey = `${order.id ?? order.orderId ?? ''}:${targetItem?.id ?? targetItem?.itemId ?? ''}:${isOpen}`;
+  const [qtyState, setQtyState] = useState<{ readonly targetKey: string; readonly value: number }>({
+    targetKey: '',
+    value: 0,
+  });
+  const availableQuantity = qtyState.targetKey === targetKey ? qtyState.value : 0;
 
   useEffect(() => {
     if (isOpen) {
@@ -102,6 +196,16 @@ export function ConfirmRejectDialog({
                 : 'Se informará al personal de piso y servicio para cancelar o ajustar la comanda con el cliente.'}
             </p>
           </div>
+          {targetItem && (
+            <PartialAvailabilitySelector
+              targetItem={targetItem}
+              requestedQuantity={requestedQuantity}
+              availableQuantity={availableQuantity}
+              maxAvailable={maxAvailable}
+              isSubmitting={isSubmitting}
+              onChange={(nextQty) => setQtyState({ targetKey, value: nextQty })}
+            />
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2 border-t border-border">
@@ -119,7 +223,9 @@ export function ConfirmRejectDialog({
           <button
             type="button"
             data-testid="confirm-reject-submit-btn"
-            onClick={onConfirm}
+            onClick={() =>
+              onConfirm(availableQuantity > 0 ? { availableQuantity } : undefined)
+            }
             disabled={isSubmitting}
             style={{ minHeight: 48 }}
             className="w-full sm:w-auto min-h-[48px] px-5 py-2.5 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer shadow-sm disabled:opacity-50 border-0"

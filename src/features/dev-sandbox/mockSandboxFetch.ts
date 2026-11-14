@@ -21,6 +21,23 @@ const READY_ITEM_REGEX = /\/orders\/([^/]+)\/items\/([^/]+)\/ready/;
 const REJECT_ITEM_REGEX = /\/orders\/([^/]+)\/items\/([^/]+)\/kitchen-reject/;
 export const DEFAULT_WAITER_ID = '00000000-0000-0000-0000-000000000001';
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const preRedoNotesMap = new Map<string, string | null>();
+
+function getRedoNoteKey(order: Order, item: OrderItem): string {
+  const orderKey = order.id ?? order.orderId ?? 'ord';
+  const itemKey = item.id ?? item.itemId ?? item.name;
+  return `${orderKey}:${itemKey}`;
+}
+
+function restorePreRedoNote(order: Order, item: OrderItem): string | null | undefined {
+  const key = getRedoNoteKey(order, item);
+  if (!preRedoNotesMap.has(key)) {
+    return item.notes;
+  }
+  const saved = preRedoNotesMap.get(key) ?? null;
+  preRedoNotesMap.delete(key);
+  return saved;
+}
 
 /** Mock WebSocket for visual preset simulation mode without a live backend. */
 export class MockWebSocket {
@@ -404,9 +421,14 @@ function handleRedoItem(order: Order, targetItemId: string, body?: string | null
     updatedAt: new Date().toISOString(),
     items: order.items.map((item) => {
       const match = (item.id ?? item.itemId) === targetItemId;
-      return match
-        ? { ...item, status: ItemStatus.PENDING, notes: note, version: (item.version ?? 1) + 1 }
-        : item;
+      if (!match) {
+        return item;
+      }
+      const key = getRedoNoteKey(order, item);
+      if (item.status !== ItemStatus.PENDING && !preRedoNotesMap.has(key)) {
+        preRedoNotesMap.set(key, item.notes ?? null);
+      }
+      return { ...item, status: ItemStatus.PENDING, notes: note, version: (item.version ?? 1) + 1 };
     }),
   };
 }
@@ -479,7 +501,15 @@ export function handleStartPreparation(order: Order): Order {
 function handleMarkItemReady(order: Order, targetItemId: string): Order {
   const updatedItems = order.items.map((item) => {
     const match = (item.id ?? item.itemId) === targetItemId;
-    return match ? { ...item, status: ItemStatus.READY, version: (item.version ?? 1) + 1 } : item;
+    if (!match) {
+      return item;
+    }
+    return {
+      ...item,
+      status: ItemStatus.READY,
+      notes: restorePreRedoNote(order, item),
+      version: (item.version ?? 1) + 1,
+    };
   });
   const allReady = updatedItems.every(
     (item) => item.status === ItemStatus.READY || item.status === ItemStatus.DELIVERED,
@@ -504,11 +534,42 @@ export function handleMarkOrderReady(order: Order): Order {
     items: order.items.map((item) => ({
       ...item,
       status: ItemStatus.DELIVERED,
+      notes: restorePreRedoNote(order, item),
       version: (item.version ?? 1) + 1,
     })),
     version: order.version + 1,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function buildSandboxReservedItems(
+  order: Order,
+  targetItem: OrderItem | undefined,
+  effectiveAvailable: number,
+) {
+  const reserved: Array<Record<string, unknown>> = [];
+  if (targetItem && effectiveAvailable > 0) {
+    reserved.push({
+      itemId: targetItem.id ?? targetItem.itemId,
+      dishId: targetItem.dishId,
+      name: targetItem.name,
+      reservedQuantity: effectiveAvailable,
+    });
+  }
+  const targetKey = targetItem ? (targetItem.id ?? targetItem.itemId) : undefined;
+  for (const item of order.items) {
+    const itemKey = item.id ?? item.itemId;
+    if (itemKey === targetKey || item.status === ItemStatus.CANCELLED) {
+      continue;
+    }
+    reserved.push({
+      itemId: itemKey,
+      dishId: item.dishId,
+      name: item.name,
+      reservedQuantity: item.quantity,
+    });
+  }
+  return reserved;
 }
 
 export function handleKitchenReject(
@@ -522,6 +583,9 @@ export function handleKitchenReject(
       ? parsed.reason.trim()
       : 'Insumo físico insuficiente en cocina';
   const targetItem = order.items.find((it) => (it.id ?? it.itemId) === targetItemId) ?? order.items[0];
+  const rawAvailable = typeof parsed?.availableQuantity === 'number' ? parsed.availableQuantity : 0;
+  const maxPartial = targetItem ? Math.max(0, targetItem.quantity - 1) : 0;
+  const effectiveAvailable = Math.max(0, Math.min(rawAvailable, maxPartial));
 
   return {
     ...order,
@@ -536,12 +600,12 @@ export function handleKitchenReject(
               dishId: targetItem.dishId,
               name: targetItem.name,
               requestedQuantity: targetItem.quantity,
-              availableQuantity: 0,
+              availableQuantity: effectiveAvailable,
               reason,
             },
           ]
         : [],
-      reservedItems: [],
+      reservedItems: buildSandboxReservedItems(order, targetItem, effectiveAvailable),
     },
     version: order.version + 1,
     updatedAt: new Date().toISOString(),
@@ -603,6 +667,7 @@ function createNewSandboxOrder(store: SandboxStore, body: string | null): Order 
 const SIMPLE_MUTATION_HANDLERS: ReadonlyArray<readonly [string, (order: Order) => Order]> = [
   ['/confirm', handleConfirmOrder],
   ['/start-preparation', handleStartPreparation],
+  ['/request-bill', (order) => handleVoidOrder(order, OrderStatus.PAID)],
   ['/void-kitchen-error', (order) => handleVoidOrder(order, OrderStatus.WASTED)],
   ['/void', (order) => handleVoidOrder(order, OrderStatus.VOIDED)],
 ];
@@ -685,6 +750,10 @@ export function executeMockFetch(
     return jsonResponse(buildKdsQueueOrders(Object.values(store.orders), url), 200);
   }
 
+  if (method === 'GET' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?(?:\?.*)?$/.test(url)) {
+    return jsonResponse(Object.values(store.orders), 200);
+  }
+
   if (method === 'POST' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?$/.test(url)) {
     const created = createNewSandboxOrder(store, getRequestBodyString(init));
     return jsonResponse(created, 201);
@@ -760,6 +829,11 @@ export function createSandboxController(initialTokenProvider: TokenProvider): Sa
     getOrder: (orderId) => store.orders[orderId],
     getOrders: () => Object.values(store.orders),
     resetPreset: (orderId) => {
+      for (const key of preRedoNotesMap.keys()) {
+        if (key.startsWith(`${orderId}:`)) {
+          preRedoNotesMap.delete(key);
+        }
+      }
       const freshOrder = buildInitialPresets()[orderId];
       if (freshOrder) {
         store.orders[orderId] = freshOrder;

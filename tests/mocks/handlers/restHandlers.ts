@@ -39,6 +39,9 @@ export const restHandlers = [
     return HttpResponse.json(mockKdsQueue);
   }),
 
+  // GET /orders (shift order list)
+  http.get('*/orders', () => HttpResponse.json([])),
+
   // GET /orders/:orderId
   http.get('*/orders/:orderId', ({ params }) => {
     const { orderId } = params;

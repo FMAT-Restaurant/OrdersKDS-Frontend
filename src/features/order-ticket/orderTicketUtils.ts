@@ -78,8 +78,18 @@ export interface OrderActionPermissions {
   readonly canCancel: boolean;
   readonly canEdit: boolean;
   readonly canConfirm: boolean;
+  readonly canRequestBill: boolean;
   readonly canResetToNew: boolean;
   readonly showTerminalResetButton: boolean;
+}
+
+/** Active waiter orders grouped by assigned table or takeaway channel. */
+export interface TableOrderGroup {
+  readonly groupKey: string;
+  readonly label: string;
+  readonly tableNumber: number | null;
+  readonly isTakeaway: boolean;
+  readonly orders: readonly Order[];
 }
 
 /** React Query key prefix for individual order ticket queries. */
@@ -149,12 +159,19 @@ export function computeOrderActionPermissions(order?: Order): OrderActionPermiss
   const isExpired = status === OrderStatus.EXPIRED;
   const isCancelled = status === OrderStatus.CANCELLED;
   const unconfirmedCreated = isCreated && !order?.confirmedAt;
+  const allItemsDelivered = Boolean(
+    order?.items.length &&
+      order.items.every(
+        (item) => item.status === ItemStatus.DELIVERED || item.status === ItemStatus.CANCELLED,
+      ),
+  );
 
   return {
     isRejected,
     canCancel: Boolean(isCreated || isReserved || isRejected || isExpired),
     canEdit: Boolean(unconfirmedCreated || isRejected || isExpired),
     canConfirm: Boolean(unconfirmedCreated || isExpired),
+    canRequestBill: Boolean(status === OrderStatus.DELIVERED && allItemsDelivered),
     canResetToNew: Boolean(isCancelled || isExpired),
     showTerminalResetButton: Boolean(isExpired || isCancelled),
   };
@@ -432,4 +449,72 @@ export function updateKdsQueueWithRedoItem(
       }),
     };
   });
+}
+
+const TERMINAL_INACTIVE_STATUSES: ReadonlySet<OrderStatusValue> = new Set([
+  OrderStatus.PAID,
+  OrderStatus.CANCELLED,
+  OrderStatus.VOIDED,
+  OrderStatus.WASTED,
+]);
+
+/** Whether an order belongs to the waiter's currently active shift view (delivered or pending). */
+export function isOrderActiveInShift(order: Order): boolean {
+  return !TERMINAL_INACTIVE_STATUSES.has(order.status);
+}
+
+function getOrderGroupDescriptor(order: Order): Omit<TableOrderGroup, 'orders'> {
+  if (order.isTakeaway) {
+    return { groupKey: 'takeaway', label: 'Para llevar', tableNumber: null, isTakeaway: true };
+  }
+  if (typeof order.tableNumber === 'number') {
+    return {
+      groupKey: `table:${order.tableNumber}`,
+      label: `Mesa ${order.tableNumber}`,
+      tableNumber: order.tableNumber,
+      isTakeaway: false,
+    };
+  }
+  return {
+    groupKey: 'unassigned',
+    label: 'Mesa sin asignar',
+    tableNumber: null,
+    isTakeaway: false,
+  };
+}
+
+function groupSortRank(group: TableOrderGroup): number {
+  if (group.tableNumber !== null) {
+    return group.tableNumber;
+  }
+  return group.isTakeaway ? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER - 1;
+}
+
+/** Deduplicate and group active waiter shift orders by table number (takeaway grouped last). */
+export function groupActiveOrdersByTable(orders: readonly Order[]): TableOrderGroup[] {
+  const uniqueById = new Map<string, Order>();
+  for (const order of orders) {
+    const id = order.id ?? order.orderId ?? order.publicId;
+    if (id && isOrderActiveInShift(order)) {
+      uniqueById.set(id, order);
+    }
+  }
+
+  const buckets = new Map<string, { meta: Omit<TableOrderGroup, 'orders'>; items: Order[] }>();
+  for (const order of uniqueById.values()) {
+    const meta = getOrderGroupDescriptor(order);
+    const existing = buckets.get(meta.groupKey);
+    if (existing) {
+      existing.items.push(order);
+    } else {
+      buckets.set(meta.groupKey, { meta, items: [order] });
+    }
+  }
+
+  return Array.from(buckets.values())
+    .map(({ meta, items }) => ({
+      ...meta,
+      orders: [...items].sort((a, b) => (a.orderNumber ?? 0) - (b.orderNumber ?? 0)),
+    }))
+    .sort((a, b) => groupSortRank(a) - groupSortRank(b));
 }
