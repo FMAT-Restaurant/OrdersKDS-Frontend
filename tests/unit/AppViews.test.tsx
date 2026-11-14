@@ -1,6 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../../src/App.tsx';
+import { buildInitialPresets } from '../../src/features/dev-sandbox/mockSandboxFetch.ts';
+import { OrderCard } from '../../src/features/kds-board/OrderCard.tsx';
+import { UserRole } from '../../src/shared/types/auth.ts';
 
 let capturedProps: {
   orderId?: string;
@@ -14,10 +17,14 @@ let capturedKdsClient: { get: (path: string) => Promise<unknown> } | undefined;
 
 // Mock sub-applications to isolate App view switcher and test injected mocks
 vi.mock('../../src/KdsApp.tsx', () => ({
-  default: (props: { client?: { get: (path: string) => Promise<unknown> } }) => {
+  default: (props: { userRole?: UserRole; client?: { get: (path: string) => Promise<unknown> } }) => {
     capturedKdsClient = props.client;
     return (
-      <div data-testid="mock-kds-app" data-has-mock-client={props.client ? 'true' : 'false'}>
+      <div
+        data-testid="mock-kds-app"
+        data-user-role={props.userRole ?? 'none'}
+        data-has-mock-client={props.client ? 'true' : 'false'}
+      >
         KdsApp Screen
       </div>
     );
@@ -339,6 +346,59 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
       ws.close();
       expect(ws.readyState).toBe(3);
       expect(closeSpy).toHaveBeenCalled();
+    });
+
+    it('switches between Admin, Chef, Cocinero, and Mesero roles in DevSandboxApp and toggles role-specific KDS void buttons', () => {
+      render(<App />);
+
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'admin');
+
+      fireEvent.click(screen.getByTestId('dev-role-chef'));
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'chef');
+
+      fireEvent.click(screen.getByTestId('dev-role-kitchen'));
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'kitchen');
+
+      fireEvent.click(screen.getByTestId('dev-role-waiter'));
+      expect(screen.getByTestId('mock-order-ticket-widget')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('dev-role-admin'));
+      fireEvent.click(screen.getByRole('button', { name: '🍳 KDS Cocina' }));
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'admin');
+
+      const inPrepOrder = buildInitialPresets()['ord-en-preparacion'];
+      const { rerender } = render(
+        <OrderCard
+          order={inPrepOrder}
+          userRole={UserRole.ADMIN}
+          onAdminVoid={vi.fn()}
+          onChefVoid={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole('button', { name: /anulación administrativa/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /anulación por error de cocina/i })).toBeInTheDocument();
+
+      rerender(
+        <OrderCard
+          order={inPrepOrder}
+          userRole={UserRole.CHEF}
+          onAdminVoid={vi.fn()}
+          onChefVoid={vi.fn()}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: /anulación administrativa/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /anulación por error de cocina/i })).toBeInTheDocument();
+
+      rerender(
+        <OrderCard
+          order={inPrepOrder}
+          userRole={UserRole.KITCHEN}
+          onAdminVoid={vi.fn()}
+          onChefVoid={vi.fn()}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: /anulación administrativa/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /anulación por error de cocina/i })).not.toBeInTheDocument();
     });
   });
 });

@@ -14,7 +14,7 @@ import {
 } from './features/dev-sandbox/mockSandboxFetch.ts';
 import { generateLocalDevToken } from './shared/api/client.ts';
 import { queryClient } from './shared/api/queryClient.ts';
-import type { TokenProvider, UserRole } from './shared/types/auth.ts';
+import { UserRole, type TokenProvider } from './shared/types/auth.ts';
 
 type DevViewMode = 'kds' | 'ticket' | 'alerts';
 type QuickSimAction =
@@ -25,17 +25,59 @@ type QuickSimAction =
   | 'kitchen_deliver'
   | 'kitchen_reject';
 
+interface DevRoleOption {
+  readonly role: UserRole;
+  readonly label: string;
+  readonly testId: string;
+  readonly targetView?: DevViewMode;
+  readonly title: string;
+}
+
+const DEV_ROLE_OPTIONS: readonly DevRoleOption[] = [
+  {
+    role: UserRole.ADMIN,
+    label: '👑 Admin',
+    testId: 'dev-role-admin',
+    title: 'Admin: acceso completo a vistas y en KDS habilita Anular (Admin) + Anular (Cocina)',
+  },
+  {
+    role: UserRole.CHEF,
+    label: '👨‍🍳 Chef',
+    testId: 'dev-role-chef',
+    targetView: 'kds',
+    title: 'Chef Master: bloqueado a KDS en producción; muestra Anular (Cocina) y oculta Anular (Admin)',
+  },
+  {
+    role: UserRole.KITCHEN,
+    label: '🍳 Cocinero',
+    testId: 'dev-role-kitchen',
+    targetView: 'kds',
+    title: 'Cocinero: bloqueado a KDS en producción; oculta ambos botones de anulación',
+  },
+  {
+    role: UserRole.WAITER,
+    label: '📝 Mesero',
+    testId: 'dev-role-waiter',
+    targetView: 'ticket',
+    title: 'Mesero: en producción inicia en Orden Mesero sin acceso a KDS',
+  },
+];
+
 const defaultDevTokenProvider: TokenProvider = () => Promise.resolve(generateLocalDevToken('admin'));
 
 function DevNavbar({
   view,
+  selectedRole,
   isMockKds,
   onViewChange,
+  onRoleChange,
   onToggleMockKds,
 }: Readonly<{
   view: DevViewMode;
+  selectedRole: UserRole;
   isMockKds: boolean;
   onViewChange: (view: DevViewMode) => void;
+  onRoleChange: (option: DevRoleOption) => void;
   onToggleMockKds: () => void;
 }>) {
   return (
@@ -76,6 +118,25 @@ function DevNavbar({
           🔔 Alerta Órdenes Listas
         </button>
       </nav>
+      <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded border border-slate-700">
+        <span className="font-bold text-slate-400 uppercase mr-1">Rol:</span>
+        {DEV_ROLE_OPTIONS.map((option) => (
+          <button
+            key={option.role}
+            type="button"
+            data-testid={option.testId}
+            title={option.title}
+            onClick={() => onRoleChange(option)}
+            className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
+              selectedRole === option.role
+                ? 'bg-indigo-600 text-white border-indigo-400'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
       <button
         type="button"
         onClick={onToggleMockKds}
@@ -375,11 +436,17 @@ export function DevSandboxApp({
   tokenProvider,
 }: Readonly<DevSandboxAppProps> = {}) {
   const [view, setView] = useState<DevViewMode>('kds');
+  const [selectedRole, setSelectedRole] = useState<UserRole>(effectiveRole ?? UserRole.ADMIN);
   const [selectedOrderId, setSelectedOrderId] = useState<string>('ord-mesa-4');
   const [customOrderId, setCustomOrderId] = useState<string>('');
   const [isBackendMode, setIsBackendMode] = useState<boolean>(false);
   const [isMockKds, setIsMockKds] = useState<boolean>(false);
   const [sandbox] = useState<SandboxController>(() => createSandboxController(defaultDevTokenProvider));
+
+  const activeTokenProvider = useCallback<TokenProvider>(
+    () => (tokenProvider ? tokenProvider() : Promise.resolve(generateLocalDevToken(selectedRole))),
+    [tokenProvider, selectedRole],
+  );
 
   const syncSandboxQueries = useCallback(
     (orderId?: string) => {
@@ -396,12 +463,8 @@ export function DevSandboxApp({
   );
 
   useEffect(() => {
-    sandbox.updateContext(
-      selectedOrderId,
-      tokenProvider ?? defaultDevTokenProvider,
-      syncSandboxQueries,
-    );
-  }, [sandbox, selectedOrderId, tokenProvider, syncSandboxQueries]);
+    sandbox.updateContext(selectedOrderId, activeTokenProvider, syncSandboxQueries);
+  }, [sandbox, selectedOrderId, activeTokenProvider, syncSandboxQueries]);
 
   useEffect(() => {
     sandbox.getOrders().forEach((order) => {
@@ -456,6 +519,16 @@ export function DevSandboxApp({
     }
   }, []);
 
+  const handleRoleChange = useCallback(
+    (option: DevRoleOption) => {
+      setSelectedRole(option.role);
+      if (option.targetView) {
+        handleViewChange(option.targetView);
+      }
+    },
+    [handleViewChange],
+  );
+
   const handleOrderSubmitted = useCallback(
     (newOrderId: string) => {
       setSelectedOrderId(newOrderId);
@@ -483,8 +556,10 @@ export function DevSandboxApp({
       <header className="flex flex-wrap items-center justify-between px-4 py-2 bg-slate-950 border-b border-slate-800 text-xs gap-2 shrink-0 z-50">
         <DevNavbar
           view={view}
+          selectedRole={selectedRole}
           isMockKds={isMockKds}
           onViewChange={handleViewChange}
+          onRoleChange={handleRoleChange}
           onToggleMockKds={() => {
             setIsMockKds((prev) => !prev);
             void queryClient.invalidateQueries({ queryKey: ['kds'] });
@@ -508,8 +583,8 @@ export function DevSandboxApp({
       <main className="flex-1 w-full h-full overflow-auto">
         {view === 'kds' && (
           <KdsApp
-            userRole={effectiveRole}
-            tokenProvider={tokenProvider ?? defaultDevTokenProvider}
+            userRole={selectedRole}
+            tokenProvider={activeTokenProvider}
             client={isMockKds ? sandbox.mockKdsClient : undefined}
           />
         )}

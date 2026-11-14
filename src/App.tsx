@@ -94,7 +94,7 @@ function App({
     return (
       <DevSandboxApp
         effectiveRole={UserRole.ADMIN}
-        tokenProvider={effectiveTokenProvider}
+        tokenProvider={token || tokenProvider ? effectiveTokenProvider : undefined}
       />
     );
   }
@@ -103,13 +103,14 @@ function App({
   const hasKitchen = hasKitchenModuleAccess(activeUser);
   const hasOrders = hasWaiterModuleAccess(activeUser);
   const canSwitchViews = isAdminUser(activeUser) || (hasKitchen && hasOrders);
+  const effectiveView: ShellViewMode = canSwitchViews ? view : getInitialView(activeUser);
 
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-slate-900 text-slate-100">
-      {canSwitchViews && <ShellNavbar view={view} onViewChange={setView} />}
+      {canSwitchViews && <ShellNavbar view={effectiveView} onViewChange={setView} />}
 
       <main className="flex-1 w-full h-full overflow-auto">
-        {view === 'kds' ? (
+        {effectiveView === 'kds' ? (
           <KdsApp userRole={effectiveRole} tokenProvider={effectiveTokenProvider} />
         ) : (
           <div className="p-6 flex flex-col items-center justify-start min-h-full bg-slate-100 text-slate-900">

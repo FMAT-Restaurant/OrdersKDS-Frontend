@@ -411,14 +411,17 @@ function handleRedoItem(order: Order, targetItemId: string, body?: string | null
   };
 }
 
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
 function mapUpdatedItem(
   existing: OrderItem | undefined,
   raw: Record<string, unknown>,
   idx: number,
 ): OrderItem {
   const fallbackId = `item-sim-${Date.now()}-${idx}`;
-  const rawId = typeof raw.id === 'string' ? raw.id : undefined;
-  const resolvedId = rawId ?? existing?.id ?? existing?.itemId ?? fallbackId;
+  const resolvedId = asString(raw.id) ?? existing?.id ?? existing?.itemId ?? fallbackId;
   const rawUnitPrice = typeof raw.unitPrice === 'number' ? raw.unitPrice : existing?.unitPrice ?? 100;
   const rawQty =
     typeof raw.quantity === 'number' && raw.quantity > 0 ? raw.quantity : existing?.quantity ?? 1;
@@ -426,17 +429,17 @@ function mapUpdatedItem(
   return {
     ...existing,
     id: resolvedId,
-    itemId: typeof raw.itemId === 'string' ? raw.itemId : resolvedId,
-    dishId: typeof raw.dishId === 'string' ? raw.dishId : existing?.dishId,
-    sourceId: typeof raw.sourceId === 'string' ? raw.sourceId : existing?.sourceId,
-    offerId: typeof raw.offerId === 'string' ? raw.offerId : existing?.offerId,
-    name: typeof raw.name === 'string' ? raw.name : existing?.name ?? 'Platillo',
+    itemId: asString(raw.itemId) ?? resolvedId,
+    dishId: asString(raw.dishId) ?? existing?.dishId,
+    sourceId: asString(raw.sourceId) ?? existing?.sourceId,
+    offerId: asString(raw.offerId) ?? existing?.offerId,
+    name: asString(raw.name) ?? existing?.name ?? 'Platillo',
     quantity: rawQty,
     unitPrice: rawUnitPrice,
     status: existing?.status ?? ItemStatus.PENDING,
     station: existing?.station ?? 'parrilla',
     modifiers: Array.isArray(raw.modifiers) ? raw.modifiers.map(String) : existing?.modifiers ?? [],
-    notes: typeof raw.notes === 'string' ? raw.notes : existing?.notes ?? '',
+    notes: asString(raw.notes) ?? existing?.notes ?? '',
     version: (existing?.version ?? 1) + 1,
   };
 }
@@ -597,49 +600,73 @@ function createNewSandboxOrder(store: SandboxStore, body: string | null): Order 
   return newOrder;
 }
 
+const SIMPLE_MUTATION_HANDLERS: ReadonlyArray<readonly [string, (order: Order) => Order]> = [
+  ['/confirm', handleConfirmOrder],
+  ['/start-preparation', handleStartPreparation],
+  ['/void-kitchen-error', (order) => handleVoidOrder(order, OrderStatus.WASTED)],
+  ['/void', (order) => handleVoidOrder(order, OrderStatus.VOIDED)],
+];
+
+function findSimpleMutationHandler(url: string): ((order: Order) => Order) | undefined {
+  const entry = SIMPLE_MUTATION_HANDLERS.find(([suffix]) => url.endsWith(suffix));
+  return entry?.[1];
+}
+
+function applyPatchOnlyMutation(
+  url: string,
+  currentOrder: Order,
+  body: string | null,
+): Order | null {
+  if (url.endsWith('/cancel')) {
+    return handleCancelOrder(currentOrder);
+  }
+  const redoMatch = REDO_ITEM_REGEX.exec(url);
+  if (redoMatch) {
+    return handleRedoItem(currentOrder, decodeURIComponent(redoMatch[2]), body);
+  }
+  if (url.endsWith('/items')) {
+    return handleUpdateItems(currentOrder, body);
+  }
+  return null;
+}
+
+function applyReadyOrRejectMutation(
+  url: string,
+  currentOrder: Order,
+  body: string | null,
+): Order | null {
+  if (url.endsWith('/ready')) {
+    const itemReadyMatch = READY_ITEM_REGEX.exec(url);
+    return itemReadyMatch
+      ? handleMarkItemReady(currentOrder, decodeURIComponent(itemReadyMatch[2]))
+      : handleMarkOrderReady(currentOrder);
+  }
+  if (url.endsWith('/kitchen-reject')) {
+    const itemRejectMatch = REJECT_ITEM_REGEX.exec(url);
+    const targetItemId = itemRejectMatch ? decodeURIComponent(itemRejectMatch[2]) : undefined;
+    return handleKitchenReject(currentOrder, targetItemId, body);
+  }
+  return null;
+}
+
 function applyOrderMutation(
   url: string,
   method: string,
   currentOrder: Order,
   body: string | null,
 ): Order | null {
-  const isPostOrPatch = method === 'POST' || method === 'PATCH';
-  if (isPostOrPatch && url.endsWith('/confirm')) {
-    return handleConfirmOrder(currentOrder);
-  }
-  if (method === 'PATCH' && url.endsWith('/cancel')) {
-    return handleCancelOrder(currentOrder);
-  }
-  if (isPostOrPatch && url.endsWith('/start-preparation')) {
-    return handleStartPreparation(currentOrder);
-  }
-  if (isPostOrPatch && url.endsWith('/ready')) {
-    const itemReadyMatch = READY_ITEM_REGEX.exec(url);
-    return itemReadyMatch
-      ? handleMarkItemReady(currentOrder, decodeURIComponent(itemReadyMatch[2]))
-      : handleMarkOrderReady(currentOrder);
-  }
-  if (isPostOrPatch && url.endsWith('/kitchen-reject')) {
-    const itemRejectMatch = REJECT_ITEM_REGEX.exec(url);
-    const targetItemId = itemRejectMatch ? decodeURIComponent(itemRejectMatch[2]) : undefined;
-    return handleKitchenReject(currentOrder, targetItemId, body);
-  }
-  if (isPostOrPatch && url.endsWith('/void-kitchen-error')) {
-    return handleVoidOrder(currentOrder, OrderStatus.WASTED);
-  }
-  if (isPostOrPatch && url.endsWith('/void')) {
-    return handleVoidOrder(currentOrder, OrderStatus.VOIDED);
-  }
   if (method === 'PATCH') {
-    const redoMatch = REDO_ITEM_REGEX.exec(url);
-    if (redoMatch) {
-      return handleRedoItem(currentOrder, decodeURIComponent(redoMatch[2]), body);
-    }
-    if (url.endsWith('/items')) {
-      return handleUpdateItems(currentOrder, body);
-    }
+    const patchResult = applyPatchOnlyMutation(url, currentOrder, body);
+    if (patchResult) return patchResult;
   }
-  return null;
+  if (method !== 'POST' && method !== 'PATCH') {
+    return null;
+  }
+  const simpleHandler = findSimpleMutationHandler(url);
+  if (simpleHandler) {
+    return simpleHandler(currentOrder);
+  }
+  return applyReadyOrRejectMutation(url, currentOrder, body);
 }
 
 /**
