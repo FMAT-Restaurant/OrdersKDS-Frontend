@@ -30,6 +30,30 @@
   --space-unit: 4px;
 }
 
+[data-theme="dark"] .orders-kds-root,
+.orders-kds-root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-primary: #E06A3B;
+  --color-primary-hover: #F07C48;
+  --color-primary-accent: #FB923C;
+  --color-primary-soft: rgba(224, 106, 59, 0.16);
+  --color-ink: #FFFFFF;
+  --color-text: #E8E3DF;
+  --color-body: #D6CFC9;
+  --color-muted: #9C9288;
+  --color-border: #2C2420;
+  --color-canvas: #0A0908;
+  --color-surface: #161311;
+  --color-success: #22C55E;
+  --bg-success: rgba(34, 197, 94, 0.15);
+  --color-warning: #F59E0B;
+  --bg-warning: rgba(245, 158, 11, 0.15);
+  --color-danger: #EF4444;
+  --bg-danger: rgba(239, 68, 68, 0.15);
+  --color-error: #EF4444;
+  --color-info: #3B82F6;
+}
+
 .orders-kds-root button {
   font-family: inherit;
   border: 0 solid transparent;

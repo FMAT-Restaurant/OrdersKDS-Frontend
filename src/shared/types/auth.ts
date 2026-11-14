@@ -29,6 +29,10 @@ export interface ShellUser {
   sub?: string;
   email?: string;
   staffId?: string;
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  roleLabel?: string;
   userType?: string;
   roles?: string[];
   permissions?: string[];
@@ -85,6 +89,62 @@ export function resolveUserRole(user?: ShellUser | null): UserRole | undefined {
   if (user.permissions?.some((p) => p.startsWith('orders:'))) return UserRole.WAITER;
 
   return undefined;
+}
+
+/**
+ * Determine whether a ShellUser holds administrative privileges.
+ */
+export function isAdminUser(user?: ShellUser | null): boolean {
+  if (!user) return false;
+  return Boolean(
+    user.userType === 'ADMIN' ||
+      user.permissions?.includes('*') ||
+      user.roles?.some((r) => normalizeShellRole(r) === UserRole.ADMIN),
+  );
+}
+
+/**
+ * Evaluate RBAC/PBAC permission strings formatted as `module:resource:action`.
+ */
+export function hasPermission(
+  user: ShellUser | null | undefined,
+  requiredPermission: string,
+): boolean {
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+  return Boolean(user.permissions?.includes(requiredPermission));
+}
+
+/**
+ * Determine whether a ShellUser should access the Kitchen (KDS) module.
+ */
+export function hasKitchenModuleAccess(user?: ShellUser | null): boolean {
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+  if (user.permissions?.some((p) => p.startsWith('kitchen:'))) return true;
+  return Boolean(
+    user.roles?.some((r) => {
+      const role = normalizeShellRole(r);
+      return role === UserRole.CHEF || role === UserRole.KITCHEN;
+    }),
+  );
+}
+
+/**
+ * Determine whether a ShellUser should access the Waiter/Orders module.
+ * CHEF_MASTER carries `orders:orders:view` to inspect ticket details without
+ * unlocking full waiter order-management navigation.
+ */
+export function hasWaiterModuleAccess(user?: ShellUser | null): boolean {
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+  if (user.roles?.some((r) => normalizeShellRole(r) === UserRole.WAITER)) return true;
+  if (user.permissions?.some((p) => p.startsWith('orders:') && p !== 'orders:orders:view')) {
+    return true;
+  }
+  return Boolean(
+    user.permissions?.includes('orders:orders:view') && !hasKitchenModuleAccess(user),
+  );
 }
 
 /**

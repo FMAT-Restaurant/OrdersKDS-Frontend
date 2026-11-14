@@ -172,10 +172,7 @@ export function applyRealtimeStatusChange(
     ...currentOrder,
     status: event.status,
     version: event.version,
-    rejectionDetails:
-      event.rejectionDetails === undefined
-        ? currentOrder.rejectionDetails
-        : event.rejectionDetails,
+    rejectionDetails: event.rejectionDetails ?? currentOrder.rejectionDetails,
     awaitingStockConfirmation:
       event.status === OrderStatus.CREATED
         ? currentOrder.awaitingStockConfirmation

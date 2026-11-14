@@ -42,7 +42,7 @@ export class ApiClient {
   private readonly customFetch: typeof fetch;
 
   constructor(config: ApiClientConfig = {}) {
-    this.baseUrl = config.baseUrl ?? '';
+    this.baseUrl = config.baseUrl ?? import.meta.env.VITE_API_URL ?? '';
     this.tokenProvider = config.tokenProvider;
     this.customFetch = config.fetchFn ?? globalThis.fetch.bind(globalThis);
   }
@@ -258,7 +258,16 @@ export function generateLocalDevToken(role = 'admin'): string {
   return `${header}.${claims}.devsignature`;
 }
 
-const localApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+/** Resolve the default REST gateway URL for the active build mode. */
+export function resolveDefaultApiBaseUrl(mode: string = import.meta.env.MODE): string {
+  return (
+    import.meta.env.VITE_API_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    (mode === 'cocina' ? 'http://localhost:8000/api/v1/kitchen' : 'http://localhost:8000')
+  );
+}
+
+const localApiBaseUrl = resolveDefaultApiBaseUrl();
 const localDevToken = import.meta.env.VITE_API_TOKEN || generateLocalDevToken('admin');
 
 export const apiClient = createApiClient({

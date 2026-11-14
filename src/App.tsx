@@ -5,8 +5,17 @@ import { ReadyOrdersAlert } from './ReadyOrdersAlert.tsx';
 import { queryClient } from './shared/api/queryClient.ts';
 import { OrderStatus, ItemStatus } from './shared/types/order.ts';
 import type { Order } from './shared/api/schemas.ts';
-import { UserRole, type FederatedModuleProps, type ShellUser, type TokenProvider } from './shared/types/auth.ts';
-import { getStoredSessionUser, resolveUserRole } from './shared/types/auth.ts';
+import {
+  getStoredSessionUser,
+  hasKitchenModuleAccess,
+  hasWaiterModuleAccess,
+  isAdminUser,
+  resolveUserRole,
+  UserRole,
+  type FederatedModuleProps,
+  type ShellUser,
+  type TokenProvider,
+} from './shared/types/auth.ts';
 import { generateLocalDevToken, getStoredSessionToken } from './shared/api/client.ts';
 
 type ViewMode = 'kds' | 'ticket' | 'alerts';
@@ -608,24 +617,8 @@ function AlertsViewContent() {
 }
 
 function getInitialView(user: ShellUser | null): ViewMode {
-  if (user) {
-    const hasKitchen = Boolean(
-      user.userType === 'ADMIN' ||
-        user.permissions?.some((p) => p.startsWith('kitchen:') || p === '*') ||
-        user.roles?.some((r) =>
-          ['admin', 'administrador', 'chef', 'chef_master', 'kitchen', 'cocinero'].includes(
-            r.toLowerCase(),
-          ),
-        ),
-    );
-    const hasOrders = Boolean(
-      user.userType === 'ADMIN' ||
-        user.permissions?.some((p) => p.startsWith('orders:') || p === '*') ||
-        user.roles?.some((r) =>
-          ['admin', 'administrador', 'waiter', 'mesero'].includes(r.toLowerCase()),
-        ),
-    );
-    if (!hasKitchen && hasOrders) return 'ticket';
+  if (user && !hasKitchenModuleAccess(user) && hasWaiterModuleAccess(user)) {
+    return 'ticket';
   }
   return 'kds';
 }
@@ -688,27 +681,9 @@ function App({
   }, [theme]);
 
   const effectiveRole = resolveUserRole(activeUser) ?? UserRole.ADMIN;
-  const hasKitchen = Boolean(
-    activeUser?.userType === 'ADMIN' ||
-      activeUser?.permissions?.some((p) => p.startsWith('kitchen:') || p === '*') ||
-      activeUser?.roles?.some((r) =>
-        ['admin', 'administrador', 'chef', 'chef_master', 'kitchen', 'cocinero'].includes(
-          r.toLowerCase(),
-        ),
-      ),
-  );
-  const hasOrders = Boolean(
-    activeUser?.userType === 'ADMIN' ||
-      activeUser?.permissions?.some((p) => p.startsWith('orders:') || p === '*') ||
-      activeUser?.roles?.some((r) =>
-        ['admin', 'administrador', 'waiter', 'mesero'].includes(r.toLowerCase()),
-      ),
-  );
-  const isAdmin = Boolean(
-    activeUser?.userType === 'ADMIN' ||
-      activeUser?.permissions?.includes('*') ||
-      activeUser?.roles?.some((r) => ['admin', 'administrador'].includes(r.toLowerCase())),
-  );
+  const hasKitchen = hasKitchenModuleAccess(activeUser);
+  const hasOrders = hasWaiterModuleAccess(activeUser);
+  const isAdmin = isAdminUser(activeUser);
 
   const effectiveTokenProvider: TokenProvider = useCallback(() => {
     if (token) return Promise.resolve(token);

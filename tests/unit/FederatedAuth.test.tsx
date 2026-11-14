@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../src/App.tsx';
 import {
   getStoredSessionUser,
+  hasKitchenModuleAccess,
+  hasPermission,
+  hasWaiterModuleAccess,
+  isAdminUser,
   normalizeShellRole,
   resolveUserRole,
   UserRole,
@@ -112,6 +116,58 @@ describe('Federated Auth Contract and Orchestration', () => {
     });
   });
 
+  describe('PBAC Helpers and Module Access Guards (Stage 2)', () => {
+    it('evaluates hasPermission and isAdminUser accurately', () => {
+      expect(hasPermission(undefined, 'orders:orders:create')).toBe(false);
+      expect(isAdminUser(null)).toBe(false);
+      expect(hasKitchenModuleAccess(undefined)).toBe(false);
+      expect(hasWaiterModuleAccess(undefined)).toBe(false);
+
+      expect(hasPermission({ userType: 'ADMIN', permissions: [] }, 'kitchen:queues:view')).toBe(
+        true,
+      );
+      expect(hasPermission({ roles: ['ADMINISTRADOR'], permissions: [] }, 'orders:orders:create')).toBe(
+        true,
+      );
+      expect(hasPermission({ permissions: ['*'] }, 'orders:orders:void_admin')).toBe(true);
+      expect(
+        hasPermission({ roles: ['MESERO'], permissions: ['orders:orders:create'] }, 'orders:orders:create'),
+      ).toBe(true);
+      expect(
+        hasPermission({ roles: ['MESERO'], permissions: ['orders:orders:view'] }, 'orders:orders:create'),
+      ).toBe(false);
+    });
+
+    it('denies waiter navigation for CHEF_MASTER even when orders:orders:view is granted', () => {
+      const chefWithOrderView: ShellUser = {
+        id: 'chef-1',
+        userType: 'STAFF',
+        roles: ['CHEF_MASTER'],
+        permissions: ['kitchen:queues:view', 'kitchen:orders:start_preparation', 'orders:orders:view'],
+      };
+
+      expect(hasKitchenModuleAccess(chefWithOrderView)).toBe(true);
+      expect(hasWaiterModuleAccess(chefWithOrderView)).toBe(false);
+
+      const waiterWithViewOnly: ShellUser = {
+        id: 'waiter-1',
+        userType: 'STAFF',
+        roles: [],
+        permissions: ['orders:orders:view'],
+      };
+      expect(hasKitchenModuleAccess(waiterWithViewOnly)).toBe(false);
+      expect(hasWaiterModuleAccess(waiterWithViewOnly)).toBe(true);
+
+      const waiterByCreatePerm: ShellUser = {
+        id: 'waiter-2',
+        userType: 'STAFF',
+        roles: ['MESERO'],
+        permissions: ['orders:orders:create'],
+      };
+      expect(hasWaiterModuleAccess(waiterByCreatePerm)).toBe(true);
+    });
+  });
+
   describe('Session Storage Fallbacks', () => {
     it('retrieves stored token and user from localStorage when present', () => {
       const mockSession = {
@@ -150,6 +206,21 @@ describe('Federated Auth Contract and Orchestration', () => {
 
       expect(screen.getByTestId('mock-kds-app')).toBeInTheDocument();
       expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'chef');
+      expect(screen.queryByTestId('mock-order-ticket-widget')).not.toBeInTheDocument();
+      expect(screen.queryByText('Módulo Órdenes & Cocina')).not.toBeInTheDocument();
+    });
+
+    it('keeps CHEF_MASTER with orders:orders:view locked to KDS without ShellNavbar', () => {
+      const chefWithOrdersView: ShellUser = {
+        id: 'chef-uuid-2',
+        userType: 'STAFF',
+        roles: ['CHEF_MASTER'],
+        permissions: ['kitchen:queues:view', 'kitchen:orders:start_preparation', 'orders:orders:view'],
+      };
+
+      render(<App currentUser={chefWithOrdersView} />);
+
+      expect(screen.getByTestId('mock-kds-app')).toBeInTheDocument();
       expect(screen.queryByTestId('mock-order-ticket-widget')).not.toBeInTheDocument();
       expect(screen.queryByText('Módulo Órdenes & Cocina')).not.toBeInTheDocument();
     });
