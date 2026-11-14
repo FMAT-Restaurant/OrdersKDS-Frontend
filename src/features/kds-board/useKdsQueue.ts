@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { ApiClient, apiClient as defaultApiClient } from '../../shared/api/client.ts';
+import { ApiClient, ApiError, apiClient as defaultApiClient } from '../../shared/api/client.ts';
 import { KdsQueueResponseSchema, type Order } from '../../shared/api/schemas.ts';
 import type { TokenProvider } from '../../shared/types/auth.ts';
 
@@ -12,6 +12,23 @@ export interface UseKdsQueueOptions {
   readonly client?: ApiClient;
   readonly tokenProvider?: TokenProvider;
   readonly enabled?: boolean;
+}
+
+/**
+ * In development mode, enriches queue fetch failures so developers get an
+ * explicit server connection diagnostic without changing the user-facing alert.
+ */
+function toDeveloperQueueError(err: unknown, view: KdsViewType): Error {
+  const detail = err instanceof Error ? err.message : String(err);
+  const endpoint = `/kds/queue?view=${view}`;
+  if (err instanceof ApiError) {
+    const devMessage = `Error de conexión con el servidor al cargar ${endpoint} (status ${err.status}, code ${err.code}): ${detail}`;
+    return new ApiError(err.status, err.code, devMessage, err.details ?? err);
+  }
+  return new Error(
+    `Error de conexión con el servidor al cargar ${endpoint}: ${detail}`,
+    { cause: err },
+  );
 }
 
 /**
@@ -39,11 +56,19 @@ export function useKdsQueue({
 
   return useQuery<Order[], Error>({
     queryKey: ['kds', 'queue', view],
-    queryFn: () =>
-      effectiveClient.get<Order[]>(
-        `/kds/queue?view=${view}`,
-        KdsQueueResponseSchema,
-      ),
+    queryFn: async () => {
+      try {
+        return await effectiveClient.get<Order[]>(
+          `/kds/queue?view=${view}`,
+          KdsQueueResponseSchema,
+        );
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          throw toDeveloperQueueError(err, view);
+        }
+        throw err;
+      }
+    },
     enabled,
   });
 }

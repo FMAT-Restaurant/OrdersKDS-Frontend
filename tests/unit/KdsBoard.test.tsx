@@ -602,23 +602,39 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
   // -------------------------------------------------------------------------
   describe('Error and Boundary Branch Coverage', () => {
     it('renders error alert when queue fetch fails', async () => {
-      server.use(
-        http.get('*/kds/queue', () =>
-          HttpResponse.json(
-            { error: { code: 'INTERNAL_ERROR', message: 'Database connection failed' } },
-            { status: 500 },
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        server.use(
+          http.get('*/kds/queue', () =>
+            HttpResponse.json(
+              { error: { code: 'INTERNAL_ERROR', message: 'Database connection failed' } },
+              { status: 500 },
+            ),
           ),
-        ),
-      );
+        );
 
-      const queryClient = createTestQueryClient();
-      render(<KdsBoard tokenProvider={validTokenProvider} queryClient={queryClient} />);
+        const queryClient = createTestQueryClient();
+        render(<KdsBoard tokenProvider={validTokenProvider} queryClient={queryClient} />);
 
-      await waitFor(() => {
-        expect(screen.getByTestId('kds-error')).toBeInTheDocument();
-      });
+        await waitFor(() => {
+          expect(screen.getByTestId('kds-error')).toBeInTheDocument();
+        });
 
-      expect(screen.getByTestId('kds-error')).toHaveTextContent('Error al cargar la comanda:');
+        const errorAlert = screen.getByTestId('kds-error');
+        expect(errorAlert).toHaveTextContent('Error al cargar comandas. Verifique su conexión');
+        expect(errorAlert).not.toHaveTextContent('Database connection failed');
+
+        await waitFor(() => {
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            '[KDS] Error de conexión con el servidor:',
+            expect.objectContaining({
+              message: expect.stringContaining('Error de conexión con el servidor'),
+            }),
+          );
+        });
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
     });
 
     it('handles bump bar boundary conditions without exceeding bounds', async () => {
@@ -885,6 +901,30 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
         { wrapper },
       );
       expect(result.current.isPending).toBe(true);
+    });
+
+    it('throws explicit server connection error in DEV mode when queue fetch fails', async () => {
+      const queryClient = createTestQueryClient();
+      const wrapper = ({ children }: Readonly<{ children: React.ReactNode }>) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      );
+      const failingClient = {
+        get: vi.fn().mockRejectedValue(new Error('Network down')),
+      } as unknown as ApiClient;
+
+      const { result } = renderHook(
+        () => useKdsQueue({ client: failingClient, view: 'active' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isError).toBe(true);
+      });
+
+      expect(result.current.error?.message).toContain(
+        'Error de conexión con el servidor al cargar /kds/queue?view=active',
+      );
+      expect(result.current.error?.message).toContain('Network down');
     });
   });
 

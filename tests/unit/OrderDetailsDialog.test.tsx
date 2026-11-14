@@ -248,4 +248,28 @@ describe('OrderDetailsDialog Component Suite', () => {
     const itemActionBtn = screen.getByTestId('order-details-item-action-item-1');
     expect(itemActionBtn).toHaveStyle({ minHeight: '48px' });
   });
+
+  it('locks document background scroll while open and restores previous overflow on close', () => {
+    document.body.style.overflow = 'auto';
+    document.documentElement.style.overflow = 'scroll';
+
+    const { rerender, unmount } = render(
+      <OrderDetailsDialog order={mockOrder} isOpen={true} onClose={vi.fn()} />,
+    );
+
+    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('hidden');
+
+    rerender(<OrderDetailsDialog order={mockOrder} isOpen={false} onClose={vi.fn()} />);
+
+    expect(document.body.style.overflow).toBe('auto');
+    expect(document.documentElement.style.overflow).toBe('scroll');
+
+    rerender(<OrderDetailsDialog order={mockOrder} isOpen={true} onClose={vi.fn()} />);
+    expect(document.body.style.overflow).toBe('hidden');
+
+    unmount();
+    expect(document.body.style.overflow).toBe('auto');
+    expect(document.documentElement.style.overflow).toBe('scroll');
+  });
 });

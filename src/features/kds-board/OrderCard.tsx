@@ -502,7 +502,7 @@ function OrderCardExpiredTabActions({
         data-testid={`order-ttl-expired-alert-${displayId}`}
         className="w-full mb-1.5 p-1.5 rounded bg-red-100 border border-red-300 text-red-900 text-xs font-bold text-center"
       >
-        Comanda caducada por tiempo de reserva (TTL)
+        Comanda caducada por tiempo agotado para Inicio de Preparación
       </div>
       <button
         type="button"
