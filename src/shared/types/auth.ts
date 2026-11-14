@@ -62,6 +62,31 @@ export function normalizeShellRole(roleStr?: string): UserRole | undefined {
   return undefined;
 }
 
+const ROLE_PRIORITY: readonly UserRole[] = [
+  UserRole.ADMIN,
+  UserRole.CHEF,
+  UserRole.KITCHEN,
+  UserRole.WAITER,
+];
+
+function findHighestPriorityRole(roles: readonly string[]): UserRole | undefined {
+  const normalized = new Set<UserRole>();
+  for (const rawRole of roles) {
+    const resolved = normalizeShellRole(rawRole);
+    if (resolved) {
+      normalized.add(resolved);
+    }
+  }
+  return ROLE_PRIORITY.find((candidate) => normalized.has(candidate));
+}
+
+function resolveRoleFromPermissions(permissions: readonly string[]): UserRole | undefined {
+  if (permissions.includes('kitchen:orders:void_error')) return UserRole.CHEF;
+  if (permissions.some((p) => p.startsWith('kitchen:'))) return UserRole.KITCHEN;
+  if (permissions.some((p) => p.startsWith('orders:'))) return UserRole.WAITER;
+  return undefined;
+}
+
 /**
  * Resolve the highest-priority internal UserRole from a ShellUser object.
  */
@@ -69,26 +94,12 @@ export function resolveUserRole(user?: ShellUser | null): UserRole | undefined {
   if (!user) return undefined;
   if (user.userType === 'ADMIN' || user.permissions?.includes('*')) return UserRole.ADMIN;
 
-  const roles = user.roles ?? [];
-  for (const r of roles) {
-    if (normalizeShellRole(r) === UserRole.ADMIN) return UserRole.ADMIN;
-  }
-  for (const r of roles) {
-    if (normalizeShellRole(r) === UserRole.CHEF) return UserRole.CHEF;
-  }
-  for (const r of roles) {
-    if (normalizeShellRole(r) === UserRole.KITCHEN) return UserRole.KITCHEN;
-  }
-  for (const r of roles) {
-    if (normalizeShellRole(r) === UserRole.WAITER) return UserRole.WAITER;
+  if (user.roles) {
+    const roleFromRoles = findHighestPriorityRole(user.roles);
+    if (roleFromRoles) return roleFromRoles;
   }
 
-  // Fallback check on PBAC permissions
-  if (user.permissions?.some((p) => p === 'kitchen:orders:void_error')) return UserRole.CHEF;
-  if (user.permissions?.some((p) => p.startsWith('kitchen:'))) return UserRole.KITCHEN;
-  if (user.permissions?.some((p) => p.startsWith('orders:'))) return UserRole.WAITER;
-
-  return undefined;
+  return user.permissions ? resolveRoleFromPermissions(user.permissions) : undefined;
 }
 
 /**
