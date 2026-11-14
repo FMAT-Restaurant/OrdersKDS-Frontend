@@ -25,13 +25,13 @@ En la experiencia de atención en sala de FMAT Restaurant, el mesero interactúa
 
 ### 2.1 Comparativa de Tecnologías entre Microfrontends
 
-| Propiedad | `Menu-Frontend` (Host Consumidor) | `orders-frontend` (Remote Productor) | `Auth-Frontend` (Shell Global) |
+| Propiedad | `Menu-Frontend` (Host Consumidor) | `orders-frontend` (Remote Dual Productor) | `Auth-Frontend` (Shell Global) |
 | :--- | :--- | :--- | :--- |
-| **Puerto Local** | `5175` | `5177` | `3000` |
-| **Herramienta Build** | Vite 5 | Vite 5 | Vite 5 |
+| **Puerto Local** | `5173` / `5175` | `5177` (`ordenesApp`) / `5179` (`cocinaApp`) | `3000` |
+| **Herramienta Build** | Vite | Vite 8 (`vite.config.ts` multi-modo) | Vite |
 | **Plugin Federation** | `@originjs/vite-plugin-federation` | `@originjs/vite-plugin-federation` | `@originjs/vite-plugin-federation` |
-| **Versión de React** | **`^18.3.1`** (React 18) | React 19 (en migración a 18) | **`18.2.0`** (React 18) |
-| **Componente Expuesto** | `./App` (`menu_app`) | **`./OrderTicketWidget`**, `./KdsApp` | Host Principal |
+| **Versión de React** | **`^18.3.1`** (React 18) | **`^18.3.1`** (React 18, ya alineada con el Shell) | **`18.2.0` / `^18.3.1`** (React 18) |
+| **Componente Expuesto** | `./App` (`menuApp`) | **`./OrderTicketWidget`**, `./App`, `./KdsApp`, `./IntermediateDishesApp`, `./ReadyOrdersAlert` (`ordenesApp` & `cocinaApp`) | Host Principal |
 
 > [!TIP]
 > **Sinergia con el Microservicio de Auth:**
@@ -279,15 +279,16 @@ A continuación se documenta de forma íntegra la especificación oficial y el p
 Actúa como un ingeniero experto en React, TypeScript, Vite y arquitecturas de Microfrontends.
 Necesito que configures y adaptes este repositorio para conectarse como un **Microfrontend Remoto (Remote)** dentro del **Shell principal (`Auth-Frontend`)** del proyecto **FMAT-Restaurant** usando `@originjs/vite-plugin-federation`, además de alinear las llamadas HTTP con el **API Gateway (Kong)**.
 
-Primero, inspecciona este repositorio para identificar a cuál de los 5 módulos pertenece y usa **estrictamente** los valores de su fila en esta tabla oficial de contratos del Shell:
+Primero, inspecciona este repositorio para identificar a cuál de los **6 módulos oficiales** pertenece (Matriz Maestra actualizada en [PROMPT_INTEGRACION_EQUIPOS.md](./PROMPT_INTEGRACION_EQUIPOS.md)):
 
-| Módulo | `name` en Federation | Puerto (`server` y `preview`) | Ruta en API Gateway (`http://localhost:8000`) | Puerto interno Backend Docker | Prefijo de Permisos PBAC |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Sala / Host** | `sala_app` | `5174` | `/api/v1/floor` | `8085` | `sala:` |
-| **Menú** | `menu_app` | `5175` | `/api/v1/menu` | `8081` | `menu:` |
-| **Inventario** | `inventario_app` | `5176` | `/api/v1/inventory` | `8083` | `inventory:` |
-| **Órdenes y Cocina (KDS)** | `ordenes_app` | `5177` | `/api/v1/orders` | `8082` | `orders:` y `kitchen:` |
-| **Caja y Facturación** | `caja_app` | `5178` | `/api/v1/payments` | `8084` | `billing:` |
+| Módulo / Dominio | `name` en Federation | Puerto (`server` y `preview`) | Ruta en API Gateway (`http://localhost:8000`) | Puerto Backend (Referencia) | Rol Base / Prefijo PBAC |
+| :--- | :--- | :---: | :--- | :---: | :--- |
+| **Sala / Host** | `salaApp` | `5174` | `/api/v1/floor` | `8085` | `HOST` (`sala:`) |
+| **Menú** | `menuApp` | `5173` | `/api/v1/menu` | `8080` | `GESTOR_MENU` (`menu:`) |
+| **Inventario** | `inventarioApp` | `5176` | `/api/v1/inventory` | `8083` | `ALMACENISTA` (`inventory:`) |
+| **Órdenes (POS)** | `ordenesApp` | `5177` | `/api/v1/orders` | `8082` | `MESERO` (`orders:`) |
+| **Cocina (KDS)** | `cocinaApp` | `5179` | `/api/v1/kitchen` | `8086` | `CHEF_MASTER` (`kitchen:`) |
+| **Caja y Facturación** | `cajaApp` | `5178` | `/api/v1/payments` | `8084` | `CAJERO` (`billing:`) |
 
 Realiza los siguientes cambios en el repositorio:
 
@@ -312,7 +313,7 @@ Realiza los siguientes cambios en el repositorio:
      plugins: [
        react(),
        federation({
-         name: '<NAME_SEGUN_TABLA>', // ej. 'menu_app' o 'ordenes_app'
+         name: '<NAME_SEGUN_MATRIZ>', // ej. 'menuApp', 'ordenesApp' o 'cocinaApp'
          filename: 'remoteEntry.js',
          exposes: {
            './App': './src/App.tsx',

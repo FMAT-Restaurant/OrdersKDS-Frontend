@@ -133,7 +133,9 @@ Para despliegues en diferentes entornos (staging, producción):
 ### ¿Por qué la guía anterior mencionaba PostgreSQL, Redis y RabbitMQ?
 La documentación inicial contenía una plantilla heredada del backend. En la arquitectura del restaurante:
 - **Backend:** Requiere contenedores para servicios de base de datos, caché y colas de mensajes.
-- **Frontend:** Es una aplicación cliente en React 19 / TypeScript / Vite que se sirve como contenido estático a través de Nginx.
+- **Frontend:** Es una aplicación cliente en **React 18 (`^18.3.1`) / TypeScript / Vite** que se sirve como contenido estático a través de Nginx y genera dos artefactos de Module Federation:
+  - `npm run build` → `dist/` (`ordenesApp`, puerto `5177`, tráfico hacia `/api/v1/orders` en backend `8082`).
+  - `npm run build:cocina` → `dist-cocina/` (`cocinaApp`, puerto `5179`, tráfico hacia `/api/v1/kitchen` en backend `8086`).
 
 ### El contenedor arranca pero no puedo conectarme a la API local
 Si tu backend está corriendo en tu máquina fuera de Docker (en `localhost:8000`), recuerda que desde el navegador de tu computadora `localhost:8000` sigue siendo accesible directamente. Asegúrate de que las políticas de CORS del backend permitan peticiones desde el puerto donde corre tu contenedor frontend (ej. `http://localhost:8080`).

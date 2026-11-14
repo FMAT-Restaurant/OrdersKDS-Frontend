@@ -11,13 +11,10 @@
 
 El Shell principal del restaurante (`Auth-Frontend`) está construido en **React 18**, **Vite** y `@originjs/vite-plugin-federation`. Actúa como el host contenedor que autentica a los usuarios, administra los roles y permisos PBAC, y monta dinámicamente cada microfrontend según el módulo seleccionado en su barra lateral.
 
-### Contrato Oficial del Shell para este Módulo:
-* **Identificador en Federation:** `ordenes_app` (el Shell lo importa como `ordenesApp`)
-* **Endpoint de entrada remota:** `http://localhost:5177/assets/remoteEntry.js`
-* **Componente raíz importado por el Shell:** `ordenesApp/App` (`./src/App.tsx`)
-* **Puerto fijo local:** `5177`
-* **Ruta en API Gateway (Kong):** `http://localhost:8000/api/v1/orders`
-* **Prefijos de permisos autorizados:** `orders:` y `kitchen:`
+### Contrato Oficial del Shell (Arquitectura de 6 Módulos):
+* **Módulo Órdenes (POS / Mesero):** Identificador en Federation `ordenesApp` (`http://localhost:5177/assets/remoteEntry.js`), expone `ordenesApp/App` y `ordenesApp/OrderTicketWidget`, enruta vía Kong `http://localhost:8000/api/v1/orders` (backend `8082`), rol base `MESERO` y permisos `orders:`.
+* **Módulo Cocina (KDS):** Identificador en Federation `cocinaApp` (`http://localhost:5179/assets/remoteEntry.js`), compilado con `--mode cocina` hacia `dist-cocina/`, expone `cocinaApp/App` y `cocinaApp/KdsApp`, enruta vía Kong `http://localhost:8000/api/v1/kitchen` (backend `8086`), rol base `CHEF_MASTER` y permisos `kitchen:`.
+* **Guard de `CHEF_MASTER`:** `CHEF_MASTER` puede portar `orders:orders:view` únicamente para consultar detalle de orden en solo lectura sin habilitar controles de escritura ni vista de POS Mesero.
 
 > [!WARNING]
 > **Atención al trabajo en paralelo:** Actualmente se están realizando ajustes visuales y de diseño en tiempo real en los componentes del tablero KDS (`OrderCard.tsx`, `OrderCardStub.tsx`, `StationSelector.tsx`, etc.). Los cambios descritos en este documento deben implementarse de forma coordinada, respetando los archivos de estilos que están siendo intervenidos.
@@ -80,12 +77,12 @@ export default function App({ token, currentUser, theme }: Readonly<FederatedMod
     }
   }, [currentUser]);
 
-  // 2. Determinar vistas disponibles según PBAC
-  const hasKitchen = activeUser?.userType === 'ADMIN' || 
-    activeUser?.permissions.some(p => p.startsWith('kitchen:') || p === '*');
-  const hasOrders = activeUser?.userType === 'ADMIN' || 
-    activeUser?.permissions.some(p => p.startsWith('orders:') || p === '*');
-  const isAdmin = activeUser?.userType === 'ADMIN' || activeUser?.permissions.includes('*');
+  // 2. Determinar vistas disponibles según PBAC (con guard específico para CHEF_MASTER)
+  // Ref. real en src/shared/types/auth.ts: hasKitchenModuleAccess / hasWaiterModuleAccess / isAdminUser
+  const hasKitchen = isAdminUser(activeUser) || hasKitchenModuleAccess(activeUser);
+  const hasOrders = isAdminUser(activeUser) || hasWaiterModuleAccess(activeUser);
+  // Nota: CHEF_MASTER puede portar `orders:orders:view` para ver detalle de ticket en solo lectura,
+  // pero NO recibe permisos de escritura ni acceso al módulo POS Mesero (`hasWaiterModuleAccess`).
 
   // Ajustar vista inicial por rol predominante
   useEffect(() => {
@@ -142,8 +139,8 @@ export default function App({ token, currentUser, theme }: Readonly<FederatedMod
 
 ## 3. Cambios Técnicos Necesarios en el Repositorio Frontend
 
-### 3.1. Alinear versión de React con el Shell (Requisito Crítico de Module Federation)
-* **Situación actual:** `orders-frontend/package.json` tiene React 19 (`"react": "^19.0.0"`, `"react-dom": "^19.0.0"`).
+### 3.1. Alinear versión de React con el Shell (Completado)
+* **Estado actual:** `orders-frontend/package.json` ya está alineado con el Shell (`Auth-Frontend`) utilizando **React 18 (`"react": "^18.3.1"`, `"react-dom": "^18.3.1"`)**.
 * **Requisito del Shell:** `Auth-Frontend` corre en React 18 (`^18.3.1`).
 * **Riesgo técnico:** Como Module Federation comparte la instancia de React en tiempo de ejecución (`shared: ['react', 'react-dom']`), cuando el Shell (React 18) intente renderizar un componente compilado contra el runtime de React 19, fallará con:
   > `Error: Objects are not valid as a React child (found: object with keys {$$typeof, type, key, ref, props, _owner})`
@@ -155,12 +152,12 @@ export default function App({ token, currentUser, theme }: Readonly<FederatedMod
 
 ---
 
-### 3.2. Configuración de Module Federation en `vite.config.ts`
-Debemos ajustar la configuración de federación para alinearse estrictamente al contrato de `Auth-Frontend`:
+### 3.2. Configuración de Module Federation en `vite.config.ts` (Dual: `ordenesApp` y `cocinaApp`)
+La configuración de federación en `orders-frontend/vite.config.ts` expone ambos remotos oficiales de la matriz de `Auth-Frontend` mediante `--mode cocina`:
 
 ```diff
 - name: 'ordersKds',
-+ name: 'ordenes_app',
++ name: isCocina ? 'cocinaApp' : 'ordenesApp', // puertos 5179 (dist-cocina/) y 5177 (dist/)
   filename: 'remoteEntry.js',
   exposes: {
 +   './App': './src/App.tsx',
@@ -218,10 +215,15 @@ El trabajo de estilos que se está realizando actualmente en el equipo (reemplaz
 ---
 
 ### 3.5. Scripts en `package.json`
-Agregar el script de previsualización federada:
+Scripts disponibles para compilación y previsualización federada dual (`ordenesApp:5177` y `cocinaApp:5179`):
 ```json
 "scripts": {
-  "dev:federation": "vite build && vite preview --port 5177"
+  "build": "tsc -b && vite build",
+  "build:cocina": "tsc -b && vite build --mode cocina",
+  "preview": "vite preview --port 5177 --host 0.0.0.0",
+  "preview:cocina": "vite preview --mode cocina --port 5179 --host 0.0.0.0",
+  "dev:federation": "vite build && vite preview --port 5177 --host 0.0.0.0",
+  "dev:federation:cocina": "vite build --mode cocina && vite preview --mode cocina --port 5179 --host 0.0.0.0"
 }
 ```
 
