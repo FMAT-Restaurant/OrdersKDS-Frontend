@@ -610,7 +610,7 @@ interface KdsGridContentProps {
   readonly currentTab?: KdsTabType;
   readonly isLoading: boolean;
   readonly isError: boolean;
-  readonly error: Error | null;
+  readonly isScrollLocked?: boolean;
   readonly paginatedOrders: Order[];
   readonly pendingUndoMap: Record<string, PendingUndoItem>;
   readonly optimisticReadyItemIds: Set<string>;
@@ -630,7 +630,7 @@ function KdsGridContent({
   currentTab,
   isLoading,
   isError,
-  error,
+  isScrollLocked = false,
   paginatedOrders,
   pendingUndoMap,
   optimisticReadyItemIds,
@@ -664,7 +664,7 @@ function KdsGridContent({
         role="alert"
         className="flex items-center justify-center h-full text-xl font-semibold text-error"
       >
-        Error al cargar la comanda: {error?.message ?? 'Error inesperado'}
+        Error al cargar comandas. Verifique su conexión
       </div>
     );
   }
@@ -682,11 +682,12 @@ function KdsGridContent({
   }
 
   const isCompactLayout = paginatedOrders.length > 4;
+  const gridOverflowClass = isScrollLocked ? 'overflow-y-hidden' : 'overflow-y-auto';
 
   return (
     <div
       data-testid="kds-grid"
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 min-h-0 auto-rows-max lg:auto-rows-fr lg:h-full content-start overflow-y-auto"
+      className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 min-h-0 auto-rows-max lg:auto-rows-fr lg:h-full content-start ${gridOverflowClass}`}
     >
       {paginatedOrders.map((order) => {
         const orderKey = getOrderKey(order);
@@ -928,6 +929,12 @@ function KdsBoardContent({
     client,
     tokenProvider,
   });
+
+  useEffect(() => {
+    if (import.meta.env.DEV && isError && error) {
+      console.error('[KDS] Error de conexión con el servidor:', error);
+    }
+  }, [isError, error]);
 
   // Cached active queue data for badges (redo priority alert, pending, in_preparation)
   const activeQueueData = useMemo(() => {
@@ -1440,7 +1447,7 @@ function KdsBoardContent({
           currentTab={tab}
           isLoading={isLoading}
           isError={isError}
-          error={error}
+          isScrollLocked={selectedModalOrder !== null}
           paginatedOrders={paginatedOrders}
           pendingUndoMap={pendingUndoMap}
           optimisticReadyItemIds={optimisticReadyItemIds}

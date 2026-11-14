@@ -650,6 +650,22 @@ export function OrderDetailsDialog({
     }
   }, [isOpen]);
 
+  // Lock background page scroll while the details modal is open so that long
+  // orders can be navigated inside the modal body without moving the KDS behind.
+  const isScrollLocked = isOpen && order !== null;
+  useEffect(() => {
+    if (!isScrollLocked) return;
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousRootOverflow = documentElement.style.overflow;
+    body.style.overflow = 'hidden';
+    documentElement.style.overflow = 'hidden';
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      documentElement.style.overflow = previousRootOverflow;
+    };
+  }, [isScrollLocked]);
+
   const ttlStatus = order ? getOrderTtlStatus(order) : null;
   const isOrderExpired = Boolean(
     isExpiredTab || order?.status === 'EXPIRED' || ttlStatus?.isExpired,
@@ -692,7 +708,7 @@ export function OrderDetailsDialog({
       aria-labelledby="order-details-title"
       data-testid="order-details-dialog"
       onKeyDown={handleKeyDown}
-      className="orders-kds-root fixed inset-0 z-50 m-0 p-3 sm:p-6 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-xs border-none select-none"
+      className="orders-kds-root fixed inset-0 z-50 m-0 p-3 sm:p-6 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-xs border-none select-none overscroll-none"
     >
       <div className="w-full max-w-2xl max-h-[92vh] rounded-card bg-surface border border-border shadow-2xl flex flex-col text-ink overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
@@ -773,14 +789,14 @@ export function OrderDetailsDialog({
         {/* Modal Body: Full list of dishes */}
         <section
           aria-label="Lista completa de platillos de la comanda"
-          className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 bg-canvas scrollbar-thin scrollbar-thumb-gray-300"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 bg-canvas scrollbar-thin scrollbar-thumb-gray-300"
         >
           {isOrderExpired && (
             <div
               data-testid="order-details-ttl-expired-alert"
               className="mb-3 p-2.5 rounded-control bg-red-100 border border-red-300 text-red-900 text-xs sm:text-sm font-bold text-center"
             >
-              Comanda caducada por tiempo de reserva (TTL) — Solo consulta o rechazo por falta de insumos
+              Comanda caducada por tiempo agotado para Inicio de Preparación — Solo consulta o rechazo por falta de insumos
             </div>
           )}
           <ul

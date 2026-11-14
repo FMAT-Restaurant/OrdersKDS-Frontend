@@ -182,8 +182,11 @@ describe('KdsBoard Caducados tab and phantom count prevention', () => {
     const caducadosTab = screen.getByTestId('tab-expired');
     fireEvent.click(caducadosTab);
 
-    // Now expired order is displayed in Caducados
+    // Now expired order is displayed in Caducados with kitchen-friendly message (no TTL jargon)
     expect(await screen.findByTestId('order-card-ord-caducada-1')).toBeInTheDocument();
+    expect(screen.getByTestId('order-ttl-expired-alert-ord-caducada-1')).toHaveTextContent(
+      'Comanda caducada por tiempo agotado para Inicio de Preparación',
+    );
     expect(screen.queryByTestId('order-card-ord-active-1')).not.toBeInTheDocument();
 
     // In Caducados, recovery/start/ready/item-ready actions are blocked; only "Rechazar insumo" is allowed
@@ -218,11 +221,17 @@ describe('KdsBoard Caducados tab and phantom count prevention', () => {
     );
 
     const cardStub = await screen.findByTestId('order-card-stub-ord-caducada-dialog');
+    const kdsGrid = screen.getByTestId('kds-grid');
+    expect(kdsGrid).toHaveClass('overflow-y-auto');
+
     // Pressing Enter on an expired card must open details, NOT start preparation
     fireEvent.keyDown(cardStub, { key: 'Enter' });
 
     expect(await screen.findByTestId('order-details-dialog')).toBeInTheDocument();
-    expect(screen.getByTestId('order-details-ttl-expired-alert')).toBeInTheDocument();
+    expect(kdsGrid).toHaveClass('overflow-y-hidden');
+    expect(screen.getByTestId('order-details-ttl-expired-alert')).toHaveTextContent(
+      'Comanda caducada por tiempo agotado para Inicio de Preparación',
+    );
     expect(screen.queryByTestId('order-details-action-start')).not.toBeInTheDocument();
     expect(screen.queryByTestId('order-details-action-ready')).not.toBeInTheDocument();
     expect(screen.queryByTestId('order-details-item-action-item-1')).not.toBeInTheDocument();
