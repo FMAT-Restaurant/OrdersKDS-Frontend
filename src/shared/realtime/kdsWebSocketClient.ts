@@ -7,6 +7,7 @@ import {
   WebSocketStatus,
 } from './types.ts';
 import { versionTracker, type VersionTracker } from './versionTracker.ts';
+import { logDeveloperWebSocketClose } from '../api/devErrorLogger.ts';
 
 export const WS_CLOSE_UNAUTHENTICATED = 4401;
 export const WS_CLOSE_FORBIDDEN_ROLE = 4403;
@@ -285,6 +286,7 @@ export class KdsWebSocketClient {
 
     // Close code 4403: Forbidden role -> Terminate without retry (DoD #5)
     if (event.code === WS_CLOSE_FORBIDDEN_ROLE) {
+      logDeveloperWebSocketClose(this.resolveEndpoint(), event.code, this.wasReconnecting);
       this.setStatus(WebSocketStatus.TERMINATED);
       this.options.onForbiddenRole?.();
       return;
@@ -292,6 +294,7 @@ export class KdsWebSocketClient {
 
     // Close code 4401: Unauthenticated / expired token -> refresh token and reconnect
     if (event.code === WS_CLOSE_UNAUTHENTICATED) {
+      logDeveloperWebSocketClose(this.resolveEndpoint(), event.code, this.wasReconnecting);
       this.wasReconnecting = true;
       this.options.onTokenExpired?.();
       this.scheduleReconnect();
@@ -299,6 +302,7 @@ export class KdsWebSocketClient {
     }
 
     // Transient network drop / other closure -> schedule backoff reconnect
+    logDeveloperWebSocketClose(this.resolveEndpoint(), event.code, this.wasReconnecting);
     this.wasReconnecting = true;
     this.scheduleReconnect();
   }
@@ -333,7 +337,7 @@ export class KdsWebSocketClient {
     const delay = Math.min(this.currentReconnectDelay + jitter, maxDelay);
 
     this.reconnectTimer = setTimeout(() => {
-      void this.connect();
+      this.connect().catch(() => undefined);
     }, delay);
 
     // Compute next delay for exponential backoff

@@ -7,6 +7,7 @@ import {
   apiClient as defaultApiClient,
   type ApiClient as ApiClientType,
 } from '../../shared/api/client.ts';
+import { logDeveloperError } from '../../shared/api/devErrorLogger.ts';
 import { queryClient as defaultQueryClient } from '../../shared/api/queryClient.ts';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
 import type { TokenProvider, UserRole } from '../../shared/types/auth.ts';
@@ -931,10 +932,10 @@ function KdsBoardContent({
   });
 
   useEffect(() => {
-    if (import.meta.env.DEV && isError && error) {
-      console.error('[KDS] Error de conexión con el servidor:', error);
+    if (isError && error) {
+      logDeveloperError('KDS', `/kds/queue?view=${backendView}`, error);
     }
-  }, [isError, error]);
+  }, [isError, error, backendView]);
 
   // Cached active queue data for badges (redo priority alert, pending, in_preparation)
   const activeQueueData = useMemo(() => {

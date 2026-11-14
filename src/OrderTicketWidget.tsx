@@ -3,7 +3,7 @@
  * @satisfies RF-12, RF-13, RF-14, RF-15, RF-17, RF-22, RF-23, RNF-03
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createApiClient, getStoredSessionToken } from './shared/api/client.ts';
 import { OrderSchema, type Order, type OrderItem } from './shared/api/schemas.ts';
@@ -28,7 +28,6 @@ import { RedoItemDialog } from './features/order-ticket/RedoItemDialog.tsx';
 import {
   mergeDraftItem,
   toEditableItems,
-  type AddItemEventDetail,
   type EditableOrderItem,
 } from './features/order-ticket/draftItemsHelper.ts';
 import {
@@ -47,10 +46,14 @@ import { useExternalOrderEvents } from './features/order-ticket/useExternalOrder
 import { useOrderTicketActions } from './features/order-ticket/useOrderTicketActions.ts';
 import { useOrderEvents } from './shared/realtime/useOrderEvents.ts';
 import { getStoredSessionUser, type TokenProvider } from './shared/types/auth.ts';
+import { logDeveloperError } from './shared/api/devErrorLogger.ts';
 import { OrderStatus } from './shared/types/order.ts';
 import './features/order-ticket/OrderTicketWidget.css';
 
-export type { AddItemEventDetail, EditableOrderItem };
+export type {
+  AddItemEventDetail,
+  EditableOrderItem,
+} from './features/order-ticket/draftItemsHelper.ts';
 
 /** Public federated properties accepted by OrderTicketWidget. */
 export interface OrderTicketWidgetProps {
@@ -163,6 +166,12 @@ function OrderTicket({
   });
   const order = orderQuery.data;
 
+  useEffect(() => {
+    if (orderQuery.isError && orderQuery.error && activeOrderId) {
+      logDeveloperError('OrderTicket', `/orders/${activeOrderId}`, orderQuery.error);
+    }
+  }, [orderQuery.isError, orderQuery.error, activeOrderId]);
+
   useExternalOrderEvents({
     isEditing,
     order,
@@ -188,7 +197,9 @@ function OrderTicket({
     },
   });
 
-  const hasQuantityFormatErrors = draftItems.some(hasInvalidDraftItemQuantity);
+  const hasQuantityFormatErrors = draftItems.some((item) =>
+    hasInvalidDraftItemQuantity(item),
+  );
   const effectiveDiningSessionId = order?.diningSessionId || propDiningSessionId;
 
   const actions = useOrderTicketActions({

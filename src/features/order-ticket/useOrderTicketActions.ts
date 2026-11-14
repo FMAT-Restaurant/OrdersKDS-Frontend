@@ -6,6 +6,7 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useMutation, type QueryClient } from '@tanstack/react-query';
 import { type createApiClient } from '../../shared/api/client.ts';
+import { logDeveloperError } from '../../shared/api/devErrorLogger.ts';
 import { OrderSchema, type Order, type OrderItem } from '../../shared/api/schemas.ts';
 import { OrderStatus } from '../../shared/types/order.ts';
 import type { EditableOrderItem } from './draftItemsHelper.ts';
@@ -71,7 +72,7 @@ export async function executeCreateOrderSequence({
 
   const withItems = await api.patch<Order>(
     `/orders/${encodeURIComponent(createdId)}/items`,
-    { items: items.map(mapDraftItemToApiInput) },
+    { items: items.map((item) => mapDraftItemToApiInput(item)) },
     OrderSchema,
   );
 
@@ -128,6 +129,13 @@ export function useOrderTicketActions({
         onOrderSubmitted?.(activeOrderId);
       }
     },
+    onError: (err) => {
+      logDeveloperError(
+        'OrderTicket',
+        `POST /orders/${activeOrderId ?? 'unknown'}/confirm`,
+        err,
+      );
+    },
     onSettled: releaseLock,
   });
 
@@ -141,6 +149,13 @@ export function useOrderTicketActions({
     onSuccess: (updated) => {
       client.setQueryData(queryKey, updated);
       onOrderCancelled?.();
+    },
+    onError: (err) => {
+      logDeveloperError(
+        'OrderTicket',
+        `PATCH /orders/${activeOrderId ?? 'unknown'}/cancel`,
+        err,
+      );
     },
     onSettled: releaseLock,
   });
@@ -161,6 +176,13 @@ export function useOrderTicketActions({
       );
       setSelectedRedoItem(null);
     },
+    onError: (err) => {
+      logDeveloperError(
+        'OrderTicket',
+        `PATCH /orders/${activeOrderId ?? 'unknown'}/items/redo`,
+        err,
+      );
+    },
     onSettled: releaseLock,
   });
 
@@ -168,12 +190,19 @@ export function useOrderTicketActions({
     mutationFn: () =>
       api.patch<Order>(
         `/orders/${encodeURIComponent(activeOrderId!)}/items`,
-        { items: draftItems.map(mapDraftItemToApiInput) },
+        { items: draftItems.map((item) => mapDraftItemToApiInput(item)) },
         OrderSchema,
       ),
     onSuccess: (updated) => {
       client.setQueryData(queryKey, updated);
       setIsEditing(false);
+    },
+    onError: (err) => {
+      logDeveloperError(
+        'OrderTicket',
+        `PATCH /orders/${activeOrderId ?? 'unknown'}/items`,
+        err,
+      );
     },
     onSettled: releaseLock,
   });
@@ -244,6 +273,7 @@ export function useOrderTicketActions({
         onOrderSubmitted?.(createdId);
       }
     } catch (err) {
+      logDeveloperError('OrderTicket', 'POST /orders + /items', err);
       setCreateError(formatError(err));
     } finally {
       releaseLock();

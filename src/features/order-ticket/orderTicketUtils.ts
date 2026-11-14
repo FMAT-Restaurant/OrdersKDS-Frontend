@@ -269,7 +269,9 @@ export function parseRejectionDetails(details: unknown): ParsedRejectionDetails 
   }
   const raw = details as Record<string, unknown>;
   const missing = extractRawArray(raw.missingIngredients, raw.faltantes);
-  const rejected = extractRawArray(raw.rejectedItems, raw.items).map(parseSingleRejectedItem);
+  const rejected = extractRawArray(raw.rejectedItems, raw.items).map((item) =>
+    parseSingleRejectedItem(item),
+  );
   const reserved = extractRawArray(raw.reservedItems, null) as ReservedItemDetail[];
   const reason =
     typeof raw.reason === 'string' && raw.reason.trim() ? raw.reason.trim() : undefined;

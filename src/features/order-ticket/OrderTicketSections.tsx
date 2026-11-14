@@ -60,7 +60,9 @@ export function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBr
       {details.missingIngredients && details.missingIngredients.length > 0 && (
         <p className="order-ticket__missing-ingredients">
           <strong>Ingredientes faltantes:</strong>{' '}
-          {details.missingIngredients.map(formatIngredientName).join(', ')}
+          {details.missingIngredients
+            .map((ingredient) => formatIngredientName(ingredient))
+            .join(', ')}
         </p>
       )}
       {details.rejectedItems.length > 0 && (
