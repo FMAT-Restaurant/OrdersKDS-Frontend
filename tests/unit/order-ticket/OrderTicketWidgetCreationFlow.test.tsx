@@ -37,7 +37,7 @@ describe('OrderTicketWidget Creation and Event Bus Suite', () => {
     // Draft header rendered
     const tableInput = screen.getByTestId('draft-table-input');
     const takeawayCheckbox = screen.getByTestId('draft-takeaway-checkbox');
-    expect(screen.getByText('Nueva Comanda')).toBeInTheDocument();
+    expect(screen.getByText('Nueva Orden')).toBeInTheDocument();
     expect(tableInput).toHaveValue(5);
     expect(screen.getByText(/Borrador/)).toBeInTheDocument();
 
@@ -53,7 +53,7 @@ describe('OrderTicketWidget Creation and Event Bus Suite', () => {
     expect(screen.getByTestId('draft-table-input')).toHaveValue(5);
 
     // Empty state
-    expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
+    expect(screen.getByText('Esta orden todavía no tiene platillos.')).toBeInTheDocument();
 
     // Click "+ Agregar platillo"
     const addDishBtn = screen.getByTestId('order-ticket-add-dish-btn');
@@ -368,7 +368,7 @@ describe('OrderTicketWidget Creation and Event Bus Suite', () => {
     fireEvent.click(discardBtn);
 
     expect(screen.queryByText('Item a descartar')).not.toBeInTheDocument();
-    expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
+    expect(screen.getByText('Esta orden todavía no tiene platillos.')).toBeInTheDocument();
   });
 
   it('works without tokenProvider using stored session token and propagates sourceId, offerId and unitPrice on PATCH items', async () => {

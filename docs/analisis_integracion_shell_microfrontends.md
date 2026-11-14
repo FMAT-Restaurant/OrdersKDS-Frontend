@@ -25,17 +25,17 @@ El Shell principal del restaurante (`Auth-Frontend`) está construido en **React
 
 El microservicio de Órdenes y Cocina cuenta con **dos interfaces de usuario principales**:
 1. **Pantalla KDS de Cocina (`KdsApp.tsx`):** Diseñada para la línea caliente, planchas y freidoras. Orientada a pantallas táctiles y teclado industrial (Bump Bar).
-2. **Gestión de Comandas / Toma de Pedidos (`OrderTicketWidget.tsx` / Vista de Pedidos):** Diseñada para meseros y sala, permitiendo capturar comandas, editar platillos, confirmar pedidos a cocina y solicitar la cuenta.
+2. **Gestión de Órdenes / Toma de Pedidos (`OrderTicketWidget.tsx` / Vista de Pedidos):** Diseñada para meseros y sala, permitiendo capturar órdenes, editar platillos, confirmar pedidos a cocina y solicitar la cuenta.
 
 ### El Reto de Arquitectura
 El Shell solo monta un único componente raíz por microservicio:
 ```tsx
 const RemoteOrdenesApp = React.lazy(() => import('ordenesApp/App'));
 ```
-No tiene rutas separadas en el menú principal para "KDS" y "Comandas", sino un único módulo: **"Órdenes y Cocina"** (`id: 'ordenes'`).
+No tiene rutas separadas en el menú principal para "KDS" y "Órdenes", sino un único módulo: **"Órdenes y Cocina"** (`id: 'ordenes'`).
 
-### La Solución: Componente Contenedor Orquestador (`src/App.tsx`)
-`src/App.tsx` debe actuar como un orquestador inteligente que recibe las propiedades federadas del Shell (`FederatedModuleProps`):
+### La Solución: Componente Contenedor Orquestador (`src/App.tsx` + Sandbox en `src/DevSandboxApp.tsx`)
+`src/App.tsx` actúa exclusivamente como el contenedor federado de producción que recibe las propiedades del Shell (`FederatedModuleProps`) y, únicamente cuando no existe usuario autenticado (`standalone` local), delega el renderizado a `src/DevSandboxApp.tsx` (junto con el motor compartido en memoria `src/features/dev-sandbox/mockSandboxFetch.ts`):
 
 ```mermaid
 flowchart TD
@@ -44,9 +44,9 @@ flowchart TD
     AppContainer --> CheckRole{¿Qué perfil tiene el usuario?}
     
     CheckRole -->|Permisos kitchen:* o rol CHEF/COCINERO| RenderKDS[Renderiza KdsApp - Pantalla KDS]
-    CheckRole -->|Permisos orders:* o rol MESERO| RenderOrders[Renderiza Vista de Comandas / Mesero]
-    CheckRole -->|ADMIN o permisos mixtos| RenderTabbed[Barra de pestañas: Alternar KDS y Comandas]
-    CheckRole -->|Modo Standalone puerto 5177| RenderStandalone[Selector de prueba para desarrollo local]
+    CheckRole -->|Permisos orders:* o rol MESERO| RenderOrders[Renderiza OrderTicketWidget - Gestión de Órdenes]
+    CheckRole -->|ADMIN o permisos mixtos| RenderTabbed[Barra de pestañas: Alternar KDS y Gestión de Órdenes]
+    CheckRole -->|Modo Standalone puerto 5177| RenderStandalone[Delega a src/DevSandboxApp.tsx]
 ```
 
 #### Propuesta de Implementación para `src/App.tsx`:
@@ -113,7 +113,7 @@ export default function App({ token, currentUser, theme }: Readonly<FederatedMod
                 activeView === 'orders' ? 'bg-fmat-primary text-white shadow-sm' : 'text-muted hover:text-ink'
               }`}
             >
-              Gestión de Comandas
+              Gestión de Órdenes
             </button>
           </div>
         </header>
@@ -237,7 +237,7 @@ Para no interferir con las modificaciones de estilos que se están ejecutando en
    - El equipo termina de pulir y commitear los estilos visuales de `OrderCard.tsx`, `KdsBoard.tsx`, etc.
    - Se valida que `test:coverage` continúe al 100%.
 2. **Fase 2 (Federación y Contenedor):**
-   - Implementar el contenedor `src/App.tsx` con soporte para `FederatedModuleProps` y alternancia de vistas KDS / Comandas.
+   - Implementar el contenedor `src/App.tsx` con soporte para `FederatedModuleProps` y alternancia de vistas KDS / Gestión de Órdenes (delegando modo `standalone` local a `src/DevSandboxApp.tsx`).
    - Ajustar `vite.config.ts` para fijar el puerto `5177` y exportar `'./App': './src/App.tsx'`.
 3. **Fase 3 (Alineación de React 18):**
    - En una rama dedicada o tras asentar los estilos, instalar `react@^18.3.1` y validar que el build federado sea consumido limpiamente por `Auth-Frontend` corriendo en el puerto `3000`.

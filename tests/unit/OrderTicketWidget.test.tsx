@@ -57,7 +57,7 @@ describe('OrderTicketWidget', () => {
   it('renders the order, item details, and waiter realtime channels', async () => {
     renderTicket();
 
-    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Orden #102' })).toBeInTheDocument();
     expect(screen.getByText('1 × Ensalada César')).toBeInTheDocument();
     expect(screen.getByText('Modificadores: Extra queso')).toBeInTheDocument();
     expect(screen.getByText('Nota: Sin tomate')).toBeInTheDocument();
@@ -120,9 +120,9 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket();
 
-    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Orden #102' })).toBeInTheDocument();
     expect(screen.getByText('Mesa sin asignar')).toBeInTheDocument();
-    expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
+    expect(screen.getByText('Esta orden todavía no tiene platillos.')).toBeInTheDocument();
     expect(screen.getByText('En preparación')).toBeInTheDocument();
   });
 
@@ -444,10 +444,10 @@ describe('OrderTicketWidget', () => {
     );
     renderTicket(createOrder);
 
-    const alert = await screen.findByText('La comanda expiró. Crea una nueva comanda.');
+    const alert = await screen.findByText('La orden expiró. Crea una nueva orden.');
     expect(alert).toBeInTheDocument();
     expect(alert.closest('[aria-live="assertive"]')).toBeInTheDocument();
-    const newOrderButton = screen.getByRole('button', { name: 'Crear una nueva comanda' });
+    const newOrderButton = screen.getByRole('button', { name: 'Crear una nueva orden' });
     expect(newOrderButton).toBeInTheDocument();
     fireEvent.click(newOrderButton);
     expect(createOrder).toHaveBeenCalledOnce();
@@ -467,7 +467,7 @@ describe('OrderTicketWidget', () => {
     const alert = await screen.findByText('Entregada por cocina — recoger.');
     expect(alert).toBeInTheDocument();
     expect(alert.closest('[aria-live="assertive"]')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Crear una nueva comanda' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crear una nueva orden' })).not.toBeInTheDocument();
   });
 
   it('requires a nonblank reason and submits delivered-item redo without changing order status', async () => {
@@ -524,7 +524,7 @@ describe('OrderTicketWidget', () => {
   it('applies a newer waiter status event to the displayed order', async () => {
     renderTicket();
 
-    await screen.findByRole('heading', { name: 'Comanda #102' });
+    await screen.findByRole('heading', { name: 'Orden #102' });
     const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
     options.onOrderStatusChanged?.({
       type: 'order.status_changed',
@@ -563,7 +563,7 @@ describe('OrderTicketWidget', () => {
     expect(screen.queryByText('Sensitive backend detail')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
 
-    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Orden #102' })).toBeInTheDocument();
   });
 
   it('discards edits and reverts to view mode when user clicks Descartar', async () => {
@@ -645,12 +645,12 @@ describe('OrderTicketWidget', () => {
       'Su sesión ha expirado o no es válida. Por favor inicie sesión nuevamente.',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
-    expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Orden #102' })).toBeInTheDocument();
   });
 
   it('ignores WebSocket events for a different orderId or older/equal version', async () => {
     renderTicket();
-    await screen.findByRole('heading', { name: 'Comanda #102' });
+    await screen.findByRole('heading', { name: 'Orden #102' });
     const options = realtime.useOrderEvents.mock.calls[0][0] as UseOrderEventsOptions;
 
     // Different orderId -> ignored
@@ -773,7 +773,7 @@ describe('OrderTicketWidget', () => {
     renderTicket();
     expect(
       await screen.findByText(
-        'Motivo de rechazo: Inventario insuficiente. Modifica la comanda para ajustar cantidades o cancela.',
+        'Motivo de rechazo: Inventario insuficiente. Modifica la orden para ajustar cantidades o cancela.',
       ),
     ).toBeInTheDocument();
   });
@@ -791,7 +791,7 @@ describe('OrderTicketWidget', () => {
     renderTicket();
     expect(
       await screen.findByText(
-        'Motivo de rechazo: Inventario insuficiente. Modifica la comanda para ajustar cantidades o cancela.',
+        'Motivo de rechazo: Inventario insuficiente. Modifica la orden para ajustar cantidades o cancela.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText('Detalle de rechazo de inventario')).not.toBeInTheDocument();
@@ -808,7 +808,7 @@ describe('OrderTicketWidget', () => {
         ),
       );
       const { unmount } = renderTicket();
-      expect(await screen.findByRole('heading', { name: 'Comanda #102' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Orden #102' })).toBeInTheDocument();
       expect(document.querySelector('.order-ticket__alert')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
@@ -1005,7 +1005,7 @@ describe('OrderTicketWidget', () => {
 
   it('handles fmat:comanda:add-item DOM event and merges into draft items', async () => {
     renderTicket();
-    await screen.findByRole('heading', { name: 'Comanda #102' });
+    await screen.findByRole('heading', { name: 'Orden #102' });
 
     fireEvent(
       window,
@@ -1113,9 +1113,9 @@ describe('OrderTicketWidget', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Nueva Comanda' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Nueva Orden' })).toBeInTheDocument();
     expect(screen.getByText('Borrador')).toBeInTheDocument();
-    expect(screen.getByText('Esta comanda todavía no tiene platillos.')).toBeInTheDocument();
+    expect(screen.getByText('Esta orden todavía no tiene platillos.')).toBeInTheDocument();
 
     fireEvent(
       window,

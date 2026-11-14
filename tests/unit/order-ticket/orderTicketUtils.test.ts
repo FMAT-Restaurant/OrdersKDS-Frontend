@@ -132,9 +132,9 @@ describe('orderTicketUtils', () => {
   });
 
   it('builds localized alert messages, table labels, and table numbers', () => {
-    expect(getOrderAlert(OrderStatus.REJECTED, 'orden')).toContain('Modifica la orden');
+    expect(getOrderAlert(OrderStatus.REJECTED, 'comanda')).toContain('Modifica la comanda');
     expect(getOrderAlert(OrderStatus.EXPIRED, 'orden')).toContain('La orden expiró');
-    expect(getOrderAlert(OrderStatus.CANCELLED)).toContain('comanda ha sido cancelada');
+    expect(getOrderAlert(OrderStatus.CANCELLED)).toContain('orden ha sido cancelada');
     expect(getOrderAlert(OrderStatus.DELIVERED)).toContain('recoger');
     expect(getOrderAlert(OrderStatus.PAID)).toBe('');
 

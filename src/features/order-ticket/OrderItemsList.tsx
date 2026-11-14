@@ -184,7 +184,7 @@ export function OrderItemsList({
   isMutating,
   canRedo,
   draftItems,
-  emptyMessage = 'Esta comanda todavía no tiene platillos.',
+  emptyMessage = 'Esta orden todavía no tiene platillos.',
   canRemoveItem = false,
   onUpdateDraftItem,
   onRemoveDraftItem,

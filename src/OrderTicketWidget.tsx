@@ -119,7 +119,8 @@ function OrderTicket({
   fetchFn,
   WebSocketClass,
 }: Readonly<OrderTicketWidgetProps>) {
-  const entityNoun = entityLabelProp === 'orden' ? 'Orden' : 'Comanda';
+  const effectiveEntityLabel = entityLabelProp ?? 'orden';
+  const entityNoun = effectiveEntityLabel === 'comanda' ? 'Comanda' : 'Orden';
   const entityNounLower = entityNoun.toLowerCase();
 
   const [activeOrderId, setActiveOrderId] = useState<string | undefined>(
@@ -409,6 +410,7 @@ function OrderTicket({
         isOpen={isAddDishOpen}
         isPending={actions.isMutating}
         dish={selectedDishForDialog}
+        entityNoun={entityNoun}
         onClose={() => {
           setIsAddDishOpen(false);
           setSelectedDishForDialog(null);

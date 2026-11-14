@@ -134,7 +134,7 @@ export function OrderDraftHeader({
   draftIsTakeaway,
   isMutating,
   diningSessionId,
-  entityNoun = 'Comanda',
+  entityNoun = 'Orden',
   onTableNumberChange,
   onTakeawayChange,
 }: Readonly<OrderDraftHeaderProps>) {
@@ -197,7 +197,7 @@ export function OrderExistingHeader({
   order,
   orderId,
   diningSessionId,
-  entityNoun = 'Comanda',
+  entityNoun = 'Orden',
 }: Readonly<OrderExistingHeaderProps>) {
   const effectiveSession = order.diningSessionId || diningSessionId;
   const tableOrTakeaway = getTableOrTakeawayLabel(order);

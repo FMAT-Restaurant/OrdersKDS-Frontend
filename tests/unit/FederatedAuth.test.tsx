@@ -255,14 +255,14 @@ describe('Federated Auth Contract and Orchestration', () => {
 
       expect(screen.getByText('Módulo Órdenes & Cocina')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Pantalla Cocina (KDS)' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Gestión de Comandas' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Gestión de Órdenes' })).toBeInTheDocument();
 
       // Default view is KDS
       expect(screen.getByTestId('mock-kds-app')).toBeInTheDocument();
       expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'admin');
 
-      // Click to toggle to Comandas
-      fireEvent.click(screen.getByRole('button', { name: 'Gestión de Comandas' }));
+      // Click to toggle to Ordenes
+      fireEvent.click(screen.getByRole('button', { name: 'Gestión de Órdenes' }));
       expect(screen.getByTestId('mock-order-ticket-widget')).toBeInTheDocument();
 
       // Click back to KDS

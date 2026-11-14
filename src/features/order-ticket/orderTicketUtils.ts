@@ -313,7 +313,7 @@ export function resolveDishName(
 }
 
 /** Return the alert banner copy corresponding to terminal/actionable order statuses. */
-export function getOrderAlert(status: OrderStatusValue, entityNounLower = 'comanda'): string {
+export function getOrderAlert(status: OrderStatusValue, entityNounLower = 'orden'): string {
   switch (status) {
     case OrderStatus.REJECTED:
       return `Motivo de rechazo: Inventario insuficiente. Modifica la ${entityNounLower} para ajustar cantidades o cancela.`;
