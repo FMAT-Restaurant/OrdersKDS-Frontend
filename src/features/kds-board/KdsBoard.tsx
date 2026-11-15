@@ -3,8 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
 import {
-  ApiClient,
-  apiClient as defaultApiClient,
+  resolveApiClient,
   type ApiClient as ApiClientType,
 } from '../../shared/api/client.ts';
 import { logDeveloperError } from '../../shared/api/devErrorLogger.ts';
@@ -95,6 +94,7 @@ function getRedoTabClass(isSelected: boolean, count: number): string {
 
 export interface KdsBoardProps {
   readonly client?: ApiClientType;
+  readonly apiBaseUrl?: string;
   readonly tokenProvider?: TokenProvider;
   readonly userRole?: UserRole;
   readonly queryClient?: QueryClient;
@@ -885,6 +885,7 @@ function useReservedTtlNowMs(orders: Order[]): number {
 
 function KdsBoardContent({
   client,
+  apiBaseUrl,
   tokenProvider,
   userRole,
   pageSize = 8,
@@ -931,6 +932,7 @@ function KdsBoardContent({
   const { data, isLoading, isError, error } = useKdsQueue({
     view: backendView,
     client,
+    apiBaseUrl,
     tokenProvider,
   });
 
@@ -987,10 +989,10 @@ function KdsBoardContent({
     [onOrderSelect],
   );
 
-  const actionClient = useMemo(() => {
-    if (client) return client;
-    return tokenProvider ? new ApiClient({ tokenProvider }) : defaultApiClient;
-  }, [client, tokenProvider]);
+  const actionClient = useMemo(
+    () => resolveApiClient({ client, baseUrl: apiBaseUrl, tokenProvider }),
+    [client, apiBaseUrl, tokenProvider],
+  );
 
   const runAction = useCallback(
     async (

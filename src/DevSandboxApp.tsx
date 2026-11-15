@@ -12,7 +12,11 @@ import {
   type SandboxController,
   type SandboxSimAction,
 } from './features/dev-sandbox/mockSandboxFetch.ts';
-import { generateLocalDevToken } from './shared/api/client.ts';
+import {
+  generateLocalDevToken,
+  resolveDefaultApiBaseUrl,
+  resolveDefaultWsBaseUrl,
+} from './shared/api/client.ts';
 import { queryClient } from './shared/api/queryClient.ts';
 import { UserRole, type TokenProvider } from './shared/types/auth.ts';
 
@@ -387,8 +391,8 @@ function TicketViewContent({
           orderId={selectedOrderId || undefined}
           userId={DEFAULT_WAITER_ID}
           tokenProvider={defaultDevTokenProvider}
-          apiBaseUrl={isBackendMode ? 'http://localhost:8000' : ''}
-          webSocketBaseUrl={isBackendMode ? 'ws://localhost:8000' : undefined}
+          apiBaseUrl={isBackendMode ? resolveDefaultApiBaseUrl() : ''}
+          webSocketBaseUrl={isBackendMode ? resolveDefaultWsBaseUrl() : undefined}
           fetchFn={isBackendMode ? undefined : mockFetch}
           WebSocketClass={
             isBackendMode ? undefined : (MockWebSocket as unknown as typeof WebSocket)
@@ -419,7 +423,7 @@ function AlertsViewContent() {
         <ReadyOrdersAlert
           userId={DEFAULT_WAITER_ID}
           tokenProvider={defaultDevTokenProvider}
-          webSocketBaseUrl="ws://localhost:8000"
+          webSocketBaseUrl={resolveDefaultWsBaseUrl()}
           enableSound={true}
         />
       </div>
@@ -605,6 +609,7 @@ export function DevSandboxApp({
           <KdsApp
             userRole={selectedRole}
             tokenProvider={activeTokenProvider}
+            apiBaseUrl={isMockKds ? undefined : resolveDefaultApiBaseUrl()}
             client={isMockKds ? sandbox.mockKdsClient : undefined}
           />
         )}

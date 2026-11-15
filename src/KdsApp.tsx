@@ -6,6 +6,7 @@ import type { TokenProvider, UserRole } from './shared/types/auth.ts';
 export interface KdsAppProps {
   readonly userRole?: UserRole;
   readonly tokenProvider?: TokenProvider;
+  readonly apiBaseUrl?: string;
   readonly client?: ApiClient;
   readonly onAdminVoid?: (order: Order) => void;
   readonly onChefVoid?: (order: Order) => void;
@@ -14,6 +15,7 @@ export interface KdsAppProps {
 export default function KdsApp({
   userRole,
   tokenProvider,
+  apiBaseUrl,
   client,
   onAdminVoid,
   onChefVoid,
@@ -24,6 +26,7 @@ export default function KdsApp({
       <KdsBoard
         userRole={userRole}
         tokenProvider={tokenProvider}
+        apiBaseUrl={apiBaseUrl}
         client={client}
         onAdminVoid={onAdminVoid}
         onChefVoid={onChefVoid}

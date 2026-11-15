@@ -329,9 +329,9 @@ docker build -t orders-frontend:latest .
 
 # 3. Remove any previous container with the same name and start the new container on port 3000
 docker rm -f orders-frontend 2>$null
-docker run -d --name orders-frontend -p 3000:80 orders-frontend:latest
+docker run -d --name orders-frontend -p 3000:8080 orders-frontend:latest
 
-# 4. In Docker Desktop -> Containers, verify "orders-frontend" is Running (green dot) on 3000:80.
+# 4. In Docker Desktop -> Containers, verify "orders-frontend" is Running (green dot) on 3000:8080.
 #    Open http://localhost:3000 in your browser (it connects automatically to http://localhost:8000).
 ```
 
@@ -702,9 +702,9 @@ docker build -t orders-frontend:latest .
 
 # 3. Eliminar cualquier contenedor previo con el mismo nombre y levantarlo en el puerto 3000
 docker rm -f orders-frontend 2>$null
-docker run -d --name orders-frontend -p 3000:80 orders-frontend:latest
+docker run -d --name orders-frontend -p 3000:8080 orders-frontend:latest
 
-# 4. En Docker Desktop -> Containers verás "orders-frontend" en estado Running (3000:80).
+# 4. En Docker Desktop -> Containers verás "orders-frontend" en estado Running (3000:8080).
 #    Abre http://localhost:3000 en tu navegador (se conecta automáticamente a http://localhost:8000).
 ```
 
