@@ -5,28 +5,34 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm globally
-RUN npm install -g pnpm
+# Enable Corepack and activate pinned pnpm version (bundled in Node 20)
+RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
 
-# Install dependencies with frozen lockfile
+# Install dependencies with frozen lockfile and scripts disabled
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy the remaining project files and build
 COPY . .
+ARG VITE_API_URL
+ARG VITE_API_BASE_URL
+ARG VITE_WS_URL
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_WS_URL=${VITE_WS_URL}
 RUN pnpm run build
 
 # ==========================================
-# Stage 2: Production stage with Nginx
+# Stage 2: Production stage with unprivileged Nginx
 # ==========================================
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
 
-# Copy build artifacts to Nginx web root
+# Copy build artifacts to Nginx web root (keep root:root read-only ownership)
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Configure Nginx with CORS headers for Module Federation remote access
+# Configure Nginx on unprivileged port 8080 with CORS headers for Module Federation
 RUN printf 'server {\n\
-    listen 80;\n\
+    listen 8080;\n\
     server_name localhost;\n\
 \n\
     location / {\n\
@@ -52,7 +58,10 @@ RUN printf 'server {\n\
     }\n\
 }\n' > /etc/nginx/conf.d/default.conf
 
-# Expose port 80
-EXPOSE 80
+# Run explicitly as non-root user
+USER nginx
+
+# Expose unprivileged port 8080
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]

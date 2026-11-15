@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import DevSandboxApp from './DevSandboxApp.tsx';
 import KdsApp from './KdsApp.tsx';
 import OrderTicketWidget from './OrderTicketWidget.tsx';
-import { generateLocalDevToken, getStoredSessionToken } from './shared/api/client.ts';
+import {
+  generateLocalDevToken,
+  getStoredSessionToken,
+  resolveDefaultApiBaseUrl,
+  resolveDefaultWsBaseUrl,
+} from './shared/api/client.ts';
 import {
   getStoredSessionUser,
   hasKitchenModuleAccess,
@@ -111,13 +116,19 @@ function App({
 
       <main className="flex-1 w-full h-full overflow-auto">
         {effectiveView === 'kds' ? (
-          <KdsApp userRole={effectiveRole} tokenProvider={effectiveTokenProvider} />
+          <KdsApp
+            userRole={effectiveRole}
+            tokenProvider={effectiveTokenProvider}
+            apiBaseUrl={resolveDefaultApiBaseUrl()}
+          />
         ) : (
           <div className="p-6 flex flex-col items-center justify-start min-h-full bg-slate-100 text-slate-900">
             <div className="orders-kds-root w-full max-w-4xl">
               <OrderTicketWidget
                 tokenProvider={effectiveTokenProvider}
                 userId={activeUser.id || activeUser.sub || '00000000-0000-0000-0000-000000000001'}
+                apiBaseUrl={resolveDefaultApiBaseUrl()}
+                webSocketBaseUrl={resolveDefaultWsBaseUrl()}
                 entityLabel="orden"
                 allowRemoveAllItems
               />

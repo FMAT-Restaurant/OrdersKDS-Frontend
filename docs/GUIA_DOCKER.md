@@ -35,11 +35,11 @@ El proyecto utiliza una estrategia de compilación multi-etapa (**Multi-Stage Bu
                            │ Extrae únicamente /app/dist
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│  Stage 2: producción (nginx:alpine)                    │
-│  - Copia /app/dist a /usr/share/nginx/html             │
-│  - Inyecta configuración de Nginx con SPA routing      │
-│  - Inyecta cabeceras CORS para Module Federation       │
-│  - Expone el puerto 80                                 │
+│  Stage 2: producción (nginxinc/nginx-unprivileged:alpine) │
+│  - Copia /app/dist a /usr/share/nginx/html                │
+│  - Inyecta configuración Nginx sin root + SPA routing     │
+│  - Inyecta cabeceras CORS para Module Federation          │
+│  - Expone el puerto no privilegiado 8080 (USER nginx)     │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -70,10 +70,10 @@ docker build -t orders-frontend:local .
 > **Nota:** El archivo [`.dockerignore`](../.dockerignore) filtra automáticamente carpetas como `node_modules`, `dist`, reportes de cobertura, suites de pruebas (`tests/`, `e2e/`) y variables locales (`.env.local`), acelerando la compilación y manteniendo la imagen limpia.
 
 ### 3.2 Ejecutar el Contenedor
-Arranca el contenedor mapeando el puerto 80 del contenedor al puerto `8080` (o el de tu preferencia) en tu máquina:
+Arranca el contenedor mapeando el puerto interno no privilegiado `8080` del contenedor al puerto `8080` (o `3000`) en tu máquina:
 
 ```powershell
-docker run -d --name orders-front-preview -p 8080:80 orders-frontend:local
+docker run -d --name orders-front-preview -p 8080:8080 orders-frontend:local
 ```
 
 ### 3.3 Verificar el Funcionamiento

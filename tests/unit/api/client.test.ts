@@ -1,10 +1,13 @@
+import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   ApiClient,
   ApiError,
   apiClient,
   createApiClient,
+  resolveApiClient,
   resolveDefaultApiBaseUrl,
+  resolveDefaultWsBaseUrl,
 } from '../../../src/shared/api/client.ts';
 import { ErrorCode } from '../../../src/shared/api/errorCodes.ts';
 import { KdsQueueResponseSchema, OrderSchema } from '../../../src/shared/api/schemas.ts';
@@ -417,6 +420,78 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
         const envClient = new ApiClient({ fetchFn: mockFetch });
         const queue = await envClient.get<unknown[]>('/kds/queue');
         expect(queue).toEqual([]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('defaults ApiClient baseUrl to http://localhost:8000 when env vars are unset and preserves explicit empty baseUrl', async () => {
+      vi.stubEnv('VITE_API_URL', '');
+      vi.stubEnv('VITE_API_BASE_URL', '');
+      try {
+        const calls: string[] = [];
+        const mockFetch = vi.fn().mockImplementation((url: string) => {
+          calls.push(url);
+          return Promise.resolve(
+            new Response(JSON.stringify([]), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        });
+
+        const defaultClient = new ApiClient({ fetchFn: mockFetch });
+        await defaultClient.get<unknown[]>('/kds/queue');
+        expect(calls[0]).toBe('http://localhost:8000/kds/queue');
+
+        const relativeClient = new ApiClient({ baseUrl: '', fetchFn: mockFetch });
+        await relativeClient.get<unknown[]>('/kds/queue');
+        expect(calls[1]).toBe('/kds/queue');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('resolves scoped ApiClient via resolveApiClient and WebSocket gateway via resolveDefaultWsBaseUrl', async () => {
+      expect(resolveApiClient()).toBe(apiClient);
+
+      const customClient = createApiClient({ baseUrl: 'http://custom:9000' });
+      expect(resolveApiClient({ client: customClient, tokenProvider: async () => 'ignored' })).toBe(
+        customClient,
+      );
+
+      const scopedClient = resolveApiClient({
+        baseUrl: 'http://gateway.local:8000/api/v1/kitchen',
+        tokenProvider: async () => 'scoped-jwt',
+      });
+      expect(scopedClient).not.toBe(apiClient);
+      let capturedUrl = '';
+      let capturedAuth: string | null = null;
+      server.use(
+        http.get('http://gateway.local:8000/api/v1/kitchen/kds/queue', ({ request }) => {
+          capturedUrl = request.url;
+          capturedAuth = request.headers.get('Authorization');
+          return HttpResponse.json([]);
+        }),
+      );
+      await scopedClient.get<unknown[]>('/kds/queue');
+      expect(capturedUrl).toBe('http://gateway.local:8000/api/v1/kitchen/kds/queue');
+      expect(capturedAuth).toBe('Bearer scoped-jwt');
+
+      vi.stubEnv('VITE_WS_URL', '');
+      vi.stubEnv('VITE_API_URL', '');
+      vi.stubEnv('VITE_API_BASE_URL', '');
+      try {
+        expect(resolveDefaultWsBaseUrl('production')).toBe('ws://localhost:8000');
+        expect(resolveDefaultWsBaseUrl('cocina')).toBe('ws://localhost:8000/api/v1/kitchen');
+
+        vi.stubEnv('VITE_API_URL', 'https://gateway.restaurant.com/api/v1/orders');
+        expect(resolveDefaultWsBaseUrl('production')).toBe(
+          'wss://gateway.restaurant.com/api/v1/orders',
+        );
+
+        vi.stubEnv('VITE_WS_URL', 'ws://gateway.local:8000/api/v1/orders/ws');
+        expect(resolveDefaultWsBaseUrl()).toBe('ws://gateway.local:8000/api/v1/orders/ws');
       } finally {
         vi.unstubAllEnvs();
       }

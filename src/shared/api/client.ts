@@ -42,7 +42,7 @@ export class ApiClient {
   private readonly customFetch: typeof fetch;
 
   constructor(config: ApiClientConfig = {}) {
-    this.baseUrl = config.baseUrl ?? import.meta.env.VITE_API_URL ?? '';
+    this.baseUrl = config.baseUrl ?? resolveDefaultApiBaseUrl();
     this.tokenProvider = config.tokenProvider;
     this.customFetch = config.fetchFn ?? globalThis.fetch.bind(globalThis);
   }
@@ -267,6 +267,24 @@ export function resolveDefaultApiBaseUrl(mode: string = import.meta.env.MODE): s
   );
 }
 
+/** Resolve the default WebSocket gateway URL from Vite env or active API gateway base URL. */
+export function resolveDefaultWsBaseUrl(mode: string = import.meta.env.MODE): string {
+  if (import.meta.env.VITE_WS_URL) {
+    return import.meta.env.VITE_WS_URL;
+  }
+  const configuredApiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+  if (configuredApiUrl) {
+    return configuredApiUrl.replace(/^http(s?):\/\//i, 'ws$1://');
+  }
+  return mode === 'cocina' ? 'ws://localhost:8000/api/v1/kitchen' : 'ws://localhost:8000';
+}
+
+export interface ResolveApiClientOptions {
+  readonly client?: ApiClient;
+  readonly baseUrl?: string;
+  readonly tokenProvider?: TokenProvider;
+}
+
 const localApiBaseUrl = resolveDefaultApiBaseUrl();
 const localDevToken = import.meta.env.VITE_API_TOKEN || generateLocalDevToken('admin');
 
@@ -277,3 +295,18 @@ export const apiClient = createApiClient({
     return Promise.resolve(stored || localDevToken);
   },
 });
+
+/** Resolve an injected ApiClient or construct a scoped client with gateway defaults. */
+export function resolveApiClient({
+  client,
+  baseUrl,
+  tokenProvider,
+}: Readonly<ResolveApiClientOptions> = {}): ApiClient {
+  if (client) {
+    return client;
+  }
+  if (tokenProvider || baseUrl !== undefined) {
+    return new ApiClient({ baseUrl, tokenProvider });
+  }
+  return apiClient;
+}
