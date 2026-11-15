@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { ApiClient, apiClient as defaultApiClient } from '../../shared/api/client.ts';
+import { resolveApiClient, type ApiClient } from '../../shared/api/client.ts';
 import { toDeveloperEndpointError } from '../../shared/api/devErrorLogger.ts';
 import { KdsQueueResponseSchema, type Order } from '../../shared/api/schemas.ts';
 import type { TokenProvider } from '../../shared/types/auth.ts';
@@ -11,6 +11,7 @@ export type KdsTabType = 'pending' | 'in_preparation' | 'active' | 'redo' | 'del
 export interface UseKdsQueueOptions {
   readonly view?: KdsViewType;
   readonly client?: ApiClient;
+  readonly apiBaseUrl?: string;
   readonly tokenProvider?: TokenProvider;
   readonly enabled?: boolean;
 }
@@ -25,18 +26,14 @@ export interface UseKdsQueueOptions {
 export function useKdsQueue({
   view = 'active',
   client,
+  apiBaseUrl,
   tokenProvider,
   enabled = true,
 }: Readonly<UseKdsQueueOptions> = {}): UseQueryResult<Order[], Error> {
-  const effectiveClient = useMemo(() => {
-    if (client) {
-      return client;
-    }
-    if (tokenProvider) {
-      return new ApiClient({ tokenProvider });
-    }
-    return defaultApiClient;
-  }, [client, tokenProvider]);
+  const effectiveClient = useMemo(
+    () => resolveApiClient({ client, baseUrl: apiBaseUrl, tokenProvider }),
+    [client, apiBaseUrl, tokenProvider],
+  );
 
   return useQuery<Order[], Error>({
     queryKey: ['kds', 'queue', view],
