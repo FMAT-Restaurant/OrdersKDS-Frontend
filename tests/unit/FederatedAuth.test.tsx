@@ -58,8 +58,9 @@ describe('Federated Auth Contract and Orchestration', () => {
     it('resolves primary UserRole by priority (ADMIN > CHEF > KITCHEN > WAITER)', () => {
       expect(resolveUserRole(null)).toBeUndefined();
 
-      // ADMIN userType overrides everything
+      // ADMIN / ADMINISTRADOR userType overrides everything
       expect(resolveUserRole({ userType: 'ADMIN', permissions: [] })).toBe(UserRole.ADMIN);
+      expect(resolveUserRole({ userType: 'ADMINISTRADOR', permissions: [] })).toBe(UserRole.ADMIN);
       expect(resolveUserRole({ permissions: ['*'] })).toBe(UserRole.ADMIN);
 
       // Multiple roles: ADMIN > CHEF
@@ -126,6 +127,10 @@ describe('Federated Auth Contract and Orchestration', () => {
       expect(hasPermission({ userType: 'ADMIN', permissions: [] }, 'kitchen:queues:view')).toBe(
         true,
       );
+      expect(
+        hasPermission({ userType: 'ADMINISTRADOR', permissions: [] }, 'orders:orders:void_admin'),
+      ).toBe(true);
+      expect(isAdminUser({ userType: 'ADMINISTRADOR', permissions: [] })).toBe(true);
       expect(hasPermission({ roles: ['ADMINISTRADOR'], permissions: [] }, 'orders:orders:create')).toBe(
         true,
       );

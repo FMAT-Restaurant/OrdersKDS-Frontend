@@ -399,11 +399,16 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
       expect(customClient).toBeInstanceOf(ApiClient);
     });
 
-    it('resolves gateway baseUrl per build mode and honors VITE_API_URL fallback', async () => {
+    it('resolves gateway baseUrl per build mode and honors VITE_API_URL fallback and auto mode', async () => {
       vi.stubEnv('VITE_API_URL', '');
       vi.stubEnv('VITE_API_BASE_URL', '');
       try {
-        expect(resolveDefaultApiBaseUrl('development')).toBe('http://localhost:8000');
+        expect(resolveDefaultApiBaseUrl('development')).toBe('http://localhost:8000/api/v1/orders');
+        expect(resolveDefaultApiBaseUrl('production')).toBe('http://localhost:8000/api/v1/orders');
+        expect(resolveDefaultApiBaseUrl('cocina')).toBe('http://localhost:8000/api/v1/kitchen');
+
+        vi.stubEnv('VITE_API_BASE_URL', 'auto');
+        expect(resolveDefaultApiBaseUrl('production')).toBe('http://localhost:8000/api/v1/orders');
         expect(resolveDefaultApiBaseUrl('cocina')).toBe('http://localhost:8000/api/v1/kitchen');
 
         vi.stubEnv('VITE_API_URL', 'http://gateway.local:8000/api/v1/orders');
@@ -425,7 +430,7 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
       }
     });
 
-    it('defaults ApiClient baseUrl to http://localhost:8000 when env vars are unset and preserves explicit empty baseUrl', async () => {
+    it('defaults ApiClient baseUrl to Kong /api/v1/orders when env vars are unset and preserves explicit empty baseUrl', async () => {
       vi.stubEnv('VITE_API_URL', '');
       vi.stubEnv('VITE_API_BASE_URL', '');
       try {
@@ -442,7 +447,7 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
 
         const defaultClient = new ApiClient({ fetchFn: mockFetch });
         await defaultClient.get<unknown[]>('/kds/queue');
-        expect(calls[0]).toBe('http://localhost:8000/kds/queue');
+        expect(calls[0]).toBe('http://localhost:8000/api/v1/orders/kds/queue');
 
         const relativeClient = new ApiClient({ baseUrl: '', fetchFn: mockFetch });
         await relativeClient.get<unknown[]>('/kds/queue');
@@ -482,7 +487,11 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
       vi.stubEnv('VITE_API_URL', '');
       vi.stubEnv('VITE_API_BASE_URL', '');
       try {
-        expect(resolveDefaultWsBaseUrl('production')).toBe('ws://localhost:8000');
+        expect(resolveDefaultWsBaseUrl('production')).toBe('ws://localhost:8000/api/v1/orders');
+        expect(resolveDefaultWsBaseUrl('cocina')).toBe('ws://localhost:8000/api/v1/kitchen');
+
+        vi.stubEnv('VITE_WS_URL', 'auto');
+        expect(resolveDefaultWsBaseUrl('production')).toBe('ws://localhost:8000/api/v1/orders');
         expect(resolveDefaultWsBaseUrl('cocina')).toBe('ws://localhost:8000/api/v1/kitchen');
 
         vi.stubEnv('VITE_API_URL', 'https://gateway.restaurant.com/api/v1/orders');

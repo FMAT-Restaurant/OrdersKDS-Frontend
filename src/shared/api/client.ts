@@ -258,25 +258,44 @@ export function generateLocalDevToken(role = 'admin'): string {
   return `${header}.${claims}.devsignature`;
 }
 
+function resolveDynamicGatewayOrigin(): string {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${protocol}//${window.location.hostname}:8000`;
+  }
+  return 'http://localhost:8000';
+}
+
+function resolveGatewayPrefix(mode: string): string {
+  return mode === 'cocina' ? '/api/v1/kitchen' : '/api/v1/orders';
+}
+
+function resolveConfiguredEnvUrl(raw?: string): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'auto') {
+    return null;
+  }
+  return trimmed;
+}
+
 /** Resolve the default REST gateway URL for the active build mode. */
 export function resolveDefaultApiBaseUrl(mode: string = import.meta.env.MODE): string {
-  return (
-    import.meta.env.VITE_API_URL ||
-    import.meta.env.VITE_API_BASE_URL ||
-    (mode === 'cocina' ? 'http://localhost:8000/api/v1/kitchen' : 'http://localhost:8000')
-  );
+  const configured =
+    resolveConfiguredEnvUrl(import.meta.env.VITE_API_URL) ??
+    resolveConfiguredEnvUrl(import.meta.env.VITE_API_BASE_URL);
+  if (configured) {
+    return configured;
+  }
+  return `${resolveDynamicGatewayOrigin()}${resolveGatewayPrefix(mode)}`;
 }
 
 /** Resolve the default WebSocket gateway URL from Vite env or active API gateway base URL. */
 export function resolveDefaultWsBaseUrl(mode: string = import.meta.env.MODE): string {
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL;
+  const configuredWs = resolveConfiguredEnvUrl(import.meta.env.VITE_WS_URL);
+  if (configuredWs) {
+    return configuredWs;
   }
-  const configuredApiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
-  if (configuredApiUrl) {
-    return configuredApiUrl.replace(/^http(s?):\/\//i, 'ws$1://');
-  }
-  return mode === 'cocina' ? 'ws://localhost:8000/api/v1/kitchen' : 'ws://localhost:8000';
+  return resolveDefaultApiBaseUrl(mode).replace(/^http(s?):\/\//i, 'ws$1://');
 }
 
 export interface ResolveApiClientOptions {

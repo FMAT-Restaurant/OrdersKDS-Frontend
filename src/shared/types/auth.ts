@@ -87,12 +87,18 @@ function resolveRoleFromPermissions(permissions: readonly string[]): UserRole | 
   return undefined;
 }
 
+const ADMIN_USER_TYPES = new Set(['ADMIN', 'ADMINISTRADOR']);
+
+function isAdminUserType(userType?: string): boolean {
+  return typeof userType === 'string' && ADMIN_USER_TYPES.has(userType.trim().toUpperCase());
+}
+
 /**
  * Resolve the highest-priority internal UserRole from a ShellUser object.
  */
 export function resolveUserRole(user?: ShellUser | null): UserRole | undefined {
   if (!user) return undefined;
-  if (user.userType === 'ADMIN' || user.permissions?.includes('*')) return UserRole.ADMIN;
+  if (isAdminUserType(user.userType) || user.permissions?.includes('*')) return UserRole.ADMIN;
 
   if (user.roles) {
     const roleFromRoles = findHighestPriorityRole(user.roles);
@@ -108,7 +114,7 @@ export function resolveUserRole(user?: ShellUser | null): UserRole | undefined {
 export function isAdminUser(user?: ShellUser | null): boolean {
   if (!user) return false;
   return Boolean(
-    user.userType === 'ADMIN' ||
+    isAdminUserType(user.userType) ||
       user.permissions?.includes('*') ||
       user.roles?.some((r) => normalizeShellRole(r) === UserRole.ADMIN),
   );
