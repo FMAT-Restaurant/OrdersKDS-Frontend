@@ -109,4 +109,53 @@ export const restHandlers = [
       version: mockOrder1.version + 1,
     });
   }),
+
+  // GET /shifts/current
+  http.get('*/shifts/current', () =>
+    HttpResponse.json({
+      isOpen: true,
+      canAcceptOrders: true,
+      currentShift: {
+        id: 'shift-1',
+        shiftId: 'shift-1',
+        shiftNumber: 1,
+        status: 'OPEN',
+        lastOrderFolio: 2,
+        openedAt: '2026-11-19T08:00:00Z',
+        version: 1,
+      },
+      lastClosedShift: null,
+      nextShiftNumber: 2,
+    }),
+  ),
+
+  // POST /shifts/open
+  http.post('*/shifts/open', () =>
+    HttpResponse.json(
+      {
+        id: 'shift-2',
+        shiftId: 'shift-2',
+        shiftNumber: 2,
+        status: 'OPEN',
+        lastOrderFolio: 0,
+        openedAt: '2026-11-19T14:00:00Z',
+        version: 1,
+      },
+      { status: 201 },
+    ),
+  ),
+
+  // POST /shifts/current/close
+  http.post('*/shifts/current/close', () =>
+    HttpResponse.json({
+      id: 'shift-1',
+      shiftId: 'shift-1',
+      shiftNumber: 1,
+      status: 'CLOSED',
+      lastOrderFolio: 2,
+      openedAt: '2026-11-19T08:00:00Z',
+      closedAt: '2026-11-19T14:00:00Z',
+      version: 2,
+    }),
+  ),
 ];

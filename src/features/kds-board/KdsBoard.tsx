@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
 import {
@@ -9,9 +9,10 @@ import {
 import { logDeveloperError } from '../../shared/api/devErrorLogger.ts';
 import { queryClient as defaultQueryClient } from '../../shared/api/queryClient.ts';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
-import type { TokenProvider, UserRole } from '../../shared/types/auth.ts';
+import type { ShellUser, TokenProvider, UserRole } from '../../shared/types/auth.ts';
 import { ItemStatus, OrderStatus } from '../../shared/types/order.ts';
 import { OrderCard, type PendingUndoItem } from './OrderCard.tsx';
+import { ShiftControlBar } from './ShiftControlBar.tsx';
 import { StationSelector } from './StationSelector.tsx';
 import { type KdsTabType, type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 import { pointerAction } from './pointerAction.ts';
@@ -97,6 +98,7 @@ export interface KdsBoardProps {
   readonly apiBaseUrl?: string;
   readonly tokenProvider?: TokenProvider;
   readonly userRole?: UserRole;
+  readonly currentUser?: ShellUser | null;
   readonly queryClient?: QueryClient;
   readonly pageSize?: number;
   readonly initialView?: KdsTabType;
@@ -337,6 +339,7 @@ interface KdsHeaderProps {
   readonly inPrepCount: number;
   readonly redoCount: number;
   readonly expiredCount: number;
+  readonly shiftControlSlot?: ReactNode;
 }
 
 function KdsHeader({
@@ -349,6 +352,7 @@ function KdsHeader({
   inPrepCount,
   redoCount,
   expiredCount,
+  shiftControlSlot,
 }: Readonly<KdsHeaderProps>) {
   const isPendingSelected = tab === 'pending';
   const isInPrepSelected = tab === 'in_preparation' || tab === 'active';
@@ -478,11 +482,14 @@ function KdsHeader({
         </button>
       </div>
 
-      <StationSelector
-        stations={availableStations}
-        selectedStation={effectiveStation}
-        onSelectStation={onStationChange}
-      />
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+        {shiftControlSlot}
+        <StationSelector
+          stations={availableStations}
+          selectedStation={effectiveStation}
+          onSelectStation={onStationChange}
+        />
+      </div>
     </header>
   );
 }
@@ -888,6 +895,7 @@ function KdsBoardContent({
   apiBaseUrl,
   tokenProvider,
   userRole,
+  currentUser,
   pageSize = 8,
   initialView = 'active',
   initialStation = 'general',
@@ -1441,6 +1449,15 @@ function KdsBoardContent({
         inPrepCount={inPrepCount}
         redoCount={redoCount}
         expiredCount={expiredCount}
+        shiftControlSlot={
+          <ShiftControlBar
+            client={actionClient}
+            currentUser={currentUser}
+            userRole={userRole}
+            onFeedback={setFeedbackMessage}
+            onError={setActionError}
+          />
+        }
       />
 
       <section

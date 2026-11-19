@@ -1,5 +1,6 @@
 import { ApiClient } from '../../shared/api/client.ts';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
+import { ShiftStatus, type Shift } from '../../shared/api/shiftSchemas.ts';
 import type { TokenProvider } from '../../shared/types/auth.ts';
 import { ItemStatus, OrderStatus, type OrderStatus as OrderStatusValue } from '../../shared/types/order.ts';
 
@@ -11,8 +12,15 @@ export interface PresetItemConfig {
   readonly activeBg?: string;
 }
 
+export interface SandboxShiftState {
+  currentShift: Shift | null;
+  lastClosedShift: Shift | null;
+  nextShiftNumber: number;
+}
+
 export interface SandboxStore {
   orders: Record<string, Order>;
+  shift?: SandboxShiftState;
 }
 
 const ORDER_ID_REGEX = /\/orders\/([^/?]+)/;
@@ -638,17 +646,108 @@ function buildKdsQueueOrders(orders: Order[], url: string): Order[] {
   });
 }
 
-function createNewSandboxOrder(store: SandboxStore, body: string | null): Order {
+function ensureSandboxShiftState(store: SandboxStore): SandboxShiftState {
+  store.shift ??= {
+    currentShift: {
+      id: 'shift-sim-1',
+      shiftId: 'shift-sim-1',
+      shiftNumber: 1,
+      status: ShiftStatus.OPEN,
+      lastOrderFolio: 0,
+      openedAt: new Date().toISOString(),
+      version: 1,
+    },
+    lastClosedShift: null,
+    nextShiftNumber: 2,
+  };
+  return store.shift;
+}
+
+function handleSandboxShiftRoute(
+  url: string,
+  method: string,
+  store: SandboxStore,
+  body: string | null,
+): Response | null {
+  const shiftState = ensureSandboxShiftState(store);
+  if (method === 'GET' && url.includes('/shifts/current')) {
+    return jsonResponse(
+      {
+        isOpen: shiftState.currentShift !== null,
+        canAcceptOrders: shiftState.currentShift !== null,
+        currentShift: shiftState.currentShift,
+        lastClosedShift: shiftState.lastClosedShift,
+        nextShiftNumber: shiftState.nextShiftNumber,
+      },
+      200,
+    );
+  }
+  if (method === 'POST' && url.includes('/shifts/open')) {
+    if (shiftState.currentShift !== null) {
+      return jsonResponse(
+        { error: { code: 'INVALID_STATE_TRANSITION', message: 'A shift is already open.' } },
+        409,
+      );
+    }
+    const parsed = parseJsonRecord(body);
+    const num = shiftState.nextShiftNumber;
+    const opened: Shift = {
+      id: `shift-sim-${num}`,
+      shiftId: `shift-sim-${num}`,
+      shiftNumber: num,
+      status: ShiftStatus.OPEN,
+      lastOrderFolio: 0,
+      openedAt: new Date().toISOString(),
+      notes: typeof parsed?.notes === 'string' ? parsed.notes : null,
+      version: 1,
+    };
+    shiftState.currentShift = opened;
+    shiftState.nextShiftNumber = num + 1;
+    return jsonResponse(opened, 201);
+  }
+  if (method === 'POST' && url.includes('/shifts/current/close')) {
+    if (shiftState.currentShift === null) {
+      return jsonResponse(
+        { error: { code: 'INVALID_STATE_TRANSITION', message: 'No active shift is currently open.' } },
+        409,
+      );
+    }
+    const parsed = parseJsonRecord(body);
+    const closed: Shift = {
+      ...shiftState.currentShift,
+      status: ShiftStatus.CLOSED,
+      closedAt: new Date().toISOString(),
+      notes: typeof parsed?.notes === 'string' ? parsed.notes : shiftState.currentShift.notes,
+      version: (shiftState.currentShift.version ?? 1) + 1,
+    };
+    shiftState.lastClosedShift = closed;
+    shiftState.currentShift = null;
+    return jsonResponse(closed, 200);
+  }
+  return null;
+}
+
+function createNewSandboxOrder(store: SandboxStore, body: string | null): Order | null {
+  const shiftState = ensureSandboxShiftState(store);
+  if (!shiftState.currentShift) {
+    return null;
+  }
   const parsed = parseJsonRecord(body);
-  const nextNumber = Object.keys(store.orders).length + 101;
-  const newId = `ord-sim-${nextNumber}`;
+  const nextFolio = shiftState.currentShift.lastOrderFolio + 1;
+  shiftState.currentShift = {
+    ...shiftState.currentShift,
+    lastOrderFolio: nextFolio,
+  };
+  const seq = Object.keys(store.orders).length + 101;
+  const newId = `ord-sim-${seq}`;
   const isTakeaway = Boolean(parsed?.isTakeaway);
   const tableNumber = typeof parsed?.tableNumber === 'number' ? parsed.tableNumber : 1;
   const newOrder: Order = {
     id: newId,
     orderId: newId,
     publicId: newId,
-    orderNumber: nextNumber,
+    orderNumber: nextFolio,
+    shiftFolio: nextFolio,
     tableNumber: isTakeaway ? null : tableNumber,
     isTakeaway,
     status: OrderStatus.CREATED,
@@ -746,6 +845,11 @@ export function executeMockFetch(
   const url = extractRawUrl(input).replace(/^https?:\/\/[^/]+/, '');
   const method = (init?.method ?? 'GET').toUpperCase();
 
+  if (url.includes('/shifts/')) {
+    const shiftResponse = handleSandboxShiftRoute(url, method, store, getRequestBodyString(init));
+    if (shiftResponse) return shiftResponse;
+  }
+
   if (method === 'GET' && url.includes('/kds/queue')) {
     return jsonResponse(buildKdsQueueOrders(Object.values(store.orders), url), 200);
   }
@@ -756,6 +860,17 @@ export function executeMockFetch(
 
   if (method === 'POST' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?$/.test(url)) {
     const created = createNewSandboxOrder(store, getRequestBodyString(init));
+    if (!created) {
+      return jsonResponse(
+        {
+          error: {
+            code: 'INVALID_STATE_TRANSITION',
+            message: 'The current kitchen shift is closed.',
+          },
+        },
+        409,
+      );
+    }
     return jsonResponse(created, 201);
   }
 

@@ -165,6 +165,33 @@ export function hasWaiterModuleAccess(user?: ShellUser | null): boolean {
 }
 
 /**
+ * Determine whether the caller can manually open or close operational shifts.
+ * Strictly restricted to Master Chef (CHEF / CHEF_MASTER) and Admin.
+ */
+export function canManageShifts(
+  user?: ShellUser | null,
+  fallbackRole?: UserRole,
+): boolean {
+  if (user) {
+    if (isAdminUser(user)) return true;
+    if (Array.isArray(user.permissions)) {
+      return (
+        user.permissions.includes('*') ||
+        user.permissions.includes('kitchen:shifts:manage') ||
+        user.permissions.includes('kitchen:orders:void_error')
+      );
+    }
+    return Boolean(
+      user.roles?.some((rawRole) => {
+        const role = normalizeShellRole(rawRole);
+        return role === UserRole.CHEF || role === UserRole.ADMIN;
+      }),
+    );
+  }
+  return fallbackRole === UserRole.CHEF || fallbackRole === UserRole.ADMIN;
+}
+
+/**
  * Retrieve user session stored in localStorage by the Auth Shell.
  */
 export function getStoredSessionUser(): ShellUser | null {
