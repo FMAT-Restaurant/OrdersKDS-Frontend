@@ -18,6 +18,7 @@ import type { EditableOrderItem } from './draftItemsHelper.ts';
 export interface RejectedItemDetail {
   readonly offerId?: string;
   readonly dishId?: string;
+  readonly sourceId?: string;
   readonly itemId?: string;
   readonly name?: string;
   readonly itemName?: string;
@@ -31,6 +32,7 @@ export interface RejectedItemDetail {
 export interface ReservedItemDetail {
   readonly offerId?: string;
   readonly dishId?: string;
+  readonly sourceId?: string;
   readonly name?: string;
   readonly quantity?: number;
   readonly reservedQuantity?: number;
@@ -91,6 +93,9 @@ export interface TableOrderGroup {
   readonly isTakeaway: boolean;
   readonly orders: readonly Order[];
 }
+
+/** Max catalog identifier length aligned with Inventory-Backend (`@MaxLength(100)`). */
+export const MAX_CATALOG_ID_LENGTH = 100;
 
 /** React Query key prefix for individual order ticket queries. */
 export const ORDER_QUERY_PREFIX = ['order'] as const;
@@ -223,13 +228,21 @@ export function formatSessionDisplay(sessionId: string): string {
 function parseItemIdentifier(itemObj: Record<string, unknown>): {
   offerId?: string;
   dishId?: string;
+  sourceId?: string;
   itemId?: string;
 } {
   const itemId = typeof itemObj.itemId === 'string' ? itemObj.itemId : undefined;
   const plateId = typeof itemObj.plateId === 'string' ? itemObj.plateId : undefined;
+  const sourceId = typeof itemObj.sourceId === 'string' ? itemObj.sourceId : undefined;
   const offerId = typeof itemObj.offerId === 'string' ? itemObj.offerId : itemId;
-  const dishId = typeof itemObj.dishId === 'string' ? itemObj.dishId : (plateId ?? itemId);
-  return { offerId, dishId, itemId };
+  const dishId =
+    typeof itemObj.dishId === 'string' ? itemObj.dishId : (plateId ?? sourceId ?? itemId);
+  return {
+    offerId,
+    dishId,
+    itemId,
+    ...(sourceId !== undefined ? { sourceId } : {}),
+  };
 }
 
 function readNumericField(
@@ -312,7 +325,7 @@ export function parseRejectionDetails(details: unknown): ParsedRejectionDetails 
   };
 }
 
-/** Look up a human-readable dish name inside order items by dishId, id, or itemId. */
+/** Look up a human-readable dish name inside order items by sourceId, dishId, offerId, id, or itemId. */
 export function resolveDishName(
   dishIdOrOfferId: string | undefined,
   orderItems: readonly OrderItem[],
@@ -322,7 +335,9 @@ export function resolveDishName(
   }
   const found = orderItems.find(
     (item) =>
+      item.sourceId === dishIdOrOfferId ||
       item.dishId === dishIdOrOfferId ||
+      item.offerId === dishIdOrOfferId ||
       item.id === dishIdOrOfferId ||
       item.itemId === dishIdOrOfferId,
   );

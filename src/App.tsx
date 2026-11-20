@@ -118,6 +118,7 @@ function App({
         {effectiveView === 'kds' ? (
           <KdsApp
             userRole={effectiveRole}
+            currentUser={activeUser}
             tokenProvider={effectiveTokenProvider}
             apiBaseUrl={resolveDefaultApiBaseUrl()}
           />

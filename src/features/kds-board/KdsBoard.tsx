@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useBumpBar } from '../../hooks/useBumpBar.ts';
 import {
@@ -9,9 +9,10 @@ import {
 import { logDeveloperError } from '../../shared/api/devErrorLogger.ts';
 import { queryClient as defaultQueryClient } from '../../shared/api/queryClient.ts';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
-import type { TokenProvider, UserRole } from '../../shared/types/auth.ts';
+import type { ShellUser, TokenProvider, UserRole } from '../../shared/types/auth.ts';
 import { ItemStatus, OrderStatus } from '../../shared/types/order.ts';
 import { OrderCard, type PendingUndoItem } from './OrderCard.tsx';
+import { ShiftControlBar } from './ShiftControlBar.tsx';
 import { StationSelector } from './StationSelector.tsx';
 import { type KdsTabType, type KdsViewType, useKdsQueue } from './useKdsQueue.ts';
 import { pointerAction } from './pointerAction.ts';
@@ -25,8 +26,8 @@ import {
 } from './dialogs/ConfirmRejectDialog.tsx';
 import { OrderDetailsDialog } from './dialogs/OrderDetailsDialog.tsx';
 import {
-  type PendingUndoRefEntry,
-  registerGracePeriodCountdown,
+  getKdsGracePeriodStore,
+  type PersistentGraceSummary,
 } from './kdsGracePeriod.ts';
 import { getOrderTtlStatus } from './kdsTtl.ts';
 
@@ -97,6 +98,7 @@ export interface KdsBoardProps {
   readonly apiBaseUrl?: string;
   readonly tokenProvider?: TokenProvider;
   readonly userRole?: UserRole;
+  readonly currentUser?: ShellUser | null;
   readonly queryClient?: QueryClient;
   readonly pageSize?: number;
   readonly initialView?: KdsTabType;
@@ -206,52 +208,6 @@ function extractAvailableStations(data: Order[] | undefined): string[] {
   return ['general', ...sortedStations];
 }
 
-function clearRefEntryTimers(entry: PendingUndoRefEntry | undefined): void {
-  if (!entry) return;
-  if (entry.timerId) clearTimeout(entry.timerId);
-  if (entry.intervalId) clearInterval(entry.intervalId);
-}
-
-function extractPendingItemUndos(
-  refs: Map<string, PendingUndoRefEntry>,
-): { key: string; execute: () => Promise<void> }[] {
-  const itemEntries: { key: string; execute: () => Promise<void> }[] = [];
-  for (const [key, entry] of refs.entries()) {
-    if (entry.type === 'item') {
-      clearRefEntryTimers(entry);
-      refs.delete(key);
-      itemEntries.push({ key, execute: entry.execute });
-    }
-  }
-  return itemEntries;
-}
-
-function clearAllPendingTimers(
-  refs: Map<string, PendingUndoRefEntry>,
-  executePending: boolean,
-): void {
-  for (const entry of refs.values()) {
-    clearRefEntryTimers(entry);
-    if (executePending) {
-      void entry.execute();
-    }
-  }
-  if (executePending) {
-    refs.clear();
-  }
-}
-
-function cancelExistingOrderUndoEntry(
-  refs: Map<string, PendingUndoRefEntry>,
-  orderId: string,
-): (() => Promise<void>) | null {
-  const existingEntry = refs.get(orderId);
-  if (!existingEntry) return null;
-  clearRefEntryTimers(existingEntry);
-  refs.delete(orderId);
-  return existingEntry.type === 'item' ? existingEntry.execute : null;
-}
-
 interface BumpBarNavContext {
   availableStations: string[];
   effectiveStation: string;
@@ -292,8 +248,14 @@ function handleBumpBarNavigationAction(action: string, ctx: BumpBarNavContext): 
 }
 
 function formatUndoFeedbackMessage(
-  current: PendingUndoRefEntry,
+  current: PersistentGraceSummary,
 ): { text: string; type: 'info' } {
+  if (current.order.status === OrderStatus.DELIVERED && current.item) {
+    return {
+      text: `Envío cancelado. La rehechura de ${current.item.name} se mantiene pendiente.`,
+      type: 'info',
+    };
+  }
   if (current.type === 'order') {
     const orderNumberDisplay = getOrderNumberDisplay(
       current.order.orderNumber,
@@ -314,6 +276,19 @@ function formatUndoFeedbackMessage(
   };
 }
 
+function resolveLatestOrder(queryClient: QueryClient, fallbackOrder: Order): Order {
+  const targetId = getOrderKey(fallbackOrder);
+  const queues = [
+    queryClient.getQueryData<Order[]>(['kds', 'queue', 'active']),
+    queryClient.getQueryData<Order[]>(['kds', 'queue', 'delivered']),
+  ];
+  for (const queue of queues) {
+    const match = queue?.find((candidate) => getOrderKey(candidate) === targetId);
+    if (match) return match;
+  }
+  return fallbackOrder;
+}
+
 function countRemainingPendingItems(
   order: Order,
   targetItemId: string,
@@ -327,6 +302,64 @@ function countRemainingPendingItems(
   }).length;
 }
 
+function formatPendingStripLabel(entry: PersistentGraceSummary): string {
+  const orderDisplay = getOrderNumberDisplay(entry.order.orderNumber, entry.orderId);
+  if (entry.order.status === OrderStatus.DELIVERED && entry.item) {
+    return `Comanda #${orderDisplay} · Rehechura (${entry.item.name})`;
+  }
+  if (entry.item) {
+    return `Comanda #${orderDisplay} · ${entry.item.name}`;
+  }
+  return `Comanda #${orderDisplay} lista`;
+}
+
+function KdsPendingUndoStrip({
+  activeEntries,
+  visibleOrderIds,
+  onUndo,
+}: Readonly<{
+  activeEntries: readonly PersistentGraceSummary[];
+  visibleOrderIds: ReadonlySet<string>;
+  onUndo: (order: Order) => void;
+}>) {
+  const hiddenEntries = activeEntries.filter((entry) => !visibleOrderIds.has(entry.orderId));
+  if (hiddenEntries.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      data-testid="kds-pending-undo-strip"
+      aria-live="polite"
+      className="mb-3 flex flex-wrap items-center gap-2 rounded-control border border-amber-300 bg-amber-50 px-3 py-2 shadow-sm shrink-0"
+    >
+      {hiddenEntries.map((entry) => {
+        const label = formatPendingStripLabel(entry);
+        return (
+          <div
+            key={entry.orderId}
+            data-testid={`kds-pending-strip-item-${entry.orderId}`}
+            className="flex items-center gap-2 rounded bg-white border border-amber-300 px-2.5 py-1 text-xs sm:text-sm font-bold text-amber-950"
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            <span>
+              {label} · {entry.secondsLeft}s
+            </span>
+            <button
+              type="button"
+              data-testid={`kds-pending-strip-undo-${entry.orderId}`}
+              {...pointerAction(() => onUndo(entry.order))}
+              className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs cursor-pointer border-0"
+            >
+              Deshacer
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 interface KdsHeaderProps {
   readonly tab: KdsTabType;
   readonly onTabChange: (tab: KdsTabType) => void;
@@ -337,6 +370,7 @@ interface KdsHeaderProps {
   readonly inPrepCount: number;
   readonly redoCount: number;
   readonly expiredCount: number;
+  readonly shiftControlSlot?: ReactNode;
 }
 
 function KdsHeader({
@@ -349,6 +383,7 @@ function KdsHeader({
   inPrepCount,
   redoCount,
   expiredCount,
+  shiftControlSlot,
 }: Readonly<KdsHeaderProps>) {
   const isPendingSelected = tab === 'pending';
   const isInPrepSelected = tab === 'in_preparation' || tab === 'active';
@@ -468,9 +503,8 @@ function KdsHeader({
           {expiredCount > 0 && (
             <span
               data-testid="expired-badge"
-              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${
-                isExpiredSelected ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800'
-              }`}
+              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${isExpiredSelected ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800'
+                }`}
             >
               {expiredCount}
             </span>
@@ -478,11 +512,14 @@ function KdsHeader({
         </button>
       </div>
 
-      <StationSelector
-        stations={availableStations}
-        selectedStation={effectiveStation}
-        onSelectStation={onStationChange}
-      />
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+        {shiftControlSlot}
+        <StationSelector
+          stations={availableStations}
+          selectedStation={effectiveStation}
+          onSelectStation={onStationChange}
+        />
+      </div>
     </header>
   );
 }
@@ -513,8 +550,8 @@ function KdsActionToasts({
           aria-live="polite"
           data-testid="kds-action-feedback"
           className={`pointer-events-auto rounded-control border px-4 py-2.5 text-sm sm:text-base font-semibold flex items-center justify-between shadow-lg backdrop-blur-sm transition-all ${isFeedbackSuccess
-              ? 'bg-emerald-50/95 border-emerald-300 text-emerald-950'
-              : 'bg-blue-50/95 border-blue-300 text-blue-950'
+            ? 'bg-emerald-50/95 border-emerald-300 text-emerald-950'
+            : 'bg-blue-50/95 border-blue-300 text-blue-950'
             }`}
         >
           <div className="flex items-center gap-2">
@@ -888,6 +925,7 @@ function KdsBoardContent({
   apiBaseUrl,
   tokenProvider,
   userRole,
+  currentUser,
   pageSize = 8,
   initialView = 'active',
   initialStation = 'general',
@@ -1077,7 +1115,7 @@ function KdsBoardContent({
   const executeRejectSupplies = useCallback(
     (order: Order, targetItem?: OrderItem | null, options?: ConfirmRejectOptions) => {
       const orderId = getOrderKey(order);
-      const itemId = resolveRejectTargetItemId(order, targetItem);
+      const itemId = options?.items?.[0]?.itemId || resolveRejectTargetItemId(order, targetItem);
       const availableQuantity = options?.availableQuantity ?? 0;
       if (orderId && itemId) {
         void runAction(
@@ -1086,6 +1124,7 @@ function KdsBoardContent({
           {
             reason: 'Insumo físico insuficiente en cocina',
             ...(availableQuantity > 0 ? { availableQuantity } : {}),
+            ...(options?.items?.length ? { items: options.items } : {}),
           },
           {
             text: `Comanda #${order.orderNumber ?? orderId} rechazada por falta de insumos.`,
@@ -1123,69 +1162,78 @@ function KdsBoardContent({
     item: Order['items'][number];
   } | null>(null);
 
-  // Pending undo grace period state (TASK-40b)
-  const [pendingUndoMap, setPendingUndoMap] = useState<Record<string, PendingUndoItem>>({});
-  const optimisticReadyItemIdsRef = useRef<Set<string>>(new Set());
-  const [optimisticReadyItemIds, setOptimisticReadyItemIds] = useState<Set<string>>(
-    () => new Set(),
+  // Persistent undo grace period state shared across tab changes and KdsBoard remounts (TASK-40b)
+  const graceStore = useMemo(() => getKdsGracePeriodStore(queryClient), [queryClient]);
+  const graceSnapshot = useSyncExternalStore(
+    useCallback((listener) => graceStore.subscribe(listener), [graceStore]),
+    () => graceStore.getSnapshot(),
   );
 
-  const pendingUndoRefs = useRef<Map<string, PendingUndoRefEntry>>(new Map());
-
-  const flushPendingItemUndos = useCallback(async () => {
-    const itemEntries = extractPendingItemUndos(pendingUndoRefs.current);
-
-    if (itemEntries.length > 0) {
-      setPendingUndoMap((prev) => {
-        const next = { ...prev };
-        for (const { key } of itemEntries) {
-          delete next[key];
-        }
-        return next;
-      });
-      await Promise.all(itemEntries.map(({ execute }) => execute()));
+  useEffect(() => {
+    if (data) {
+      graceStore.reconcileOrders(data);
     }
-  }, []);
+  }, [data, graceStore]);
 
-  const handleUndoReady = useCallback((targetOrder?: Order) => {
-    const targetKey = targetOrder ? getOrderKey(targetOrder) : undefined;
-    const orderKey = targetKey || Array.from(pendingUndoRefs.current.keys()).at(-1);
-    if (!orderKey) return;
-
-    const current = pendingUndoRefs.current.get(orderKey);
-    if (!current) return;
-
-    clearRefEntryTimers(current);
-    pendingUndoRefs.current.delete(orderKey);
-    setPendingUndoMap((prev) => {
-      const next = { ...prev };
-      delete next[orderKey];
-      return next;
+  useEffect(() => {
+    return graceStore.subscribeNotices((notice) => {
+      if (notice.type === 'error') {
+        setActionError(notice.text);
+      } else {
+        setFeedbackMessage({ text: notice.text, type: notice.type });
+      }
     });
+  }, [graceStore]);
 
-    if (current.item) {
-      const itemId = getItemKey(current.item);
-      optimisticReadyItemIdsRef.current.delete(itemId);
-      setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
-    }
+  const handleUndoReady = useCallback(
+    (targetOrder?: Order) => {
+      const targetKey = targetOrder ? getOrderKey(targetOrder) : undefined;
+      const cancelled = graceStore.cancel(targetKey || undefined);
+      if (cancelled) {
+        setFeedbackMessage(formatUndoFeedbackMessage(cancelled));
+      }
+    },
+    [graceStore],
+  );
 
-    setFeedbackMessage(formatUndoFeedbackMessage(current));
-  }, []);
+  const executeReadyPatch = useCallback(
+    async (
+      path: string,
+      successNotice: { readonly text: string; readonly type: 'success' | 'info' },
+    ): Promise<boolean> => {
+      if (!actionClient) return false;
+      try {
+        await actionClient.patch(path);
+        await queryClient.invalidateQueries({ queryKey: ['kds'] });
+        graceStore.emitNotice(successNotice);
+        return true;
+      } catch (error_) {
+        graceStore.emitNotice({
+          text: error_ instanceof Error ? error_.message : 'No se pudo completar la acción.',
+          type: 'error',
+        });
+        return false;
+      }
+    },
+    [actionClient, graceStore, queryClient],
+  );
 
   const executeMarkItemReady = useCallback(
-    async (order: Order, item: Order['items'][number]) => {
+    (order: Order, item: Order['items'][number]): Promise<boolean> => {
       const orderId = getOrderKey(order);
       const itemId = getItemKey(item);
-      if (!orderId || !itemId) return;
-      if (order.status === 'RESERVED' && actionClient) {
-        await actionClient.patch(`/orders/${orderId}/start-preparation`);
-      }
-      await runAction(`item:${itemId}`, `/orders/${orderId}/items/${itemId}/ready`, undefined, {
-        text: `${item.name} marcado como listo.`,
+      if (!orderId || !itemId) return Promise.resolve(false);
+      const latestOrder = resolveLatestOrder(queryClient, order);
+      const isRedo = isRedoOrder(latestOrder) || isRedoOrder(order);
+      const text = isRedo
+        ? `Rehechura de ${item.name} marcada como lista y notificada al mesero.`
+        : `${item.name} marcado como listo.`;
+      return executeReadyPatch(`/orders/${orderId}/items/${itemId}/ready`, {
+        text,
         type: 'success',
       });
     },
-    [actionClient, runAction],
+    [executeReadyPatch, queryClient],
   );
 
   const startItemReadyGracePeriod = useCallback(
@@ -1194,13 +1242,11 @@ function KdsBoardContent({
       const itemId = getItemKey(item);
       if (!orderId || !itemId) return;
 
-      // If this order is already counting down to be sent as ready, ignore item clicks
-      if (pendingUndoRefs.current.get(orderId)?.type === 'order') {
+      if (graceStore.getEntry(orderId)?.type === 'order') {
         return;
       }
 
-      // Flush any pending ITEM countdowns across the board
-      void flushPendingItemUndos();
+      void graceStore.flushByType('item');
 
       const graceMs = undoGracePeriodMs ?? 15000;
       if (graceMs <= 0) {
@@ -1208,10 +1254,7 @@ function KdsBoardContent({
         return;
       }
 
-      optimisticReadyItemIdsRef.current.add(itemId);
-      setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
-
-      registerGracePeriodCountdown({
+      graceStore.register({
         orderId,
         itemId,
         type: 'item',
@@ -1219,64 +1262,58 @@ function KdsBoardContent({
         item,
         graceMs,
         execute: () => executeMarkItemReady(order, item),
-        pendingUndoRefs,
-        setPendingUndoMap,
       });
     },
-    [undoGracePeriodMs, flushPendingItemUndos, executeMarkItemReady],
+    [undoGracePeriodMs, graceStore, executeMarkItemReady],
   );
 
   const markItemReady = useCallback(
     (order: Order, item: Order['items'][number]) => {
+      if (order.status !== OrderStatus.IN_PREPARATION && !isRedoOrder(order)) {
+        return;
+      }
       const orderId = getOrderKey(order);
-      if (pendingUndoRefs.current.get(orderId)?.type === 'order') {
+      if (graceStore.getEntry(orderId)?.type === 'order') {
         return;
       }
       const targetItemId = getItemKey(item);
       const remainingCount = countRemainingPendingItems(
         order,
         targetItemId,
-        optimisticReadyItemIdsRef.current,
+        graceStore.getSnapshot().optimisticReadyItemIds,
       );
-      // Flush any pending item countdowns across the board
-      void flushPendingItemUndos();
 
       if (remainingCount === 0) {
         setConfirmReadyTarget({ order, item });
         return;
       }
+
       startItemReadyGracePeriod(order, item);
     },
-    [flushPendingItemUndos, startItemReadyGracePeriod],
+    [graceStore, startItemReadyGracePeriod],
   );
 
-  // Dispatch pending item/order ready on window unload/reload (TASK-40b)
+  // Dispatch pending item/order ready on browser tab close or hard reload (TASK-40b)
   useEffect(() => {
-    const activeRefs = pendingUndoRefs.current;
     const handleBeforeUnload = () => {
-      clearAllPendingTimers(activeRefs, true);
+      graceStore.flushAll();
     };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      clearAllPendingTimers(activeRefs, false);
     };
-  }, []);
+  }, [graceStore]);
 
   const executeMarkOrderReady = useCallback(
-    async (order: Order) => {
+    (order: Order): Promise<boolean> => {
       const orderId = getOrderKey(order);
-      if (!orderId) return;
-      if (order.status === 'RESERVED' && actionClient) {
-        await actionClient.patch(`/orders/${orderId}/start-preparation`);
-      }
-      await runAction('order-ready', `/orders/${orderId}/ready`, undefined, {
+      if (!orderId) return Promise.resolve(false);
+      return executeReadyPatch(`/orders/${orderId}/ready`, {
         text: `Comanda #${order.orderNumber ?? orderId} marcada como lista.`,
         type: 'success',
       });
     },
-    [actionClient, runAction],
+    [executeReadyPatch],
   );
 
   const startOrderReadyGracePeriod = useCallback(
@@ -1284,52 +1321,38 @@ function KdsBoardContent({
       const orderId = getOrderKey(order);
       if (!orderId) return;
 
-      // Clear any pending undo for this order (e.g. an individual item on this order)
-      const pendingItemExecution = cancelExistingOrderUndoEntry(
-        pendingUndoRefs.current,
-        orderId,
-      );
-      if (pendingItemExecution) {
-        void pendingItemExecution();
-      }
+      const pendingItemExecution = graceStore.cancelOrderForEscalation(orderId);
+      const pendingPromise = pendingItemExecution ? pendingItemExecution() : null;
 
-      if (triggeringItem) {
-        const triggeringItemId = getItemKey(triggeringItem);
-        optimisticReadyItemIdsRef.current.add(triggeringItemId);
-        setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
-      }
+      const runFinalReady = async (): Promise<boolean> => {
+        if (pendingPromise) {
+          await pendingPromise;
+        }
+        if (triggeringItem) {
+          return executeMarkItemReady(order, triggeringItem);
+        }
+        return executeMarkOrderReady(order);
+      };
 
       const graceMs = undoGracePeriodMs ?? 15000;
       if (graceMs <= 0) {
-        if (triggeringItem) {
-          void executeMarkItemReady(order, triggeringItem);
-        } else {
-          void executeMarkOrderReady(order);
-        }
+        void runFinalReady();
         return;
       }
 
       const triggeringItemId = triggeringItem ? getItemKey(triggeringItem) : undefined;
 
-      registerGracePeriodCountdown({
+      graceStore.register({
         orderId,
         itemId: triggeringItemId,
         type: 'order',
         order,
         item: triggeringItem,
         graceMs,
-        execute: async () => {
-          if (triggeringItem) {
-            await executeMarkItemReady(order, triggeringItem);
-          } else {
-            await executeMarkOrderReady(order);
-          }
-        },
-        pendingUndoRefs,
-        setPendingUndoMap,
+        execute: runFinalReady,
       });
     },
-    [undoGracePeriodMs, executeMarkOrderReady, executeMarkItemReady],
+    [undoGracePeriodMs, graceStore, executeMarkOrderReady, executeMarkItemReady],
   );
 
   const handleConfirmReadyDialog = useCallback(() => {
@@ -1388,6 +1411,11 @@ function KdsBoardContent({
     return filteredOrders.slice(start, start + pageSize);
   }, [filteredOrders, currentPage, pageSize]);
 
+  const visibleOrderIds = useMemo(
+    () => new Set(paginatedOrders.map((order) => getOrderKey(order))),
+    [paginatedOrders],
+  );
+
   const handleTabChange = useCallback((newTab: KdsTabType) => {
     setTab(newTab);
     setPage(1);
@@ -1441,6 +1469,15 @@ function KdsBoardContent({
         inPrepCount={inPrepCount}
         redoCount={redoCount}
         expiredCount={expiredCount}
+        shiftControlSlot={
+          <ShiftControlBar
+            client={actionClient}
+            currentUser={currentUser}
+            userRole={userRole}
+            onFeedback={setFeedbackMessage}
+            onError={setActionError}
+          />
+        }
       />
 
       <section
@@ -1454,14 +1491,19 @@ function KdsBoardContent({
           actionError={actionError}
           onClearError={() => setActionError(null)}
         />
+        <KdsPendingUndoStrip
+          activeEntries={graceSnapshot.activeEntries}
+          visibleOrderIds={visibleOrderIds}
+          onUndo={handleUndoReady}
+        />
         <KdsGridContent
           currentTab={tab}
           isLoading={isLoading}
           isError={isError}
           isScrollLocked={selectedModalOrder !== null}
           paginatedOrders={paginatedOrders}
-          pendingUndoMap={pendingUndoMap}
-          optimisticReadyItemIds={optimisticReadyItemIds}
+          pendingUndoMap={graceSnapshot.pendingUndoMap}
+          optimisticReadyItemIds={graceSnapshot.optimisticReadyItemIds}
           userRole={userRole}
           pendingAction={pendingAction}
           onOrderSelect={handleOrderCardSelect}
@@ -1500,8 +1542,8 @@ function KdsBoardContent({
         }}
         userRole={userRole}
         pendingAction={pendingAction}
-        pendingUndoMap={pendingUndoMap}
-        optimisticReadyItemIds={optimisticReadyItemIds}
+        pendingUndoMap={graceSnapshot.pendingUndoMap}
+        optimisticReadyItemIds={graceSnapshot.optimisticReadyItemIds}
         onItemReady={markItemReady}
         onUndoItemReady={handleUndoReady}
         onStartPreparation={onStartPreparation ?? startPreparation}

@@ -99,6 +99,7 @@ function OrderDetailsItemRow({
     Boolean(isOptimisticallyReady);
   const isRedoPending =
     order.status === 'DELIVERED' && item.status === 'PENDING';
+  const allowItemReady = order.status === 'IN_PREPARATION' || isRedoPending;
   const rowStyle = getItemRowStyle(isRedoPending, isPendingUndo, isFinished);
 
   return (
@@ -132,7 +133,7 @@ function OrderDetailsItemRow({
             </span>
           )}
 
-          {!isPendingUndo && !isReadOnlyExpired && (
+          {!isPendingUndo && !isReadOnlyExpired && (allowItemReady || isFinished) && (
             <button
               type="button"
               data-testid={`order-details-item-action-${itemId}`}
@@ -468,8 +469,6 @@ function OrderDetailsReadyAction({
   onMarkOrderReady?: (order: Order) => void;
   onUndoOrderReady?: (order: Order) => void;
 }>) {
-  if (order.status !== 'IN_PREPARATION') return null;
-
   if (isPendingUndoOrder) {
     return (
       <div
@@ -499,6 +498,8 @@ function OrderDetailsReadyAction({
       </div>
     );
   }
+
+  if (order.status !== 'IN_PREPARATION') return null;
 
   return (
     <button

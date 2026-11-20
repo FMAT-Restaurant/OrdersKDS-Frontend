@@ -40,7 +40,7 @@ describe('KdsApp', () => {
     await waitFor(() => {
       expect(requestedUrls.length).toBeGreaterThan(0);
     });
-    expect(requestedUrls[0]).toBe('http://localhost:8000/kds/queue?view=active');
+    expect(requestedUrls[0]).toBe('http://localhost:8000/api/v1/orders/kds/queue?view=active');
   });
 
   it('forwards explicit apiBaseUrl prop to KdsBoard queue requests', async () => {
