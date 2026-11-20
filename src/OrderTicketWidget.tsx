@@ -494,6 +494,7 @@ function OrderTicket({
   };
 
   const resetToBlankDraft = () => {
+    actions.clearPendingDraftOrder();
     setActiveOrderId(undefined);
     setDraftItems([]);
     setIsEditing(true);
@@ -664,6 +665,7 @@ function OrderTicket({
           onConfirmCreate={() => actions.handleCreateOrder(true, getDisplayError)}
           onSaveDraft={() => actions.handleCreateOrder(false, getDisplayError)}
           onDiscard={() => {
+            actions.clearPendingDraftOrder();
             setIsDraftTableLocked(false);
             setDraftItems([]);
             onCreateNewOrder?.();

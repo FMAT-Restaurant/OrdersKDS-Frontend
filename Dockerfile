@@ -14,13 +14,18 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy the remaining project files and build
 COPY . .
+ARG BUILD_MODE=production
 ARG VITE_API_URL
 ARG VITE_API_BASE_URL
 ARG VITE_WS_URL
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_WS_URL=${VITE_WS_URL}
-RUN pnpm run build
+RUN if [ "$BUILD_MODE" = "cocina" ]; then \
+      pnpm run build:cocina && cp -r /app/dist-cocina /app/out; \
+    else \
+      pnpm run build && cp -r /app/dist /app/out; \
+    fi
 
 # ==========================================
 # Stage 2: Production stage with unprivileged Nginx
@@ -28,7 +33,7 @@ RUN pnpm run build
 FROM nginxinc/nginx-unprivileged:alpine
 
 # Copy build artifacts to Nginx web root (keep root:root read-only ownership)
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/out /usr/share/nginx/html
 
 # Configure Nginx on unprivileged port 8080 with CORS headers for Module Federation
 RUN printf 'server {\n\

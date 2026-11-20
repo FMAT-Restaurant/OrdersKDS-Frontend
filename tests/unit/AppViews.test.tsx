@@ -430,5 +430,40 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
       expect(screen.queryByRole('button', { name: /anulación administrativa/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /anulación por error de cocina/i })).not.toBeInTheDocument();
     });
+
+    it('supports creating new real backend orders with TEST_DATA dishes without reverting to mock mode', () => {
+      render(<App />);
+
+      fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
+      fireEvent.click(screen.getByTestId('sandbox-backend-new-order-btn'));
+
+      expect(screen.getByText('Live Backend')).toBeInTheDocument();
+      expect(screen.getByText(/OrderTicketWidget Active Order: draft/)).toBeInTheDocument();
+      expect(capturedProps.fetchFn).toBeUndefined();
+      expect(capturedProps.WebSocketClass).toBeUndefined();
+
+      const eventListener = vi.fn();
+      window.addEventListener('fmat:orden:add-item', eventListener);
+      expect(screen.getByTestId('backend-quick-menu-bar')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /\+ Menú Real: Hamburguesa clásica/i }));
+      expect(eventListener).toHaveBeenCalledTimes(1);
+      const customEvent = eventListener.mock.calls[0]?.[0] as CustomEvent<Record<string, unknown>>;
+      expect(customEvent.detail).toEqual({
+        dishId: 'PLATE-BURGER-01',
+        sourceId: 'PLATE-BURGER-01',
+        offerId: 'OFFER-BURGER-01',
+        name: 'Hamburguesa clásica',
+        unitPrice: 165,
+        quantity: 1,
+      });
+      window.removeEventListener('fmat:orden:add-item', eventListener);
+
+      fireEvent.click(screen.getByTestId('mock-create-new-order-btn'));
+      expect(screen.getByText('Live Backend')).toBeInTheDocument();
+      expect(capturedProps.fetchFn).toBeUndefined();
+
+      fireEvent.click(screen.getByRole('button', { name: /ver en kds cocina/i }));
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-has-mock-client', 'false');
+    });
   });
 });

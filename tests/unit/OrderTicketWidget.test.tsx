@@ -600,7 +600,9 @@ describe('OrderTicketWidget', () => {
     const confirmButton = await screen.findByRole('button', { name: 'Confirmar' });
     fireEvent.click(confirmButton);
     expect(
-      await screen.findByText('La comanda no puede cambiar al estado solicitado en este momento.'),
+      await screen.findByText(
+        'No hay un turno de trabajo abierto en cocina. No se pudo mandar la orden.',
+      ),
     ).toBeInTheDocument();
 
     const cancelButton = screen.getByRole('button', { name: 'Cancelar' });

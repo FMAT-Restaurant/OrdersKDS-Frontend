@@ -1,8 +1,10 @@
 import type React from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { Order } from '../../../src/shared/api/schemas.ts';
 import type { PendingUndoItem } from '../../../src/features/kds-board/OrderCard.tsx';
 import {
+  getKdsGracePeriodStore,
   type PendingUndoRefEntry,
   registerGracePeriodCountdown,
 } from '../../../src/features/kds-board/kdsGracePeriod.ts';
@@ -193,5 +195,61 @@ describe('registerGracePeriodCountdown', () => {
 
     await vi.advanceTimersByTimeAsync(5000);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('reconciles completed and reopened redo items cleanly and rolls back failed executions', async () => {
+    const qc = new QueryClient();
+    const store = getKdsGracePeriodStore(qc);
+    expect(getKdsGracePeriodStore(qc)).toBe(store);
+    expect(store.cancel('missing')).toBeNull();
+
+    // Register item-1, then overwrite same order entry with item-2 to verify old item cleanup
+    store.register({
+      orderId: 'order-123',
+      itemId: 'item-1',
+      type: 'item',
+      order: mockOrder,
+      item: mockOrder.items[0],
+      graceMs: 5000,
+      execute: vi.fn().mockResolvedValue(true),
+    });
+    store.register({
+      orderId: 'order-123',
+      itemId: 'item-2',
+      type: 'item',
+      order: mockOrder,
+      item: { ...mockOrder.items[0], id: 'item-2' },
+      graceMs: 5000,
+      execute: vi.fn().mockResolvedValue(true),
+    });
+    expect(store.getSnapshot().optimisticReadyItemIds.has('item-1')).toBe(false);
+    expect(store.getSnapshot().optimisticReadyItemIds.has('item-2')).toBe(true);
+
+    // Expire timer cleanly -> records committed version and awaits reconciliation
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(store.getSnapshot().optimisticReadyItemIds.has('item-2')).toBe(true);
+
+    // Reconcile when a new redo increments order version on PENDING item -> releases optimistic lock
+    store.reconcileOrders([
+      {
+        ...mockOrder,
+        version: 2,
+        items: [{ ...mockOrder.items[0], id: 'item-2', status: 'PENDING' }],
+      },
+    ]);
+    expect(store.getSnapshot().optimisticReadyItemIds.has('item-2')).toBe(false);
+
+    // Register entry whose execute returns false -> optimistic lock rolls back cleanly
+    store.register({
+      orderId: 'order-123',
+      itemId: 'item-fail',
+      type: 'item',
+      order: mockOrder,
+      item: { ...mockOrder.items[0], id: 'item-fail' },
+      graceMs: 3000,
+      execute: vi.fn().mockResolvedValue(false),
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(store.getSnapshot().optimisticReadyItemIds.has('item-fail')).toBe(false);
   });
 });

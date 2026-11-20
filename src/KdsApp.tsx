@@ -1,10 +1,11 @@
 import { KdsBoard } from './features/kds-board/KdsBoard.tsx';
 import type { ApiClient } from './shared/api/client.ts';
 import type { Order } from './shared/api/schemas.ts';
-import type { TokenProvider, UserRole } from './shared/types/auth.ts';
+import type { ShellUser, TokenProvider, UserRole } from './shared/types/auth.ts';
 
 export interface KdsAppProps {
   readonly userRole?: UserRole;
+  readonly currentUser?: ShellUser | null;
   readonly tokenProvider?: TokenProvider;
   readonly apiBaseUrl?: string;
   readonly client?: ApiClient;
@@ -14,6 +15,7 @@ export interface KdsAppProps {
 
 export default function KdsApp({
   userRole,
+  currentUser,
   tokenProvider,
   apiBaseUrl,
   client,
@@ -25,6 +27,7 @@ export default function KdsApp({
       <h1 className="sr-only">KDS App</h1>
       <KdsBoard
         userRole={userRole}
+        currentUser={currentUser}
         tokenProvider={tokenProvider}
         apiBaseUrl={apiBaseUrl}
         client={client}

@@ -846,15 +846,52 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(deliveredBtn).toBeDisabled();
     });
 
-    it('handles item ready action on click and keyboard', () => {
-      const onItemReady = vi.fn();
-      render(<OrderCard order={reservedOrder} onItemReady={onItemReady} />);
+    it('renders undo ready banner and hides redo reject action when a redo order has pending undo', () => {
+      const deliveredRedoOrder: Order = {
+        ...reservedOrder,
+        id: 'ord-redo-undo',
+        status: OrderStatus.DELIVERED,
+        items: [
+          {
+            id: 'dish-redo-pending',
+            name: 'Corte Asado',
+            quantity: 1,
+            unitPrice: 250,
+            status: ItemStatus.PENDING,
+          },
+        ],
+      };
 
-      // Dish 1 is PENDING
+      render(
+        <OrderCard
+          order={deliveredRedoOrder}
+          isPendingUndoOrder={true}
+          undoOrderSecondsLeft={11}
+          onUndoOrderReady={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId('order-undo-countdown-ord-redo-undo')).toHaveTextContent(
+        'Comanda lista — enviando en 11s',
+      );
+      expect(screen.queryByTestId('order-redo-actions-ord-redo-undo')).not.toBeInTheDocument();
+    });
+
+    it('handles item ready action on click and keyboard in IN_PREPARATION and hides item ready buttons in RESERVED', () => {
+      const onItemReady = vi.fn();
+      const inPrepOrder: Order = { ...reservedOrder, status: OrderStatus.IN_PREPARATION };
+      const { rerender } = render(<OrderCard order={reservedOrder} onItemReady={onItemReady} />);
+
+      // PENDING (RESERVED) order strictly enforces Start Preparation before item ready actions
+      expect(screen.queryByTestId('order-item-action-dish-1')).not.toBeInTheDocument();
+
+      rerender(<OrderCard order={inPrepOrder} onItemReady={onItemReady} />);
+
+      // Dish 1 is PENDING in IN_PREPARATION
       const item1Btn = screen.getByTestId('order-item-action-dish-1');
       fireEvent.click(item1Btn);
       expect(onItemReady).toHaveBeenCalledTimes(1);
-      expect(onItemReady).toHaveBeenCalledWith(reservedOrder, reservedOrder.items[0]);
+      expect(onItemReady).toHaveBeenCalledWith(inPrepOrder, inPrepOrder.items[0]);
 
       fireEvent.keyDown(item1Btn, { key: 'Enter' });
       expect(onItemReady).toHaveBeenCalledTimes(2);
@@ -923,22 +960,22 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       const { rerender } = render(<OrderCard order={reservedOrder} />);
       const startBtn = screen.getByTestId('order-action-start-ord-reserved-1');
       const rejectBtn = screen.getByTestId('order-action-reject-ord-reserved-1');
-      const itemBtn = screen.getByTestId('order-item-action-dish-1');
 
       expect(() => {
         fireEvent.click(startBtn);
         fireEvent.keyDown(startBtn, { key: 'Enter' });
         fireEvent.click(rejectBtn);
         fireEvent.keyDown(rejectBtn, { key: 'Enter' });
-        fireEvent.click(itemBtn);
-        fireEvent.keyDown(itemBtn, { key: 'Enter' });
       }).not.toThrow();
 
       rerender(<OrderCard order={inPrepOrder} />);
       const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
+      const itemBtn = screen.getByTestId('order-item-action-dish-1');
       expect(() => {
         fireEvent.click(readyBtn);
         fireEvent.keyDown(readyBtn, { key: 'Enter' });
+        fireEvent.click(itemBtn);
+        fireEvent.keyDown(itemBtn, { key: 'Enter' });
       }).not.toThrow();
     });
 
