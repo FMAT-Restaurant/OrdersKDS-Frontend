@@ -845,18 +845,12 @@ function applyOrderMutation(
   return applyReadyOrRejectMutation(url, currentOrder, body);
 }
 
-/**
- * In-memory fetch handler backing both OrderTicketWidget and KdsApp in sandbox simulation mode.
- */
-export function executeMockFetch(
-  input: RequestInfo | URL,
+function handleCollectionRoute(
+  url: string,
+  method: string,
   init: RequestInit | undefined,
   store: SandboxStore,
-  selectedOrderId: string,
-): Response {
-  const url = extractRawUrl(input).replace(/^https?:\/\/[^/]+/, '');
-  const method = (init?.method ?? 'GET').toUpperCase();
-
+): Response | null {
   if (url.includes('/shifts/')) {
     const shiftResponse = handleSandboxShiftRoute(url, method, store, getRequestBodyString(init));
     if (shiftResponse) return shiftResponse;
@@ -872,11 +866,41 @@ export function executeMockFetch(
 
   if (method === 'POST' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?$/.test(url)) {
     const created = createNewSandboxOrder(store, getRequestBodyString(init));
-    if (!created) {
-      return shiftClosedConflictResponse();
-    }
-    return jsonResponse(created, 201);
+    return created ? jsonResponse(created, 201) : shiftClosedConflictResponse();
   }
+
+  return null;
+}
+
+function isBlockedClosedShiftConfirm(
+  url: string,
+  method: string,
+  currentOrder: Order,
+  store: SandboxStore,
+): boolean {
+  return (
+    method === 'POST' &&
+    url.includes('/confirm') &&
+    currentOrder.status === OrderStatus.CREATED &&
+    !currentOrder.confirmedAt &&
+    ensureSandboxShiftState(store).currentShift === null
+  );
+}
+
+/**
+ * In-memory fetch handler backing both OrderTicketWidget and KdsApp in sandbox simulation mode.
+ */
+export function executeMockFetch(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  store: SandboxStore,
+  selectedOrderId: string,
+): Response {
+  const url = extractRawUrl(input).replace(/^https?:\/\/[^/]+/, '');
+  const method = (init?.method ?? 'GET').toUpperCase();
+
+  const collectionResponse = handleCollectionRoute(url, method, init, store);
+  if (collectionResponse) return collectionResponse;
 
   const targetOrderId = extractOrderIdFromUrl(url, selectedOrderId);
   const currentOrder = store.orders[targetOrderId];
@@ -889,13 +913,7 @@ export function executeMockFetch(
     return jsonResponse(currentOrder, 200);
   }
 
-  if (
-    method === 'POST' &&
-    url.includes('/confirm') &&
-    currentOrder.status === OrderStatus.CREATED &&
-    !currentOrder.confirmedAt &&
-    ensureSandboxShiftState(store).currentShift === null
-  ) {
+  if (isBlockedClosedShiftConfirm(url, method, currentOrder, store)) {
     return shiftClosedConflictResponse();
   }
 
