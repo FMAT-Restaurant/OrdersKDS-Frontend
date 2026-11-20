@@ -505,5 +505,32 @@ describe('UT-FE-15 & UT-FE-16: ApiClient REST Client', () => {
         vi.unstubAllEnvs();
       }
     });
+
+    it('strips single and multiple trailing slashes from baseUrl safely in linear time', async () => {
+      const requestedUrls: string[] = [];
+      const mockFetch = vi.fn().mockImplementation((url: string) => {
+        requestedUrls.push(url);
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      });
+
+      const multiSlashClient = new ApiClient({
+        baseUrl: 'http://api.test///',
+        fetchFn: mockFetch,
+      });
+      await multiSlashClient.get('/orders');
+
+      const rootSlashClient = new ApiClient({
+        baseUrl: '/',
+        fetchFn: mockFetch,
+      });
+      await rootSlashClient.get('/orders');
+
+      expect(requestedUrls).toEqual(['http://api.test/orders', '/orders']);
+    });
   });
 });

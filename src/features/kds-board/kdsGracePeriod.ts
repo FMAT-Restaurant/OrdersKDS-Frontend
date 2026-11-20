@@ -258,7 +258,7 @@ export class KdsGracePeriodStore {
     expectedTimerId: ReturnType<typeof setTimeout>,
   ): Promise<void> {
     const current = this.entries.get(orderId);
-    if (!current || current.type !== expectedType || current.timerId !== expectedTimerId) {
+    if (current?.type !== expectedType || current.timerId !== expectedTimerId) {
       return;
     }
     this.entries.delete(orderId);

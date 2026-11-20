@@ -1219,10 +1219,10 @@ function KdsBoardContent({
   );
 
   const executeMarkItemReady = useCallback(
-    async (order: Order, item: Order['items'][number]): Promise<boolean> => {
+    (order: Order, item: Order['items'][number]): Promise<boolean> => {
       const orderId = getOrderKey(order);
       const itemId = getItemKey(item);
-      if (!orderId || !itemId) return false;
+      if (!orderId || !itemId) return Promise.resolve(false);
       const latestOrder = resolveLatestOrder(queryClient, order);
       const isRedo = isRedoOrder(latestOrder) || isRedoOrder(order);
       const text = isRedo
@@ -1305,9 +1305,9 @@ function KdsBoardContent({
   }, [graceStore]);
 
   const executeMarkOrderReady = useCallback(
-    async (order: Order): Promise<boolean> => {
+    (order: Order): Promise<boolean> => {
       const orderId = getOrderKey(order);
-      if (!orderId) return false;
+      if (!orderId) return Promise.resolve(false);
       return executeReadyPatch(`/orders/${orderId}/ready`, {
         text: `Comanda #${order.orderNumber ?? orderId} marcada como lista.`,
         type: 'success',

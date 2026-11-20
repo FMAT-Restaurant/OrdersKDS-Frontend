@@ -36,6 +36,14 @@ export function getStoredSessionToken(): string | null {
   }
 }
 
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly tokenProvider?: TokenProvider;
@@ -51,7 +59,7 @@ export class ApiClient {
     if (path.startsWith('http://') || path.startsWith('https://')) {
       return path;
     }
-    const cleanBase = this.baseUrl.replace(/\/+$/, '');
+    const cleanBase = stripTrailingSlashes(this.baseUrl);
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     return `${cleanBase}${cleanPath}`;
   }
