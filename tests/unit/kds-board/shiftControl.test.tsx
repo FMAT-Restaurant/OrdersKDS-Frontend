@@ -324,4 +324,31 @@ describe('Shift Control RBAC, UI, and API integration', () => {
     expect(created2.orderNumber).toBe(1);
     expect(created2.shiftFolio).toBe(1);
   });
+
+  it('rejects unconfirmed draft confirmation with 409 when sandbox shift is closed and allows idempotent retries', async () => {
+    const sandbox = createSandboxController(async () => 'sim-token');
+    await sandbox.mockFetch('http://localhost/shifts/current/close', { method: 'POST', body: '{}' });
+
+    const blockedConfirm = await sandbox.mockFetch('http://localhost/orders/ord-mesa-4/confirm', {
+      method: 'POST',
+      body: '{}',
+    });
+    expect(blockedConfirm.status).toBe(409);
+    const blockedBody = await blockedConfirm.json();
+    expect(blockedBody.error.code).toBe('INVALID_STATE_TRANSITION');
+
+    await sandbox.mockFetch('http://localhost/shifts/open', { method: 'POST', body: '{}' });
+    const confirmedResp = await sandbox.mockFetch('http://localhost/orders/ord-mesa-4/confirm', {
+      method: 'POST',
+      body: '{}',
+    });
+    expect(confirmedResp.status).toBe(200);
+
+    await sandbox.mockFetch('http://localhost/shifts/current/close', { method: 'POST', body: '{}' });
+    const idempotentRetry = await sandbox.mockFetch('http://localhost/orders/ord-mesa-4/confirm', {
+      method: 'POST',
+      body: '{}',
+    });
+    expect(idempotentRetry.status).toBe(200);
+  });
 });

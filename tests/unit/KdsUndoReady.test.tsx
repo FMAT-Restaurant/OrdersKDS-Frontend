@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import '@testing-library/jest-dom/vitest';
 import { KdsBoard } from '../../src/features/kds-board/KdsBoard.tsx';
 import { OrderCard, type PendingUndoItem } from '../../src/features/kds-board/OrderCard.tsx';
+import { resetPointerActionForTest } from '../../src/features/kds-board/pointerAction.ts';
 import type { Order, OrderItem } from '../../src/shared/api/schemas.ts';
 import { ItemStatus, OrderStatus } from '../../src/shared/types/order.ts';
 import type { ApiClient } from '../../src/shared/api/client.ts';
@@ -74,6 +75,7 @@ const mockMultiItemOrder: Order = {
 describe('TASK-40b: KDS Táctil - Ventana de Deshacer (Undo Grace Window - 15s)', () => {
   beforeAll(() => server.listen());
   afterEach(() => {
+    resetPointerActionForTest();
     server.resetHandlers();
     vi.clearAllMocks();
     vi.useRealTimers();
@@ -994,5 +996,206 @@ describe('TASK-40b: KDS Táctil - Ventana de Deshacer (Undo Grace Window - 15s)'
     const dialog = screen.getByTestId('confirm-ready-dialog');
     expect(within(dialog).getByText(/¿Marcar comanda como lista\?/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/Horchata/i)).toBeInTheDocument();
+  });
+
+  it('does not flush pending items or auto-confirm on ghost click when keeping order in preparation', async () => {
+    const queryClient = createTestQueryClient();
+    const twoItemReservedOrder: Order = {
+      id: 'ord-keep-prep-2',
+      orderId: 'ord-keep-prep-2',
+      orderNumber: 91,
+      tableNumber: 4,
+      isTakeaway: false,
+      status: OrderStatus.RESERVED,
+      version: 1,
+      totalAmount: 195,
+      items: [
+        { ...mockItem1, id: 'item-keep-a', itemId: 'item-keep-a', status: ItemStatus.PENDING },
+        { ...mockItem2, id: 'item-keep-b', itemId: 'item-keep-b', status: ItemStatus.PENDING },
+      ],
+      createdAt: '2026-10-19T20:00:00Z',
+    };
+
+    const mockClient = {
+      get: vi.fn().mockResolvedValue([twoItemReservedOrder]),
+      patch: vi.fn().mockResolvedValue({ success: true }),
+      post: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as ApiClient;
+
+    render(
+      <KdsBoard
+        tokenProvider={validTokenProvider}
+        client={mockClient}
+        queryClient={queryClient}
+        undoGracePeriodMs={15000}
+      />,
+    );
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('order-item-action-item-keep-a')).toBeInTheDocument();
+      expect(screen.getByTestId('order-item-action-item-keep-b')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('order-item-action-item-keep-a'));
+    });
+    expect(mockClient.patch).not.toHaveBeenCalled();
+
+    // PointerUp on last pending item opens dialog and blocks trailing ghost click on primary submit button
+    await act(async () => {
+      fireEvent.pointerUp(screen.getByTestId('order-item-action-item-keep-b'), {
+        button: 0,
+        pointerType: 'mouse',
+      });
+    });
+
+    const dialog = await screen.findByTestId('confirm-ready-dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByTestId('confirm-ready-keep-prep-btn')).toHaveFocus();
+
+    fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
+    expect(screen.getByTestId('confirm-ready-dialog')).toBeInTheDocument();
+    expect(mockClient.patch).not.toHaveBeenCalled();
+
+    // Explicitly choosing Mantener en preparación closes dialog with zero PATCH calls
+    await act(async () => {
+      fireEvent.pointerUp(screen.getByTestId('confirm-ready-keep-prep-btn'), {
+        button: 0,
+        pointerType: 'mouse',
+      });
+    });
+    expect(screen.queryByTestId('confirm-ready-dialog')).not.toBeInTheDocument();
+    expect(mockClient.patch).not.toHaveBeenCalled();
+  });
+
+  it('checks refreshed React Query cache status so stale RESERVED closures avoid duplicate start-preparation', async () => {
+    const queryClient = createTestQueryClient();
+    const initialStaleOrder: Order = {
+      id: 'ord-stale-res',
+      orderId: 'ord-stale-res',
+      orderNumber: 92,
+      tableNumber: 7,
+      isTakeaway: false,
+      status: OrderStatus.RESERVED,
+      version: 2,
+      totalAmount: 195,
+      items: [
+        { ...mockItem1, id: 'item-stale-a', itemId: 'item-stale-a', status: ItemStatus.READY },
+        { ...mockItem2, id: 'item-stale-b', itemId: 'item-stale-b', status: ItemStatus.PENDING },
+      ],
+      createdAt: '2026-10-19T20:00:00Z',
+    };
+
+    const mockClient = {
+      get: vi.fn().mockResolvedValue([initialStaleOrder]),
+      patch: vi.fn().mockResolvedValue({ success: true }),
+      post: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as ApiClient;
+
+    render(
+      <KdsBoard
+        tokenProvider={validTokenProvider}
+        client={mockClient}
+        queryClient={queryClient}
+        undoGracePeriodMs={0}
+      />,
+    );
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('order-item-action-item-stale-b')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('order-item-action-item-stale-b'));
+    });
+    expect(screen.getByTestId('confirm-ready-dialog')).toBeInTheDocument();
+
+    // Simulate cache refresh moving the order into IN_PREPARATION before the cook clicks confirm
+    await act(async () => {
+      queryClient.setQueryData(['kds', 'queue', 'active'], [
+        { ...initialStaleOrder, status: OrderStatus.IN_PREPARATION },
+      ]);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
+    });
+
+    await vi.waitFor(() => {
+      expect(mockClient.patch).toHaveBeenCalledTimes(1);
+    });
+    expect(mockClient.patch).toHaveBeenCalledWith(
+      '/orders/ord-stale-res/items/item-stale-b/ready',
+    );
+  });
+
+  it('runs prior item grace execution sequentially before final item on RESERVED order without duplicating start-preparation', async () => {
+    const queryClient = createTestQueryClient();
+    const seqOrder: Order = {
+      id: 'ord-seq-res',
+      orderId: 'ord-seq-res',
+      orderNumber: 93,
+      tableNumber: 8,
+      isTakeaway: false,
+      status: OrderStatus.RESERVED,
+      version: 1,
+      totalAmount: 195,
+      items: [
+        { ...mockItem1, id: 'item-seq-a', itemId: 'item-seq-a', status: ItemStatus.PENDING },
+        { ...mockItem2, id: 'item-seq-b', itemId: 'item-seq-b', status: ItemStatus.PENDING },
+      ],
+      createdAt: '2026-10-19T20:00:00Z',
+    };
+
+    const patchPaths: string[] = [];
+    const mockClient = {
+      get: vi.fn().mockResolvedValue([seqOrder]),
+      patch: vi.fn(async (path: string) => {
+        patchPaths.push(path);
+        return { success: true };
+      }),
+      post: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as ApiClient;
+
+    render(
+      <KdsBoard
+        tokenProvider={validTokenProvider}
+        client={mockClient}
+        queryClient={queryClient}
+        undoGracePeriodMs={15000}
+      />,
+    );
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('order-item-action-item-seq-a')).toBeInTheDocument();
+      expect(screen.getByTestId('order-item-action-item-seq-b')).toBeInTheDocument();
+    });
+
+    vi.useFakeTimers();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('order-item-action-item-seq-a'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('order-item-action-item-seq-b'));
+    });
+    expect(screen.getByTestId('confirm-ready-dialog')).toBeInTheDocument();
+    expect(patchPaths).toEqual([]);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+
+    vi.useRealTimers();
+
+    expect(patchPaths).toEqual([
+      '/orders/ord-seq-res/start-preparation',
+      '/orders/ord-seq-res/items/item-seq-a/ready',
+      '/orders/ord-seq-res/items/item-seq-b/ready',
+    ]);
   });
 });

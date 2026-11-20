@@ -1,11 +1,18 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { ConfirmReadyDialog } from '../../src/features/kds-board/dialogs/ConfirmReadyDialog.tsx';
+import {
+  pointerAction,
+  resetPointerActionForTest,
+} from '../../src/features/kds-board/pointerAction.ts';
 import type { Order } from '../../src/shared/api/schemas.ts';
 import { ItemStatus, OrderStatus } from '../../src/shared/types/order.ts';
 
 describe('ConfirmReadyDialog (User Requirement 3)', () => {
+  afterEach(() => {
+    resetPointerActionForTest();
+  });
   const mockOrder: Order = {
     id: 'ord-confirm-1',
     tableNumber: 8,
@@ -138,6 +145,71 @@ describe('ConfirmReadyDialog (User Requirement 3)', () => {
 
     // Non-Escape key does not trigger onKeepInPrep
     fireEvent.keyDown(screen.getByTestId('confirm-ready-dialog'), { key: 'Enter' });
+    expect(onKeepInPrep).not.toHaveBeenCalled();
+  });
+
+  it('focuses keep-prep button by default and blocks ghost click immediately after upstream pointerUp', () => {
+    const onConfirm = vi.fn();
+    const onKeepInPrep = vi.fn();
+    const upstreamTrigger = pointerAction(vi.fn());
+
+    render(
+      <>
+        <button type="button" data-testid="upstream-ready-btn" {...upstreamTrigger}>
+          Ready
+        </button>
+        <ConfirmReadyDialog
+          order={mockOrder}
+          item={mockItem}
+          isOpen={true}
+          onConfirm={onConfirm}
+          onKeepInPrep={onKeepInPrep}
+        />
+      </>,
+    );
+
+    expect(screen.getByTestId('confirm-ready-keep-prep-btn')).toHaveFocus();
+    expect(screen.getByTestId('confirm-ready-submit-btn')).not.toHaveFocus();
+
+    // Simulate pointerUp opening the dialog followed immediately by a trailing browser ghost click
+    fireEvent.pointerUp(screen.getByTestId('upstream-ready-btn'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    // Explicit intentional pointerUp on confirm button does submit
+    fireEvent.pointerUp(screen.getByTestId('confirm-ready-submit-btn'), {
+      button: 0,
+      pointerType: 'mouse',
+    });
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onKeepInPrep).not.toHaveBeenCalled();
+  });
+
+  it('ignores pointerUp actions on both buttons while isSubmitting is true', () => {
+    const onConfirm = vi.fn();
+    const onKeepInPrep = vi.fn();
+
+    render(
+      <ConfirmReadyDialog
+        order={mockOrder}
+        item={mockItem}
+        isOpen={true}
+        isSubmitting={true}
+        onConfirm={onConfirm}
+        onKeepInPrep={onKeepInPrep}
+      />,
+    );
+
+    fireEvent.pointerUp(screen.getByTestId('confirm-ready-submit-btn'), {
+      button: 0,
+      pointerType: 'mouse',
+    });
+    fireEvent.pointerUp(screen.getByTestId('confirm-ready-keep-prep-btn'), {
+      button: 0,
+      pointerType: 'mouse',
+    });
+
+    expect(onConfirm).not.toHaveBeenCalled();
     expect(onKeepInPrep).not.toHaveBeenCalled();
   });
 });

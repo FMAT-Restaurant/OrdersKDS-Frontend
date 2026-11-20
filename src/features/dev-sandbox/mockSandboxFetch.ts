@@ -727,6 +727,18 @@ function handleSandboxShiftRoute(
   return null;
 }
 
+function shiftClosedConflictResponse(): Response {
+  return jsonResponse(
+    {
+      error: {
+        code: 'INVALID_STATE_TRANSITION',
+        message: 'The current kitchen shift is closed.',
+      },
+    },
+    409,
+  );
+}
+
 function createNewSandboxOrder(store: SandboxStore, body: string | null): Order | null {
   const shiftState = ensureSandboxShiftState(store);
   if (!shiftState.currentShift) {
@@ -861,15 +873,7 @@ export function executeMockFetch(
   if (method === 'POST' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?$/.test(url)) {
     const created = createNewSandboxOrder(store, getRequestBodyString(init));
     if (!created) {
-      return jsonResponse(
-        {
-          error: {
-            code: 'INVALID_STATE_TRANSITION',
-            message: 'The current kitchen shift is closed.',
-          },
-        },
-        409,
-      );
+      return shiftClosedConflictResponse();
     }
     return jsonResponse(created, 201);
   }
@@ -883,6 +887,16 @@ export function executeMockFetch(
 
   if (method === 'GET') {
     return jsonResponse(currentOrder, 200);
+  }
+
+  if (
+    method === 'POST' &&
+    url.includes('/confirm') &&
+    currentOrder.status === OrderStatus.CREATED &&
+    !currentOrder.confirmedAt &&
+    ensureSandboxShiftState(store).currentShift === null
+  ) {
+    return shiftClosedConflictResponse();
   }
 
   const updated = applyOrderMutation(url, method, currentOrder, getRequestBodyString(init));

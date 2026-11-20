@@ -316,6 +316,19 @@ function formatUndoFeedbackMessage(
   };
 }
 
+function resolveLatestOrder(queryClient: QueryClient, fallbackOrder: Order): Order {
+  const targetId = getOrderKey(fallbackOrder);
+  const queues = [
+    queryClient.getQueryData<Order[]>(['kds', 'queue', 'active']),
+    queryClient.getQueryData<Order[]>(['kds', 'queue', 'delivered']),
+  ];
+  for (const queue of queues) {
+    const match = queue?.find((candidate) => getOrderKey(candidate) === targetId);
+    if (match) return match;
+  }
+  return fallbackOrder;
+}
+
 function countRemainingPendingItems(
   order: Order,
   targetItemId: string,
@@ -1180,20 +1193,36 @@ function KdsBoardContent({
     setFeedbackMessage(formatUndoFeedbackMessage(current));
   }, []);
 
+  const ensureOrderInPreparation = useCallback(
+    async (order: Order) => {
+      const orderId = getOrderKey(order);
+      if (!orderId || !actionClient) return;
+      const latestOrder = resolveLatestOrder(queryClient, order);
+      if (latestOrder.status === 'RESERVED') {
+        await actionClient.patch(`/orders/${orderId}/start-preparation`);
+      }
+    },
+    [actionClient, queryClient],
+  );
+
   const executeMarkItemReady = useCallback(
-    async (order: Order, item: Order['items'][number]) => {
+    async (
+      order: Order,
+      item: Order['items'][number],
+      options?: { readonly skipStartPrep?: boolean },
+    ) => {
       const orderId = getOrderKey(order);
       const itemId = getItemKey(item);
       if (!orderId || !itemId) return;
-      if (order.status === 'RESERVED' && actionClient) {
-        await actionClient.patch(`/orders/${orderId}/start-preparation`);
+      if (!options?.skipStartPrep) {
+        await ensureOrderInPreparation(order);
       }
       await runAction(`item:${itemId}`, `/orders/${orderId}/items/${itemId}/ready`, undefined, {
         text: `${item.name} marcado como listo.`,
         type: 'success',
       });
     },
-    [actionClient, runAction],
+    [ensureOrderInPreparation, runAction],
   );
 
   const startItemReadyGracePeriod = useCallback(
@@ -1246,16 +1275,15 @@ function KdsBoardContent({
         targetItemId,
         optimisticReadyItemIdsRef.current,
       );
-      // Flush any pending item countdowns across the board
-      void flushPendingItemUndos();
 
       if (remainingCount === 0) {
         setConfirmReadyTarget({ order, item });
         return;
       }
+
       startItemReadyGracePeriod(order, item);
     },
-    [flushPendingItemUndos, startItemReadyGracePeriod],
+    [startItemReadyGracePeriod],
   );
 
   // Dispatch pending item/order ready on window unload/reload (TASK-40b)
@@ -1273,18 +1301,21 @@ function KdsBoardContent({
   }, []);
 
   const executeMarkOrderReady = useCallback(
-    async (order: Order) => {
+    async (
+      order: Order,
+      options?: { readonly skipStartPrep?: boolean },
+    ) => {
       const orderId = getOrderKey(order);
       if (!orderId) return;
-      if (order.status === 'RESERVED' && actionClient) {
-        await actionClient.patch(`/orders/${orderId}/start-preparation`);
+      if (!options?.skipStartPrep) {
+        await ensureOrderInPreparation(order);
       }
       await runAction('order-ready', `/orders/${orderId}/ready`, undefined, {
         text: `Comanda #${order.orderNumber ?? orderId} marcada como lista.`,
         type: 'success',
       });
     },
-    [actionClient, runAction],
+    [ensureOrderInPreparation, runAction],
   );
 
   const startOrderReadyGracePeriod = useCallback(
@@ -1292,14 +1323,12 @@ function KdsBoardContent({
       const orderId = getOrderKey(order);
       if (!orderId) return;
 
-      // Clear any pending undo for this order (e.g. an individual item on this order)
+      // Clear any pending undo for this order and await it before final order completion.
       const pendingItemExecution = cancelExistingOrderUndoEntry(
         pendingUndoRefs.current,
         orderId,
       );
-      if (pendingItemExecution) {
-        void pendingItemExecution();
-      }
+      const pendingPromise = pendingItemExecution ? pendingItemExecution() : null;
 
       if (triggeringItem) {
         const triggeringItemId = getItemKey(triggeringItem);
@@ -1307,13 +1336,21 @@ function KdsBoardContent({
         setOptimisticReadyItemIds(new Set(optimisticReadyItemIdsRef.current));
       }
 
+      const runFinalReady = async () => {
+        if (pendingPromise) {
+          await pendingPromise;
+        }
+        const options = { skipStartPrep: Boolean(pendingPromise) };
+        if (triggeringItem) {
+          await executeMarkItemReady(order, triggeringItem, options);
+        } else {
+          await executeMarkOrderReady(order, options);
+        }
+      };
+
       const graceMs = undoGracePeriodMs ?? 15000;
       if (graceMs <= 0) {
-        if (triggeringItem) {
-          void executeMarkItemReady(order, triggeringItem);
-        } else {
-          void executeMarkOrderReady(order);
-        }
+        void runFinalReady();
         return;
       }
 
@@ -1326,13 +1363,7 @@ function KdsBoardContent({
         order,
         item: triggeringItem,
         graceMs,
-        execute: async () => {
-          if (triggeringItem) {
-            await executeMarkItemReady(order, triggeringItem);
-          } else {
-            await executeMarkOrderReady(order);
-          }
-        },
+        execute: runFinalReady,
         pendingUndoRefs,
         setPendingUndoMap,
       });
