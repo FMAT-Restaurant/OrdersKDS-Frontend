@@ -211,6 +211,7 @@ function OrderCardItem({
   isManyItems = false,
   isCompact = false,
   isReadOnlyExpired = false,
+  allowItemReady = true,
 }: Readonly<{
   item: OrderItem;
   index: number;
@@ -225,6 +226,7 @@ function OrderCardItem({
   isManyItems?: boolean;
   isCompact?: boolean;
   isReadOnlyExpired?: boolean;
+  allowItemReady?: boolean;
 }>) {
   const itemId = getItemKey(item, index);
   const prepTime = item.preparationTimeText ?? item.preparation_time_text ?? null;
@@ -291,7 +293,7 @@ function OrderCardItem({
             </span>
           )}
 
-          {!isPendingUndo && !isReadOnlyExpired && (
+          {!isPendingUndo && !isReadOnlyExpired && (allowItemReady || isFinished) && (
             <OrderItemReadyButton
               itemId={itemId}
               itemName={item.name}
@@ -705,8 +707,6 @@ function OrderCardReadyAction({
   onMarkOrderReady?: (order: Order) => void;
   onUndoOrderReady?: (order: Order) => void;
 }>) {
-  if (order.status !== 'IN_PREPARATION') return null;
-
   if (isPendingUndoOrder) {
     return (
       <OrderReadyUndoBanner
@@ -717,6 +717,8 @@ function OrderCardReadyAction({
       />
     );
   }
+
+  if (order.status !== 'IN_PREPARATION') return null;
 
   return (
     <button
@@ -743,14 +745,17 @@ function OrderCardRedoActions({
   displayId,
   pendingAction,
   isCompact = false,
+  isPendingUndoOrder = false,
   onRejectSupplies,
 }: Readonly<{
   order: Order;
   displayId: string;
   pendingAction?: string;
   isCompact?: boolean;
+  isPendingUndoOrder?: boolean;
   onRejectSupplies?: (order: Order, item?: OrderItem) => void;
 }>) {
+  if (isPendingUndoOrder) return null;
   const isRedoOrder =
     order.status === 'DELIVERED' &&
     order.items.some((i) => i.status === 'PENDING');
@@ -983,6 +988,8 @@ export function OrderCard({
         {order.items.map((item, index) => {
           const itemId = getItemKey(item, index);
           const isRedoPending = order.status === 'DELIVERED' && item.status === 'PENDING';
+          const allowItemReady =
+            !isOrderExpired && (order.status === 'IN_PREPARATION' || isRedoPending);
           const isPendingUndo = pendingUndoItem?.itemId === itemId;
           const isOptimisticallyReady =
             Boolean(optimisticReadyItemIds?.has(itemId)) ||
@@ -1004,6 +1011,7 @@ export function OrderCard({
               isManyItems={isManyItems}
               isCompact={isCompact}
               isReadOnlyExpired={isOrderExpired}
+              allowItemReady={allowItemReady}
             />
           );
         })}

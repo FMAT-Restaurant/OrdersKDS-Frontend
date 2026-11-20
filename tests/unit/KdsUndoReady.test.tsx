@@ -1000,13 +1000,13 @@ describe('TASK-40b: KDS Táctil - Ventana de Deshacer (Undo Grace Window - 15s)'
 
   it('does not flush pending items or auto-confirm on ghost click when keeping order in preparation', async () => {
     const queryClient = createTestQueryClient();
-    const twoItemReservedOrder: Order = {
+    const twoItemOrder: Order = {
       id: 'ord-keep-prep-2',
       orderId: 'ord-keep-prep-2',
       orderNumber: 91,
       tableNumber: 4,
       isTakeaway: false,
-      status: OrderStatus.RESERVED,
+      status: OrderStatus.IN_PREPARATION,
       version: 1,
       totalAmount: 195,
       items: [
@@ -1017,7 +1017,7 @@ describe('TASK-40b: KDS Táctil - Ventana de Deshacer (Undo Grace Window - 15s)'
     };
 
     const mockClient = {
-      get: vi.fn().mockResolvedValue([twoItemReservedOrder]),
+      get: vi.fn().mockResolvedValue([twoItemOrder]),
       patch: vi.fn().mockResolvedValue({ success: true }),
       post: vi.fn().mockResolvedValue({ success: true }),
     } as unknown as ApiClient;
@@ -1068,26 +1068,26 @@ describe('TASK-40b: KDS Táctil - Ventana de Deshacer (Undo Grace Window - 15s)'
     expect(mockClient.patch).not.toHaveBeenCalled();
   });
 
-  it('checks refreshed React Query cache status so stale RESERVED closures avoid duplicate start-preparation', async () => {
+  it('sends only item ready patch without auto start-preparation when confirming final item in IN_PREPARATION', async () => {
     const queryClient = createTestQueryClient();
-    const initialStaleOrder: Order = {
-      id: 'ord-stale-res',
-      orderId: 'ord-stale-res',
+    const inPrepOrder: Order = {
+      id: 'ord-inprep-final',
+      orderId: 'ord-inprep-final',
       orderNumber: 92,
       tableNumber: 7,
       isTakeaway: false,
-      status: OrderStatus.RESERVED,
+      status: OrderStatus.IN_PREPARATION,
       version: 2,
       totalAmount: 195,
       items: [
-        { ...mockItem1, id: 'item-stale-a', itemId: 'item-stale-a', status: ItemStatus.READY },
-        { ...mockItem2, id: 'item-stale-b', itemId: 'item-stale-b', status: ItemStatus.PENDING },
+        { ...mockItem1, id: 'item-inprep-a', itemId: 'item-inprep-a', status: ItemStatus.READY },
+        { ...mockItem2, id: 'item-inprep-b', itemId: 'item-inprep-b', status: ItemStatus.PENDING },
       ],
       createdAt: '2026-10-19T20:00:00Z',
     };
 
     const mockClient = {
-      get: vi.fn().mockResolvedValue([initialStaleOrder]),
+      get: vi.fn().mockResolvedValue([inPrepOrder]),
       patch: vi.fn().mockResolvedValue({ success: true }),
       post: vi.fn().mockResolvedValue({ success: true }),
     } as unknown as ApiClient;
@@ -1102,20 +1102,13 @@ describe('TASK-40b: KDS Táctil - Ventana de Deshacer (Undo Grace Window - 15s)'
     );
 
     await vi.waitFor(() => {
-      expect(screen.getByTestId('order-item-action-item-stale-b')).toBeInTheDocument();
+      expect(screen.getByTestId('order-item-action-item-inprep-b')).toBeInTheDocument();
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByTestId('order-item-action-item-stale-b'));
+      fireEvent.click(screen.getByTestId('order-item-action-item-inprep-b'));
     });
     expect(screen.getByTestId('confirm-ready-dialog')).toBeInTheDocument();
-
-    // Simulate cache refresh moving the order into IN_PREPARATION before the cook clicks confirm
-    await act(async () => {
-      queryClient.setQueryData(['kds', 'queue', 'active'], [
-        { ...initialStaleOrder, status: OrderStatus.IN_PREPARATION },
-      ]);
-    });
 
     await act(async () => {
       fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
@@ -1125,19 +1118,19 @@ describe('TASK-40b: KDS Táctil - Ventana de Deshacer (Undo Grace Window - 15s)'
       expect(mockClient.patch).toHaveBeenCalledTimes(1);
     });
     expect(mockClient.patch).toHaveBeenCalledWith(
-      '/orders/ord-stale-res/items/item-stale-b/ready',
+      '/orders/ord-inprep-final/items/item-inprep-b/ready',
     );
   });
 
-  it('runs prior item grace execution sequentially before final item on RESERVED order without duplicating start-preparation', async () => {
+  it('runs prior item grace execution sequentially before final item in IN_PREPARATION', async () => {
     const queryClient = createTestQueryClient();
     const seqOrder: Order = {
-      id: 'ord-seq-res',
-      orderId: 'ord-seq-res',
+      id: 'ord-seq-inprep',
+      orderId: 'ord-seq-inprep',
       orderNumber: 93,
       tableNumber: 8,
       isTakeaway: false,
-      status: OrderStatus.RESERVED,
+      status: OrderStatus.IN_PREPARATION,
       version: 1,
       totalAmount: 195,
       items: [
@@ -1193,9 +1186,171 @@ describe('TASK-40b: KDS Táctil - Ventana de Deshacer (Undo Grace Window - 15s)'
     vi.useRealTimers();
 
     expect(patchPaths).toEqual([
-      '/orders/ord-seq-res/start-preparation',
-      '/orders/ord-seq-res/items/item-seq-a/ready',
-      '/orders/ord-seq-res/items/item-seq-b/ready',
+      '/orders/ord-seq-inprep/items/item-seq-a/ready',
+      '/orders/ord-seq-inprep/items/item-seq-b/ready',
     ]);
+  });
+
+  it('hides individual item ready buttons on RESERVED orders in KdsBoard', async () => {
+    const queryClient = createTestQueryClient();
+    const reservedOrder: Order = {
+      id: 'ord-reserved-state-machine',
+      orderId: 'ord-reserved-state-machine',
+      orderNumber: 94,
+      tableNumber: 2,
+      isTakeaway: false,
+      status: OrderStatus.RESERVED,
+      version: 1,
+      totalAmount: 120,
+      items: [{ ...mockItem1, id: 'item-res-hidden', itemId: 'item-res-hidden', status: ItemStatus.PENDING }],
+      createdAt: '2026-10-19T20:00:00Z',
+    };
+
+    const mockClient = {
+      get: vi.fn().mockResolvedValue([reservedOrder]),
+      patch: vi.fn().mockResolvedValue({ success: true }),
+      post: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as ApiClient;
+
+    render(
+      <KdsBoard
+        tokenProvider={validTokenProvider}
+        client={mockClient}
+        queryClient={queryClient}
+      />,
+    );
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('order-action-start-ord-reserved-state-machine')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('order-item-action-item-res-hidden')).not.toBeInTheDocument();
+  });
+
+  it('keeps redo 15s countdown visible on redo card, across tabs, and persistent across KdsBoard remounts', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const redoOrder: Order = {
+      id: 'ord-redo-persist',
+      orderId: 'ord-redo-persist',
+      orderNumber: 95,
+      tableNumber: 6,
+      isTakeaway: false,
+      status: OrderStatus.DELIVERED,
+      version: 4,
+      totalAmount: 250,
+      items: [
+        {
+          ...mockItem1,
+          id: 'item-redo-1',
+          itemId: 'item-redo-1',
+          name: 'Corte Wagyu',
+          status: ItemStatus.PENDING,
+        },
+      ],
+      createdAt: '2026-10-19T20:00:00Z',
+    };
+
+    const mockClient = {
+      get: vi.fn().mockResolvedValue([redoOrder]),
+      patch: vi.fn().mockResolvedValue({ success: true }),
+      post: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as ApiClient;
+
+    const { unmount } = render(
+      <KdsBoard
+        tokenProvider={validTokenProvider}
+        client={mockClient}
+        queryClient={queryClient}
+        undoGracePeriodMs={15000}
+      />,
+    );
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('order-item-action-item-redo-1')).toBeInTheDocument();
+    });
+
+    vi.useFakeTimers();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('tab-redo-view'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('order-item-action-item-redo-1'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
+    });
+
+    // Redo card renders undo banner & countdown immediately
+    expect(screen.getByTestId('order-undo-countdown-ord-redo-persist')).toHaveTextContent(
+      'Comanda lista — enviando en 15s',
+    );
+
+    // Switching tabs displays the persistent cross-tab undo strip
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: /en preparaci/i }));
+    });
+    expect(screen.getByTestId('kds-pending-undo-strip')).toHaveTextContent('Comanda #95');
+    expect(screen.getByTestId('kds-pending-undo-strip')).toHaveTextContent('Rehechura (Corte Wagyu)');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(screen.getByTestId('kds-pending-strip-item-ord-redo-persist')).toHaveTextContent('11s');
+
+    // Simulate navigating to another SPA view (unmount) for 3 seconds, then coming back
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(mockClient.patch).not.toHaveBeenCalled();
+
+    const remounted = render(
+      <KdsBoard
+        tokenProvider={validTokenProvider}
+        client={mockClient}
+        queryClient={queryClient}
+        undoGracePeriodMs={15000}
+      />,
+    );
+
+    // Countdown stayed at 8s rather than resetting to 15s
+    expect(screen.getByTestId('order-undo-countdown-ord-redo-persist')).toHaveTextContent(
+      'Comanda lista — enviando en 8s',
+    );
+
+    // Cancel via strip on another tab and confirm redo feedback message
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: /pendientes/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('kds-pending-strip-undo-ord-redo-persist'));
+    });
+    expect(screen.getByTestId('kds-action-feedback')).toHaveTextContent(
+      'Envío cancelado. La rehechura de Corte Wagyu se mantiene pendiente.',
+    );
+
+    // Re-trigger redo countdown, unmount completely, and verify PATCH still executes at expiry
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('tab-redo-view'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('order-item-action-item-redo-1'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-ready-submit-btn'));
+    });
+    remounted.unmount();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    vi.useRealTimers();
+
+    expect(mockClient.patch).toHaveBeenCalledTimes(1);
+    expect(mockClient.patch).toHaveBeenCalledWith(
+      '/orders/ord-redo-persist/items/item-redo-1/ready',
+    );
   });
 });

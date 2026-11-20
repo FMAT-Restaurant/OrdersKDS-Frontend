@@ -223,10 +223,33 @@ describe('OrderDetailsDialog Component Suite', () => {
     fireEvent.click(startBtn);
     expect(onStartPreparation).toHaveBeenCalledWith(reservedOrder);
 
+    // RESERVED order does not show individual pending item ready buttons
+    expect(screen.queryByTestId('order-details-item-action-item-1')).not.toBeInTheDocument();
+
     const rejectBtn = screen.getByTestId('order-details-action-reject');
     expect(rejectBtn).toHaveTextContent('Rechazar insumo');
     fireEvent.click(rejectBtn);
     expect(onRejectSupplies).toHaveBeenCalledWith(reservedOrder);
+  });
+
+  it('renders order ready undo banner on DELIVERED redo orders when isPendingUndoOrder is true', () => {
+    const redoOrder: Order = {
+      ...mockOrder,
+      status: 'DELIVERED',
+    };
+    render(
+      <OrderDetailsDialog
+        order={redoOrder}
+        isOpen={true}
+        onClose={vi.fn()}
+        isPendingUndoOrder={true}
+        undoOrderSecondsLeft={12}
+        onUndoOrderReady={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('order-details-undo-countdown')).toHaveTextContent(
+      'Enviando en 12s',
+    );
   });
 
   it('enforces >= 48px touch targets for buttons in accordance with WCAG AA', () => {

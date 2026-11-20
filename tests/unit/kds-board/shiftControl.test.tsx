@@ -351,4 +351,78 @@ describe('Shift Control RBAC, UI, and API integration', () => {
     });
     expect(idempotentRetry.status).toBe(200);
   });
+
+  it('supports floating VirtualKeyboard inside ShiftControlDialog and sends composed shift note', async () => {
+    let postedBody: Record<string, unknown> | null = null;
+    server.use(
+      http.post('http://localhost/shifts/current/close', async ({ request }) => {
+        postedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(
+          {
+            id: 'shift-1',
+            shiftId: 'shift-1',
+            shiftNumber: 1,
+            status: 'CLOSED',
+            lastOrderFolio: 2,
+            openedAt: '2026-04-12T10:00:00Z',
+            closedAt: '2026-04-12T18:00:00Z',
+            version: 2,
+          },
+          { status: 200 },
+        );
+      }),
+    );
+
+    renderShiftBar({ userRole: UserRole.ADMIN });
+    fireEvent.click(await screen.findByTestId('shift-close-btn'));
+    expect(screen.queryByTestId('virtual-keyboard')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('shift-dialog-toggle-keyboard'));
+    expect(screen.getByTestId('virtual-keyboard')).toBeInTheDocument();
+
+    for (const letter of ['O', 'K']) {
+      fireEvent.click(screen.getByTestId(`virtual-key-${letter}`));
+    }
+    fireEvent.click(screen.getByTestId('virtual-key-space'));
+    fireEvent.click(screen.getByTestId('virtual-key-A'));
+    fireEvent.click(screen.getByTestId('virtual-key-backspace'));
+    expect(screen.getByTestId('shift-dialog-notes-input')).toHaveValue('OK ');
+
+    fireEvent.click(screen.getByTestId('virtual-keyboard-close'));
+    expect(screen.queryByTestId('virtual-keyboard')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('shift-dialog-confirm-btn'));
+    await waitFor(() => {
+      expect(postedBody).toEqual({ notes: 'OK' });
+    });
+  });
+
+  it('handles multi-item kitchen-reject breakdown in sandbox mockFetch', async () => {
+    const sandbox = createSandboxController(async () => 'sim-token');
+    const createdResp = await sandbox.mockFetch('http://localhost/orders', {
+      method: 'POST',
+      body: JSON.stringify({ tableNumber: 9 }),
+    });
+    const created = (await createdResp.json()) as { id: string };
+
+    const rejectResp = await sandbox.mockFetch(
+      `http://localhost/orders/${created.id}/items/item-a/kitchen-reject`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          reason: 'Faltan dos ingredientes',
+          items: [
+            { itemId: 'item-a', availableQuantity: 0, reason: 'Sin pan' },
+          ],
+        }),
+      },
+    );
+    expect(rejectResp.status).toBe(200);
+    const rejectedOrder = (await rejectResp.json()) as {
+      status: string;
+      rejectionDetails?: { rejectedItems?: Array<Record<string, unknown>> };
+    };
+    expect(rejectedOrder.status).toBe('REJECTED');
+    expect(rejectedOrder.rejectionDetails?.rejectedItems).toBeDefined();
+  });
 });

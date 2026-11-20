@@ -4,6 +4,8 @@
  */
 
 import { useState } from 'react';
+import { pointerAction } from '../pointerAction.ts';
+import { VirtualKeyboard } from './VirtualKeyboard.tsx';
 
 export type ShiftControlMode = 'close' | 'open' | 'rollover';
 
@@ -63,6 +65,7 @@ export function ShiftControlDialog({
   onCancel,
 }: Readonly<ShiftControlDialogProps>) {
   const [notes, setNotes] = useState('');
+  const [showKeyboard, setShowKeyboard] = useState(false);
   const copy = DIALOG_COPY[mode];
   const description = buildDialogDescription(mode, currentShiftNumber, nextShiftNumber);
 
@@ -72,7 +75,9 @@ export function ShiftControlDialog({
       aria-modal="true"
       aria-labelledby="shift-control-dialog-title"
       data-testid="shift-control-dialog"
-      className="orders-kds-root fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 border-none"
+      className={`orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex justify-center bg-black/60 border-none overflow-y-auto ${
+        showKeyboard ? 'items-start pt-4 sm:pt-8 pb-[310px]' : 'items-center'
+      }`}
     >
       <div className="w-full max-w-md rounded-card bg-surface text-ink border border-border shadow-2xl p-6 space-y-4">
         <h2 id="shift-control-dialog-title" className="text-lg font-extrabold">
@@ -81,9 +86,20 @@ export function ShiftControlDialog({
         <p className="text-sm text-ink-muted leading-relaxed">{description}</p>
 
         <div className="space-y-1.5">
-          <label htmlFor="shift-dialog-notes" className="block text-xs font-bold uppercase text-ink-muted">
-            Notas del turno (opcional)
-          </label>
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="shift-dialog-notes" className="block text-xs font-bold uppercase text-ink-muted">
+              Notas del turno (opcional)
+            </label>
+            <button
+              type="button"
+              data-testid="shift-dialog-toggle-keyboard"
+              disabled={isSubmitting}
+              {...pointerAction(() => setShowKeyboard((prev) => !prev))}
+              className="text-xs font-bold text-fmat-primary hover:underline px-2 py-1 cursor-pointer disabled:opacity-40"
+            >
+              {showKeyboard ? 'Ocultar teclado' : 'Teclado en pantalla'}
+            </button>
+          </div>
           <textarea
             id="shift-dialog-notes"
             data-testid="shift-dialog-notes-input"
@@ -117,6 +133,18 @@ export function ShiftControlDialog({
           </button>
         </div>
       </div>
+
+      {showKeyboard && (
+        <VirtualKeyboard
+          floating
+          title="Teclado en pantalla · Notas del turno"
+          value={notes}
+          onChange={setNotes}
+          maxLength={500}
+          disabled={isSubmitting}
+          onClose={() => setShowKeyboard(false)}
+        />
+      )}
     </dialog>
   );
 }

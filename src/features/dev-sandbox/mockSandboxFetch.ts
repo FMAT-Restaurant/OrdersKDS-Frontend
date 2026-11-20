@@ -550,34 +550,82 @@ export function handleMarkOrderReady(order: Order): Order {
   };
 }
 
-function buildSandboxReservedItems(
+interface ParsedKitchenRejectEntry {
+  readonly itemId: string;
+  readonly availableQuantity: number;
+  readonly reason?: string;
+}
+
+function clampSandboxAvailableQuantity(item: OrderItem, rawAvailable: number): number {
+  const maxPartial = Math.max(0, item.quantity - 1);
+  return Math.max(0, Math.min(rawAvailable, maxPartial));
+}
+
+interface RejectedTargetEntry {
+  readonly item: OrderItem;
+  readonly availableQuantity: number;
+  readonly reason: string;
+}
+
+function parseSingleRejectTarget(
+  rawEntry: unknown,
   order: Order,
-  targetItem: OrderItem | undefined,
-  effectiveAvailable: number,
-) {
-  const reserved: Array<Record<string, unknown>> = [];
-  if (targetItem && effectiveAvailable > 0) {
-    reserved.push({
-      itemId: targetItem.id ?? targetItem.itemId,
-      dishId: targetItem.dishId,
-      name: targetItem.name,
-      reservedQuantity: effectiveAvailable,
-    });
-  }
-  const targetKey = targetItem ? (targetItem.id ?? targetItem.itemId) : undefined;
-  for (const item of order.items) {
-    const itemKey = item.id ?? item.itemId;
-    if (itemKey === targetKey || item.status === ItemStatus.CANCELLED) {
-      continue;
+  seen: Set<string>,
+  defaultReason: string,
+): RejectedTargetEntry | null {
+  if (!rawEntry || typeof rawEntry !== 'object') return null;
+  const entryObj = rawEntry as Partial<ParsedKitchenRejectEntry>;
+  const matched = order.items.find((it) => (it.id ?? it.itemId) === entryObj.itemId);
+  if (!matched) return null;
+
+  const matchedKey = matched.id ?? matched.itemId ?? matched.name;
+  if (seen.has(matchedKey)) return null;
+  seen.add(matchedKey);
+
+  const rawQty =
+    typeof entryObj.availableQuantity === 'number' ? entryObj.availableQuantity : 0;
+  const itemReason =
+    typeof entryObj.reason === 'string' && entryObj.reason.trim()
+      ? entryObj.reason.trim()
+      : defaultReason;
+
+  return {
+    item: matched,
+    availableQuantity: clampSandboxAvailableQuantity(matched, rawQty),
+    reason: itemReason,
+  };
+}
+
+function resolveSandboxRejectTargets(
+  order: Order,
+  targetItemId: string | undefined,
+  parsed: Record<string, unknown> | null,
+  defaultReason: string,
+): RejectedTargetEntry[] {
+  const rawItems = Array.isArray(parsed?.items) ? parsed.items : null;
+  if (rawItems && rawItems.length > 0) {
+    const entries: RejectedTargetEntry[] = [];
+    const seen = new Set<string>();
+    for (const rawEntry of rawItems) {
+      const target = parseSingleRejectTarget(rawEntry, order, seen, defaultReason);
+      if (target) entries.push(target);
     }
-    reserved.push({
-      itemId: itemKey,
-      dishId: item.dishId,
-      name: item.name,
-      reservedQuantity: item.quantity,
-    });
+    if (entries.length > 0) {
+      return entries;
+    }
   }
-  return reserved;
+
+  const fallbackTarget =
+    order.items.find((it) => (it.id ?? it.itemId) === targetItemId) ?? order.items[0];
+  if (!fallbackTarget) return [];
+  const rawAvailable = typeof parsed?.availableQuantity === 'number' ? parsed.availableQuantity : 0;
+  return [
+    {
+      item: fallbackTarget,
+      availableQuantity: clampSandboxAvailableQuantity(fallbackTarget, rawAvailable),
+      reason: defaultReason,
+    },
+  ];
 }
 
 export function handleKitchenReject(
@@ -586,34 +634,57 @@ export function handleKitchenReject(
   body?: string | null,
 ): Order {
   const parsed = parseJsonRecord(body);
-  const reason =
+  const defaultReason =
     typeof parsed?.reason === 'string' && parsed.reason.trim()
       ? parsed.reason.trim()
       : 'Insumo físico insuficiente en cocina';
-  const targetItem = order.items.find((it) => (it.id ?? it.itemId) === targetItemId) ?? order.items[0];
-  const rawAvailable = typeof parsed?.availableQuantity === 'number' ? parsed.availableQuantity : 0;
-  const maxPartial = targetItem ? Math.max(0, targetItem.quantity - 1) : 0;
-  const effectiveAvailable = Math.max(0, Math.min(rawAvailable, maxPartial));
+  const targets = resolveSandboxRejectTargets(order, targetItemId, parsed, defaultReason);
+  const rejectedMap = new Map(
+    targets.map((entry) => [entry.item.id ?? entry.item.itemId ?? entry.item.name, entry]),
+  );
+
+  const rejectedItems: Array<Record<string, unknown>> = [];
+  const reservedItems: Array<Record<string, unknown>> = [];
+
+  for (const item of order.items) {
+    if (item.status === ItemStatus.CANCELLED) continue;
+    const itemKey = item.id ?? item.itemId ?? item.name;
+    const rejected = rejectedMap.get(itemKey);
+    if (!rejected) {
+      reservedItems.push({
+        itemId: itemKey,
+        dishId: item.dishId,
+        name: item.name,
+        reservedQuantity: item.quantity,
+      });
+      continue;
+    }
+    rejectedItems.push({
+      itemId: itemKey,
+      dishId: item.dishId,
+      name: item.name,
+      requestedQuantity: item.quantity,
+      availableQuantity: rejected.availableQuantity,
+      reason: rejected.reason,
+    });
+    if (rejected.availableQuantity > 0) {
+      reservedItems.push({
+        itemId: itemKey,
+        dishId: item.dishId,
+        name: item.name,
+        reservedQuantity: rejected.availableQuantity,
+      });
+    }
+  }
 
   return {
     ...order,
     status: OrderStatus.REJECTED,
     rejectionDetails: {
       source: 'kitchen',
-      reason,
-      rejectedItems: targetItem
-        ? [
-            {
-              itemId: targetItem.id ?? targetItem.itemId,
-              dishId: targetItem.dishId,
-              name: targetItem.name,
-              requestedQuantity: targetItem.quantity,
-              availableQuantity: effectiveAvailable,
-              reason,
-            },
-          ]
-        : [],
-      reservedItems: buildSandboxReservedItems(order, targetItem, effectiveAvailable),
+      reason: defaultReason,
+      rejectedItems,
+      reservedItems,
     },
     version: order.version + 1,
     updatedAt: new Date().toISOString(),

@@ -251,19 +251,13 @@ function AdminCustomReasonSection({
             id="admin-void-custom-reason-input"
             type="text"
             value={customReason}
+            maxLength={500}
             disabled={!isOperable || isSubmitting}
             onChange={(event) => onChangeReason(event.target.value)}
             placeholder="Observaciones o motivo específico..."
             data-testid="admin-void-custom-reason-input"
             className="w-full min-h-[48px] px-4 py-2 rounded-md bg-surface border border-border text-ink placeholder:text-muted text-base font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
           />
-          {showKeyboard && (
-            <VirtualKeyboard
-              value={customReason}
-              onChange={onChangeReason}
-              disabled={!isOperable || isSubmitting}
-            />
-          )}
         </div>
       )}
     </section>
@@ -367,15 +361,19 @@ export function AdminVoidDialog({
     onConfirm(order, { reason: finalReason, chargeCustomer });
   };
 
+  const isKeyboardVisible = customReasonActive && showKeyboard;
+
   return (
     <dialog
       open
       aria-modal="true"
       aria-labelledby="admin-void-dialog-title"
       data-testid="admin-void-dialog"
-      className="orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto"
+      className={`orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto ${
+        isKeyboardVisible ? 'items-start pt-3 sm:pt-6 pb-[310px]' : 'items-center'
+      }`}
     >
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
+      <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
         <header className="flex items-center justify-between border-b border-border pb-3">
           <h2 id="admin-void-dialog-title" className="text-2xl font-black text-ink">
             Anulación Administrativa {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
@@ -483,6 +481,18 @@ export function AdminVoidDialog({
           </button>
         </footer>
       </div>
+
+      {isKeyboardVisible && (
+        <VirtualKeyboard
+          floating
+          title="Teclado en pantalla · Anulación administrativa"
+          value={customReason}
+          onChange={setCustomReason}
+          maxLength={500}
+          disabled={!isOperable || isSubmitting}
+          onClose={() => setShowKeyboard(false)}
+        />
+      )}
     </dialog>
   );
 }

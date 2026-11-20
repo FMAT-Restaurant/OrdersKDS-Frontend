@@ -140,5 +140,35 @@ describe('useBumpBar', () => {
       expect(secondCallback).toHaveBeenCalledTimes(1);
       expect(secondCallback).toHaveBeenCalledWith('FOCUS_NEXT_ORDER');
     });
+
+    it('ignores keydown events originating inside inputs, textareas, selects, or contenteditable targets', () => {
+      const onAction = vi.fn();
+      renderHook(() => useBumpBar(onAction));
+
+      const input = document.createElement('input');
+      const textarea = document.createElement('textarea');
+      const select = document.createElement('select');
+      const editable = document.createElement('div');
+      editable.setAttribute('contenteditable', 'true');
+      const nestedChild = document.createElement('span');
+      editable.appendChild(nestedChild);
+
+      document.body.append(input, textarea, select, editable);
+
+      try {
+        for (const target of [input, textarea, select, nestedChild]) {
+          for (const code of ['Backspace', 'Enter', 'Digit1', 'ArrowLeft']) {
+            const wasAllowed = fireEvent.keyDown(target, { code });
+            expect(wasAllowed).toBe(true);
+          }
+        }
+        expect(onAction).not.toHaveBeenCalled();
+      } finally {
+        input.remove();
+        textarea.remove();
+        select.remove();
+        editable.remove();
+      }
+    });
   });
 });
