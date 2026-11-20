@@ -1200,34 +1200,35 @@ function KdsBoardContent({
     async (
       path: string,
       successNotice: { readonly text: string; readonly type: 'success' | 'info' },
-    ) => {
-      if (!actionClient) return;
+    ): Promise<boolean> => {
+      if (!actionClient) return false;
       try {
         await actionClient.patch(path);
         await queryClient.invalidateQueries({ queryKey: ['kds'] });
         graceStore.emitNotice(successNotice);
+        return true;
       } catch (error_) {
         graceStore.emitNotice({
           text: error_ instanceof Error ? error_.message : 'No se pudo completar la acción.',
           type: 'error',
         });
-        throw error_;
+        return false;
       }
     },
     [actionClient, graceStore, queryClient],
   );
 
   const executeMarkItemReady = useCallback(
-    async (order: Order, item: Order['items'][number]) => {
+    async (order: Order, item: Order['items'][number]): Promise<boolean> => {
       const orderId = getOrderKey(order);
       const itemId = getItemKey(item);
-      if (!orderId || !itemId) return;
+      if (!orderId || !itemId) return false;
       const latestOrder = resolveLatestOrder(queryClient, order);
       const isRedo = isRedoOrder(latestOrder) || isRedoOrder(order);
       const text = isRedo
         ? `Rehechura de ${item.name} marcada como lista y notificada al mesero.`
         : `${item.name} marcado como listo.`;
-      await executeReadyPatch(`/orders/${orderId}/items/${itemId}/ready`, {
+      return executeReadyPatch(`/orders/${orderId}/items/${itemId}/ready`, {
         text,
         type: 'success',
       });
@@ -1304,10 +1305,10 @@ function KdsBoardContent({
   }, [graceStore]);
 
   const executeMarkOrderReady = useCallback(
-    async (order: Order) => {
+    async (order: Order): Promise<boolean> => {
       const orderId = getOrderKey(order);
-      if (!orderId) return;
-      await executeReadyPatch(`/orders/${orderId}/ready`, {
+      if (!orderId) return false;
+      return executeReadyPatch(`/orders/${orderId}/ready`, {
         text: `Comanda #${order.orderNumber ?? orderId} marcada como lista.`,
         type: 'success',
       });
@@ -1323,15 +1324,14 @@ function KdsBoardContent({
       const pendingItemExecution = graceStore.cancelOrderForEscalation(orderId);
       const pendingPromise = pendingItemExecution ? pendingItemExecution() : null;
 
-      const runFinalReady = async () => {
+      const runFinalReady = async (): Promise<boolean> => {
         if (pendingPromise) {
           await pendingPromise;
         }
         if (triggeringItem) {
-          await executeMarkItemReady(order, triggeringItem);
-        } else {
-          await executeMarkOrderReady(order);
+          return executeMarkItemReady(order, triggeringItem);
         }
+        return executeMarkOrderReady(order);
       };
 
       const graceMs = undoGracePeriodMs ?? 15000;
