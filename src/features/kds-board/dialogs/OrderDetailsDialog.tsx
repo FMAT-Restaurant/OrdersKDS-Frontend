@@ -60,7 +60,7 @@ function getItemRowStyle(
   if (isFinished) {
     return 'bg-emerald-50/40 border-emerald-200';
   }
-  return 'bg-white border-border shadow-xs';
+  return 'bg-surface border-border shadow-xs';
 }
 
 /**
@@ -127,7 +127,7 @@ function OrderDetailsItemRow({
           {prepTime && (
             <span
               data-testid={`order-details-item-prep-time-${itemId}`}
-              className="text-xs font-mono font-semibold text-muted bg-gray-100 border border-border px-2.5 py-1 rounded"
+              className="text-xs font-mono font-semibold text-body bg-canvas border border-border px-2.5 py-1 rounded"
             >
               {prepTime}
             </span>
@@ -230,7 +230,7 @@ function OrderDetailsItemRow({
               }
             }}
             style={{ minWidth: 64, minHeight: 48 }}
-            className="min-w-[64px] min-h-[48px] px-4 py-2 rounded-control text-xs sm:text-sm font-extrabold bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto"
+            className="min-w-[64px] min-h-[48px] px-4 py-2 rounded-control text-xs sm:text-sm font-extrabold bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto"
           >
             Deshacer
           </button>
@@ -245,7 +245,7 @@ function OrderDetailsItemRow({
           {item.modifiers?.map((modifier, modIdx) => (
             <span
               key={`${itemId}-mod-${modIdx}`}
-              className="inline-block px-2.5 py-1 text-xs font-semibold rounded bg-gray-100 text-body border border-border"
+              className="inline-block px-2.5 py-1 text-xs font-semibold rounded bg-canvas text-body border border-border"
               data-testid={`order-details-item-modifier-${itemId}-${modIdx}`}
             >
               + {modifier}
@@ -257,10 +257,10 @@ function OrderDetailsItemRow({
       {item.notes && (
         <div
           data-testid={`order-details-item-notes-${itemId}`}
-          className="mt-1 pl-9 text-sm text-body italic flex items-start gap-1.5 bg-amber-50/60 p-2 rounded border border-amber-200/80"
+          className="mt-1 pl-9 text-sm text-amber-950 italic flex items-start gap-1.5 bg-amber-50 p-2 rounded border border-amber-200/80"
         >
           <span className="font-bold not-italic shrink-0 text-amber-900">Nota:</span>
-          <span className="break-words text-ink font-medium">{item.notes}</span>
+          <span className="break-words text-amber-950 font-medium">{item.notes}</span>
         </div>
       )}
 
@@ -421,7 +421,7 @@ function OrderDetailsVoidActions({
             })
           }
           style={{ minHeight: 48 }}
-          className="min-h-[48px] px-3.5 py-2 rounded-control font-bold text-sm bg-amber-600 hover:bg-amber-700 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors flex items-center justify-center cursor-pointer select-none border-0"
+          className="min-h-[48px] px-3.5 py-2 rounded-control font-bold text-sm bg-amber-700 hover:bg-amber-800 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors flex items-center justify-center cursor-pointer select-none border-0"
         >
           Anular (Admin)
         </button>
@@ -491,7 +491,7 @@ function OrderDetailsReadyAction({
           {...pointerAction(() => onUndoOrderReady?.(order))}
           onKeyDown={(event) => handleButtonKey(event, () => onUndoOrderReady?.(order))}
           style={{ minHeight: 48 }}
-          className="min-h-[48px] px-4 py-1.5 rounded-control font-extrabold text-xs sm:text-sm bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors border-0 shrink-0"
+          className="min-h-[48px] px-4 py-1.5 rounded-control font-extrabold text-xs sm:text-sm bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors border-0 shrink-0"
         >
           Deshacer
         </button>
@@ -725,7 +725,7 @@ export function OrderDetailsDialog({
                 </span>
               )}
               {tableDisplay && (
-                <span className="text-white/80 font-mono font-bold text-sm">·</span>
+                <span className="text-white font-mono font-bold text-sm">·</span>
               )}
               <h2
                 id="order-details-title"
@@ -744,7 +744,7 @@ export function OrderDetailsDialog({
                 data-testid="order-details-close-btn"
                 aria-label="Cerrar detalles de comanda"
                 onClick={onClose}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-white/90 hover:text-white hover:bg-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-white cursor-pointer border-0"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-white cursor-pointer border-0"
               >
                 ✕
               </button>
@@ -776,12 +776,12 @@ export function OrderDetailsDialog({
                 />
               </svg>
               <span>{formattedTime}</span>
-              <span className="text-xs uppercase tracking-wider opacity-95">
+              <span className="text-xs uppercase tracking-wider">
                 ({delayLabel})
               </span>
             </div>
 
-            <span className="text-xs font-semibold text-white/90">
+            <span className="text-xs font-semibold text-white">
               {order.items.length} {order.items.length === 1 ? 'platillo' : 'platillos'}
             </span>
           </div>
