@@ -22,6 +22,7 @@ import {
   OrderTicketDraftActions,
   OrderTicketErrorList,
   OrderTicketExistingActions,
+  RedoRejectionBanner,
   RejectionBreakdown,
   WaiterActiveOrdersByTable,
   type TicketErrorItem,
@@ -42,6 +43,7 @@ import {
   getOrderAlert,
   groupActiveOrdersByTable,
   hasInvalidDraftItemQuantity,
+  parseRedoRejection,
   parseRejectionDetails,
   resolveEffectiveUserId,
 } from './features/order-ticket/orderTicketUtils.ts';
@@ -576,6 +578,7 @@ function OrderTicket({
 
   const permissions = computeOrderActionPermissions(order);
   const rejectionDetailsParsed = order ? parseRejectionDetails(order.rejectionDetails) : null;
+  const redoRejectionParsed = order ? parseRedoRejection(order.rejectionDetails) : null;
   const alertMessage = order ? getOrderAlert(order.status, entityNounLower) : '';
   const connectionMessage = getRealtimeStatusMessage(
     WEBSOCKET_STATUS_TRANSLATIONS[connectionStatus],
@@ -633,6 +636,10 @@ function OrderTicket({
 
       {permissions.isRejected && rejectionDetailsParsed && order && (
         <RejectionBreakdown details={rejectionDetailsParsed} orderItems={order.items} />
+      )}
+
+      {order?.status === OrderStatus.DELIVERED && redoRejectionParsed && (
+        <RedoRejectionBanner rejection={redoRejectionParsed} orderItems={order.items} />
       )}
 
       <OrderItemsList
