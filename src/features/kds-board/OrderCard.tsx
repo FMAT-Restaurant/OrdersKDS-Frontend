@@ -77,7 +77,7 @@ function OrderItemUndoBanner({
           }
         }}
         style={{ minWidth: 64, minHeight: isManyItems ? 40 : 44 }}
-        className="min-w-[64px] min-h-[40px] px-3.5 py-1.5 rounded-control text-xs sm:text-sm font-extrabold bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto"
+        className="min-w-[64px] min-h-[40px] px-3.5 py-1.5 rounded-control text-xs sm:text-sm font-extrabold bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto"
       >
         Deshacer
       </button>
@@ -161,7 +161,7 @@ function OrderItemModifiers({
       {modifiers.map((modifier, modIdx) => (
         <span
           key={`${itemId}-mod-${modIdx}`}
-          className={`inline-block px-2 py-0.5 font-medium rounded bg-gray-100 text-body border border-border ${
+          className={`inline-block px-2 py-0.5 font-medium rounded bg-canvas text-body border border-border ${
             isManyItems ? 'text-[11px]' : 'text-xs'
           }`}
           data-testid={`order-item-modifier-${itemId}-${modIdx}`}
@@ -286,7 +286,7 @@ function OrderCardItem({
         <div className="flex items-center gap-1.5 shrink-0">
           {prepTime && (
             <span
-              className="text-xs font-mono font-semibold text-muted bg-gray-100 border border-border px-2 py-0.5 rounded shrink-0"
+              className="text-xs font-mono font-semibold text-body bg-canvas border border-border px-2 py-0.5 rounded shrink-0"
               data-testid={`order-item-prep-time-${itemId}`}
             >
               {prepTime}
@@ -399,7 +399,7 @@ function OrderReadyUndoBanner({
         style={{ minWidth: 64, minHeight: isCompact ? 40 : 44 }}
         className={`min-w-[64px] ${
           isCompact ? 'min-h-[40px] px-3 py-1' : 'min-h-[44px] px-4 py-2'
-        } rounded-control font-extrabold text-xs sm:text-sm bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto`}
+        } rounded-control font-extrabold text-xs sm:text-sm bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto`}
       >
         Deshacer
       </button>
@@ -661,7 +661,7 @@ function OrderCardVoidActions({
             isCompact
               ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
               : 'min-h-[64px] px-4 py-2.5 text-sm'
-          } flex-1 rounded-control font-bold bg-amber-600 hover:bg-amber-700 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0`}
+          } flex-1 rounded-control font-bold bg-amber-700 hover:bg-amber-800 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0`}
         >
           Anular (Admin)
         </button>
@@ -971,7 +971,7 @@ export function OrderCard({
             <span data-testid={`order-timer-${displayId}`}>{formattedTime}</span>
             <span
               data-testid={`order-delay-label-${displayId}`}
-              className="text-[11px] sm:text-xs uppercase tracking-wider opacity-95"
+              className="text-[11px] sm:text-xs uppercase tracking-wider"
             >
               ({delayLabel})
             </span>
@@ -982,7 +982,7 @@ export function OrderCard({
       {/* Dish Items List */}
       <ul
         data-testid={`order-items-list-${displayId}`}
-        className="flex-1 min-h-[120px] list-none m-0 px-3 sm:px-4 my-1 overflow-y-auto divide-y divide-border bg-surface scrollbar-thin scrollbar-thumb-gray-300"
+        className={`flex-1 ${isCompact ? 'min-h-[72px]' : 'min-h-[120px]'} list-none m-0 px-3 sm:px-4 my-1 overflow-y-auto divide-y divide-border bg-surface scrollbar-thin scrollbar-thumb-gray-300`}
         aria-label={`Platillos para la comanda ${displayId}`}
       >
         {order.items.map((item, index) => {
@@ -1025,7 +1025,7 @@ export function OrderCard({
         onClick={() => onClick?.(order)}
         className={`shrink-0 w-full ${
           isCompact ? 'px-2.5 py-0.5 text-[11px]' : 'px-3 py-1 text-xs'
-        } border-t border-border flex items-center justify-between text-muted bg-gray-50/50 hover:bg-gray-100 transition-colors text-left focus:outline-none focus:ring-1 focus:ring-fmat-primary border-0 cursor-pointer select-none`}
+        } border-t border-border flex items-center justify-between text-body bg-canvas hover:bg-surface transition-colors text-left focus:outline-none focus:ring-1 focus:ring-fmat-primary border-0 cursor-pointer select-none`}
       >
         <span className="font-medium whitespace-nowrap">
           {order.items.length} {order.items.length === 1 ? 'platillo' : 'platillos'}

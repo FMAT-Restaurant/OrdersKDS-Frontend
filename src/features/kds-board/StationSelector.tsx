@@ -27,7 +27,7 @@ export function StationSelector({
     <div
       role="radiogroup"
       aria-label="Selector de estaciones"
-      className="flex flex-wrap items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-gray-100 rounded-lg border border-border max-w-full"
+      className="flex flex-wrap items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-canvas rounded-lg border border-border max-w-full"
     >
       {stations.map((station) => {
         const isSelected = selectedStation.toLowerCase() === station.toLowerCase();

@@ -15,6 +15,7 @@ export default defineConfig({
     {
       command: process.env.CI ? 'pnpm exec vite preview --port 4173 --host 127.0.0.1' : 'pnpm run build && pnpm exec vite preview --port 4173 --host 127.0.0.1',
       port: 4173,
+      timeout: 120_000,
       reuseExistingServer: !process.env.CI,
     },
     {
