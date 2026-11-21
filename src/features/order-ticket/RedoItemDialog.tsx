@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import { ApiError } from '../../shared/api/client.ts';
+import { getDisplayError } from './orderTicketUtils.ts';
 
 export interface RedoItemDialogProps {
   readonly itemName: string;
@@ -86,11 +88,15 @@ export function RedoItemDialog({
     try {
       await onSubmit(trimmedNote);
     } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : 'No se pudo solicitar la rehechura del platillo.',
-      );
+      if (submitError instanceof ApiError) {
+        setError(getDisplayError(submitError));
+      } else {
+        setError(
+          submitError instanceof Error
+            ? submitError.message
+            : 'No se pudo solicitar la rehechura del platillo.',
+        );
+      }
     }
   };
 

@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../src/shared/api/client.ts';
+import { ErrorCode } from '../../src/shared/api/errorCodes.ts';
 import { RedoItemDialog } from '../../src/features/order-ticket/RedoItemDialog.tsx';
 
 describe('RedoItemDialog (TASK-23, UT-FE-21)', () => {
@@ -74,6 +76,29 @@ describe('RedoItemDialog (TASK-23, UT-FE-21)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'No se pudo solicitar la rehechura del platillo.',
+    );
+  });
+
+  it('translates ApiError DISH_UNAVAILABLE to localized Spanish feedback', async () => {
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValue(new ApiError(422, ErrorCode.DISH_UNAVAILABLE, 'Dish unavailable'));
+    render(
+      <RedoItemDialog
+        itemName="Hamburguesa"
+        isPending={false}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('textbox', { name: /Motivo/ }), {
+      target: { value: 'Salió fría' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Rehacer' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'El platillo seleccionado ya no se encuentra disponible.',
     );
   });
 
