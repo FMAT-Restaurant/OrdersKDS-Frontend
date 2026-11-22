@@ -49,6 +49,41 @@ async function runAxeAudit(
   ).toEqual([]);
 }
 
+async function auditOrderTicketStates(
+  page: Page,
+  themeLabel: 'light' | 'dark',
+): Promise<void> {
+  // 1. CREATED (solo lectura)
+  await page.getByTestId('table-order-chip-a11y-created').click();
+  await expect(page.getByRole('heading', { name: 'Orden #11' })).toBeVisible();
+  await runAxeAudit(page, `OrderTicket CREATED lectura (${themeLabel})`, '.orders-kds-root');
+
+  // 2. CREATED (modo edición)
+  await page.getByRole('button', { name: 'Modificar' }).click();
+  await expect(page.getByRole('button', { name: 'Guardar cambios' })).toBeVisible();
+  await runAxeAudit(page, `OrderTicket CREATED edición (${themeLabel})`, '.orders-kds-root');
+  await page.getByRole('button', { name: 'Descartar' }).click();
+
+  // 3. RESERVED
+  await page.getByTestId('table-order-chip-a11y-reserved').click();
+  await expect(page.getByRole('heading', { name: 'Orden #12' })).toBeVisible();
+  await runAxeAudit(page, `OrderTicket RESERVED (${themeLabel})`, '.orders-kds-root');
+
+  // 4. EXPIRED (Caducada)
+  await page.getByTestId('table-order-chip-a11y-expired').click();
+  await expect(page.getByRole('heading', { name: 'Orden #13' })).toBeVisible();
+  await runAxeAudit(page, `OrderTicket EXPIRED (${themeLabel})`, '.orders-kds-root');
+
+  // 5. REJECTED (aria-live & RejectionBreakdown)
+  await page.getByTestId('table-order-chip-a11y-rejected').click();
+  await expect(page.getByTestId('rejection-reason-banner')).toBeVisible();
+  await runAxeAudit(
+    page,
+    `OrderTicket REJECTED con desglose (${themeLabel})`,
+    '.orders-kds-root',
+  );
+}
+
 test.describe('RNF-11 — Auditoría WCAG 2.1 AA (claro y [data-theme="dark"])', () => {
   test.afterAll(() => {
     fs.mkdirSync('axe-report', { recursive: true });
@@ -58,7 +93,7 @@ test.describe('RNF-11 — Auditoría WCAG 2.1 AA (claro y [data-theme="dark"])',
     );
   });
 
-  test('OrderTicketWidget cumple WCAG 2.1 AA en CREATED (lectura/edición), RESERVED, EXPIRED y REJECTED', async ({
+  test('OrderTicketWidget cumple WCAG 2.1 AA en CREATED (lectura/edición), RESERVED, EXPIRED y REJECTED en tema claro y [data-theme="dark"]', async ({
     page,
   }) => {
     const createdOrd = makeOrder({ id: 'a11y-created', orderNumber: 11, status: 'CREATED' });
@@ -66,35 +101,22 @@ test.describe('RNF-11 — Auditoría WCAG 2.1 AA (claro y [data-theme="dark"])',
     const expiredOrd = makeOrder({ id: 'a11y-expired', orderNumber: 13, status: 'EXPIRED' });
     const rejectedOrd = makeRejectedOrder('a11y-rejected');
 
-    await seedAuthSession(page, { role: 'waiter' });
+    await seedAuthSession(page, { role: 'waiter', theme: 'light' });
     await mockOrdersAndKdsRoutes(page, [createdOrd, reservedOrd, expiredOrd, rejectedOrd]);
     await page.goto('/');
 
-    // 1. CREATED (solo lectura)
-    await page.getByTestId('table-order-chip-a11y-created').click();
-    await expect(page.getByRole('heading', { name: 'Orden #11' })).toBeVisible();
-    await runAxeAudit(page, 'OrderTicket CREATED lectura', '.orders-kds-root');
+    await auditOrderTicketStates(page, 'light');
 
-    // 2. CREATED (modo edición)
-    await page.getByRole('button', { name: 'Modificar' }).click();
-    await expect(page.getByRole('button', { name: 'Guardar cambios' })).toBeVisible();
-    await runAxeAudit(page, 'OrderTicket CREATED edición', '.orders-kds-root');
-    await page.getByRole('button', { name: 'Descartar' }).click();
+    await setDocumentTheme(page, 'dark');
+    await expect
+      .poll(() =>
+        page
+          .locator('.orders-kds-root .order-ticket')
+          .evaluate((el) => window.getComputedStyle(el).backgroundColor),
+      )
+      .toBe('rgb(22, 19, 17)'); // --color-surface en [data-theme="dark"] (#161311)
 
-    // 3. RESERVED
-    await page.getByTestId('table-order-chip-a11y-reserved').click();
-    await expect(page.getByRole('heading', { name: 'Orden #12' })).toBeVisible();
-    await runAxeAudit(page, 'OrderTicket RESERVED', '.orders-kds-root');
-
-    // 4. EXPIRED (Caducada)
-    await page.getByTestId('table-order-chip-a11y-expired').click();
-    await expect(page.getByRole('heading', { name: 'Orden #13' })).toBeVisible();
-    await runAxeAudit(page, 'OrderTicket EXPIRED', '.orders-kds-root');
-
-    // 5. REJECTED (aria-live & RejectionBreakdown)
-    await page.getByTestId('table-order-chip-a11y-rejected').click();
-    await expect(page.getByTestId('rejection-reason-banner')).toBeVisible();
-    await runAxeAudit(page, 'OrderTicket REJECTED con desglose', '.orders-kds-root');
+    await auditOrderTicketStates(page, 'dark');
   });
 
   test('KDS Board y modales cumplen WCAG 2.1 AA en tema claro y [data-theme="dark"]', async ({
