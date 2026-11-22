@@ -186,7 +186,7 @@ test.describe('ST-18 — OrderTicketWidget container queries, contratos DOM y re
     await expect(page.getByTestId('draft-table-input')).toBeEnabled();
   });
 
-  test('bloquea edición en RESERVED y permite vaciar a 0 ítems en EXPIRED y reiniciar con Crear una nueva orden', async ({
+  test('bloquea edición en RESERVED e IN_PREPARATION y permite vaciar a 0 ítems en EXPIRED y reiniciar con Crear una nueva orden', async ({
     page,
   }) => {
     const reservedOrd = makeOrder({
@@ -194,6 +194,12 @@ test.describe('ST-18 — OrderTicketWidget container queries, contratos DOM y re
       orderNumber: 401,
       status: 'RESERVED',
       items: [makeItem({ id: 'it-r1', name: 'Salbutes' })],
+    });
+    const inPrepOrd = makeOrder({
+      id: 'ord-prep-imm',
+      orderNumber: 403,
+      status: 'IN_PREPARATION',
+      items: [makeItem({ id: 'it-p1', name: 'Cochinita' })],
     });
     const expiredOrd = makeOrder({
       id: 'ord-exp-reset',
@@ -203,11 +209,15 @@ test.describe('ST-18 — OrderTicketWidget container queries, contratos DOM y re
     });
 
     await seedAuthSession(page, { role: 'waiter' });
-    await mockOrdersAndKdsRoutes(page, [reservedOrd, expiredOrd]);
+    await mockOrdersAndKdsRoutes(page, [reservedOrd, inPrepOrd, expiredOrd]);
     await page.goto('/');
 
     // Inmutabilidad en RESERVED
     await page.getByTestId('table-order-chip-ord-res-imm').click();
+    await expect(page.getByRole('button', { name: 'Modificar' })).toBeDisabled();
+
+    // Inmutabilidad en IN_PREPARATION
+    await page.getByTestId('table-order-chip-ord-prep-imm').click();
     await expect(page.getByRole('button', { name: 'Modificar' })).toBeDisabled();
 
     // Tras expiración (EXPIRED), Modificar se habilita y permite vaciar hasta 0 ítems sin crash

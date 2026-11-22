@@ -15,8 +15,8 @@ const ROLE_TO_PERMISSIONS: Record<E2ERole, string[]> = {
     'orders:orders:update',
     'orders:orders:confirm',
   ],
-  kitchen: ['kitchen:queue:view', 'kitchen:orders:start', 'kitchen:orders:ready'],
-  chef: ['kitchen:queue:view', 'kitchen:orders:void_error', 'orders:orders:view'],
+  kitchen: ['kitchen:queues:view', 'kitchen:orders:start_preparation', 'kitchen:items:ready', 'kitchen:orders:ready'],
+  chef: ['kitchen:queues:view', 'kitchen:orders:start_preparation', 'kitchen:orders:void_error', 'kitchen:shifts:manage', 'orders:orders:view'],
   admin: ['*'],
 };
 
@@ -45,9 +45,9 @@ export async function seedAuthSession(
     ({ rawSession, activeTheme }) => {
       window.localStorage.setItem('fmat_restaurant_auth_session', rawSession);
       if (activeTheme === 'dark') {
-        document.documentElement.setAttribute('data-theme', 'dark');
+        document.documentElement.dataset.theme = 'dark';
       } else {
-        document.documentElement.removeAttribute('data-theme');
+        delete document.documentElement.dataset.theme;
       }
     },
     { rawSession: JSON.stringify(sessionPayload), activeTheme: theme },
@@ -60,9 +60,9 @@ export async function seedAuthSession(
 export async function setDocumentTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
   await page.evaluate((nextTheme) => {
     if (nextTheme === 'dark') {
-      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.dataset.theme = 'dark';
     } else {
-      document.documentElement.removeAttribute('data-theme');
+      delete document.documentElement.dataset.theme;
     }
   }, theme);
 }
