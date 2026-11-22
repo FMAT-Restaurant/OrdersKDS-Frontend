@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { makeDefaultOpenShiftResponse } from './fixtures/orderFixtures.ts';
 
 test('verify page title', async ({ page }) => {
   await page.goto('/');
@@ -20,21 +21,7 @@ test('KDS actions use one touch and 64px targets @touch', async ({ page }) => {
   await page.route('**/shifts/current*', (route) =>
     route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({
-        isOpen: true,
-        canAcceptOrders: true,
-        currentShift: {
-          id: 'shift-e2e-1',
-          shiftId: 'shift-e2e-1',
-          shiftNumber: 1,
-          status: 'OPEN',
-          lastOrderFolio: 1,
-          openedAt: '2026-11-19T08:00:00Z',
-          version: 1,
-        },
-        lastClosedShift: null,
-        nextShiftNumber: 2,
-      }),
+      body: JSON.stringify(makeDefaultOpenShiftResponse()),
     }),
   );
   await page.route('**/kds/queue*', (route) =>

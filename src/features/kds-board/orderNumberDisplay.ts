@@ -43,3 +43,19 @@ export function getOrderNumberDisplay(
   return displayId.replace(/^ord-/, '');
 }
 
+/**
+ * Formats a table or takeaway label for KDS headers and confirmation dialogs.
+ * Returns `Mesa <n>` when `tableNumber` is defined, `'Para llevar'` for takeaway orders, or `null`.
+ */
+export function formatOrderTableLabel(
+  order: Pick<Order, 'tableNumber' | 'isTakeaway'>,
+): string | null {
+  if (order.tableNumber != null) {
+    return `Mesa ${order.tableNumber}`;
+  }
+  if (order.isTakeaway) {
+    return 'Para llevar';
+  }
+  return null;
+}
+
