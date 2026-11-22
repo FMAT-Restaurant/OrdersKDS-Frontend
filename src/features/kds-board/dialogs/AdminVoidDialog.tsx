@@ -382,7 +382,7 @@ export function AdminVoidDialog({
         </header>
 
         {/* Charge Customer Toggle Switch */}
-        <div className="flex items-center justify-between gap-4 sm:gap-6 p-4 bg-gray-50 border border-border rounded-control">
+        <div className="flex items-center justify-between gap-4 sm:gap-6 p-4 bg-canvas border border-border rounded-control">
           <div className="flex flex-col flex-1 min-w-0 pr-1">
             <span id="admin-charge-label" className="font-bold text-ink text-base leading-snug">
               ¿Cobrar comanda mermada al comensal?
@@ -417,7 +417,7 @@ export function AdminVoidDialog({
         </div>
 
         {/* Instructions banner for UI/UX clarity */}
-        <div className="p-3 bg-gray-50 border border-border rounded-control text-xs text-body leading-relaxed flex flex-col gap-1">
+        <div className="p-3 bg-canvas border border-border rounded-control text-xs text-body leading-relaxed flex flex-col gap-1">
           <span className="font-bold text-ink">
             Instrucciones para la anulación:
           </span>

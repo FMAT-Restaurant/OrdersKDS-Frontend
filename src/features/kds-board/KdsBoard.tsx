@@ -72,7 +72,7 @@ function getExpiredTabClass(isSelected: boolean, count: number): string {
     if (isSelected) {
       return `${BASE_TAB_CLASS} bg-amber-700 text-white shadow-md border border-amber-800 ring-2 ring-amber-400 font-extrabold`;
     }
-    return `${BASE_TAB_CLASS} bg-surface text-amber-800 hover:bg-amber-50 border border-amber-300 shadow hover:shadow-md font-bold`;
+    return `${BASE_TAB_CLASS} bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 shadow hover:shadow-md font-bold`;
   }
   if (isSelected) {
     return `${BASE_TAB_CLASS} bg-fmat-primary text-white shadow-md border border-fmat-primary`;
@@ -349,7 +349,7 @@ function KdsPendingUndoStrip({
               type="button"
               data-testid={`kds-pending-strip-undo-${entry.orderId}`}
               {...pointerAction(() => onUndo(entry.order))}
-              className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs cursor-pointer border-0"
+              className="px-2.5 py-1 rounded bg-amber-700 hover:bg-amber-800 text-white font-extrabold text-xs cursor-pointer border-0"
             >
               Deshacer
             </button>
@@ -408,7 +408,7 @@ function KdsHeader({
       <div
         role="tablist"
         aria-label="Vistas KDS"
-        className="flex flex-wrap items-center gap-1 sm:gap-1.5 bg-gray-100 p-1 sm:p-1.5 rounded-lg border border-border max-w-full"
+        className="flex flex-wrap items-center gap-1 sm:gap-1.5 bg-canvas p-1 sm:p-1.5 rounded-lg border border-border max-w-full"
       >
         <button
           type="button"
@@ -728,7 +728,7 @@ function KdsGridContent({
   return (
     <div
       data-testid="kds-grid"
-      className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 min-h-0 auto-rows-max lg:auto-rows-fr lg:h-full content-start ${gridOverflowClass}`}
+      className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 min-h-0 auto-rows-max xl:auto-rows-fr xl:h-full content-start ${gridOverflowClass}`}
     >
       {paginatedOrders.map((order) => {
         const orderKey = getOrderKey(order);
