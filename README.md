@@ -309,13 +309,14 @@ ordenes-kds-frontend/
 │   └── assets/                        # Design tokens (FMAT-RESTAURANT visual guide), static files
 │
 ├── tests/
-│   ├── e2e/                           # Playwright specs
+│   ├── unit/                          # Unit and component tests (Vitest + RTL)
+│   ├── e2e/                           # Playwright support (host-stub, page objects)
 │   │   └── pages/                     # Page Objects (POM)
 │   ├── bdd/                           # Gherkin .feature files + step definitions
 │   ├── contract/                      # REST contract checks against the backend
 │   └── mocks/                         # MSW handlers and fixtures
 │
-├── e2e/                           # Playwright specs at the repo root (app-level)
+├── e2e/                               # Playwright specs at the repo root (app-level)
 ├── docs/                              # Full project documentation
 ├── scripts/
 │   ├── bootstrap.ps1              # One-shot setup for Windows PowerShell
@@ -331,7 +332,7 @@ ordenes-kds-frontend/
 └── .env.example
 ```
 
-> Unit and component tests live next to the code they test (`Component.test.tsx`).
+> Unit and component tests live under `tests/unit/` (`Component.test.tsx`).
 
 ---
 
@@ -626,7 +627,8 @@ ordenes-kds-frontend/
 │   └── assets/                        # Tokens de diseño (guía visual FMAT-RESTAURANT), archivos estáticos
 │
 ├── tests/
-│   ├── e2e/                           # Specs de Playwright
+│   ├── unit/                          # Tests unitarios y de componentes (Vitest + RTL)
+│   ├── e2e/                           # Soporte de Playwright (host-stub, page objects)
 │   │   └── pages/                     # Page Objects (POM)
 │   ├── bdd/                           # Archivos .feature Gherkin + step definitions
 │   ├── contract/                      # Verificaciones del contrato REST contra el backend
@@ -642,7 +644,7 @@ ordenes-kds-frontend/
 └── .env.example
 ```
 
-> Los tests unitarios y de componentes viven junto al código que prueban (`Component.test.tsx`).
+> Los tests unitarios y de componentes viven bajo `tests/unit/` (`Component.test.tsx`).
 
 ---
 

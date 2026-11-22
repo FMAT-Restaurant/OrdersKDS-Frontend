@@ -13,8 +13,7 @@
  * In CI the `unit-tests` job runs AFTER `build-federation`, so
  * `dist/` will always be available.
  */
-import { existsSync, readFileSync } from 'fs';
-import { globSync } from 'node:fs';
+import { existsSync, globSync, readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 
 // Global selectors that MUST NOT appear outside .orders-kds-root
