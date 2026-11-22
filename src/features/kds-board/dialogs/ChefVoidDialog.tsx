@@ -4,7 +4,7 @@ import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
 import { pointerAction } from '../pointerAction.ts';
-import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
+import { formatOrderTableLabel, getOrderKey, getOrderNumberDisplay } from '../orderNumberDisplay.ts';
 import { VirtualKeyboard } from './VirtualKeyboard.tsx';
 
 const InPreparationOrderSchema = OrderSchema.extend({
@@ -37,22 +37,8 @@ export interface ChefVoidDialogProps {
   readonly onCancel: () => void;
 }
 
-function getChefTableDisplay(order: Order): string | null {
-  if (order.tableNumber != null) {
-    return `Mesa ${order.tableNumber}`;
-  }
-  if (order.isTakeaway) {
-    return 'Para llevar';
-  }
-  return null;
-}
-
 function isAuthorizedChefRole(userRole?: UserRole): boolean {
   return !userRole || userRole === UserRole.CHEF || userRole === UserRole.ADMIN;
-}
-
-function resolveChefDisplayId(order: Order): string {
-  return order.id ?? order.orderId ?? order.publicId ?? 'unknown';
 }
 
 function toggleChefReason(prev: string[], reason: string): string[] {
@@ -158,9 +144,9 @@ export function ChefVoidDialog({
   });
   const isConfirmEnabled = isOperable && justificationValidation.success && !isSubmitting;
 
-  const displayId = resolveChefDisplayId(order);
+  const displayId = getOrderKey(order) || 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
-  const tableDisplay = getChefTableDisplay(order);
+  const tableDisplay = formatOrderTableLabel(order);
 
   const toggleReason = (reason: string) => {
     setSelectedReasons((prev) => toggleChefReason(prev, reason));
@@ -251,7 +237,7 @@ export function ChefVoidDialog({
             disabled={isSubmitting}
             {...pointerAction(onCancel)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-gray-100 text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-canvas text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
           >
             Cancelar
           </button>

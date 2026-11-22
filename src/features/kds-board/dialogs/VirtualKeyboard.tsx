@@ -52,7 +52,7 @@ export function VirtualKeyboard({
 
   const containerClass = floating
     ? 'fixed inset-x-0 bottom-0 z-[70] flex flex-col gap-2 bg-surface/95 backdrop-blur-md px-3 pt-2 pb-3 border-t-2 border-fmat-primary shadow-2xl select-none overflow-x-auto w-full'
-    : 'flex flex-col gap-2 bg-gray-50 p-3 rounded-lg border border-border select-none overflow-x-auto w-full';
+    : 'flex flex-col gap-2 bg-canvas p-3 rounded-lg border border-border select-none overflow-x-auto w-full';
 
   return (
     <div
@@ -62,7 +62,7 @@ export function VirtualKeyboard({
     >
       {floating && (
         <div className="max-w-4xl mx-auto w-full flex items-center justify-between gap-3 px-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted">
             {title}
           </span>
           {onClose && (
@@ -72,7 +72,7 @@ export function VirtualKeyboard({
               disabled={disabled}
               {...pointerAction(onClose)}
               style={{ minHeight: 64, minWidth: 64 }}
-              className="min-h-[64px] min-w-[64px] px-4 py-2 rounded-control text-xs sm:text-sm font-bold text-fmat-primary hover:bg-gray-100 border border-border bg-surface cursor-pointer disabled:opacity-40"
+              className="min-h-[64px] min-w-[64px] px-4 py-2 rounded-control text-xs sm:text-sm font-bold text-fmat-primary hover:bg-canvas border border-border bg-surface cursor-pointer disabled:opacity-40"
             >
               Ocultar teclado
             </button>
@@ -94,7 +94,7 @@ export function VirtualKeyboard({
                 aria-label={`Tecla ${letter}`}
                 {...pointerAction(() => handleKeyPress(letter))}
                 style={{ minHeight: 64, minWidth: 64 }}
-                className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-control bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center select-none"
+                className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-control bg-surface hover:bg-canvas active:bg-border text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center select-none"
               >
                 {letter}
               </button>
@@ -110,7 +110,7 @@ export function VirtualKeyboard({
             aria-label="Espacio"
             {...pointerAction(handleSpace)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] flex-1 max-w-sm px-6 py-2 rounded-control bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+            className="min-h-[64px] min-w-[64px] flex-1 max-w-sm px-6 py-2 rounded-control bg-surface hover:bg-canvas active:bg-border text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Espacio
           </button>

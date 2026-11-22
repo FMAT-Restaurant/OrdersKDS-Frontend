@@ -83,11 +83,11 @@ export function ShiftControlDialog({
         <h2 id="shift-control-dialog-title" className="text-lg font-extrabold">
           {copy.title}
         </h2>
-        <p className="text-sm text-ink-muted leading-relaxed">{description}</p>
+        <p className="text-sm text-muted leading-relaxed">{description}</p>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2">
-            <label htmlFor="shift-dialog-notes" className="block text-xs font-bold uppercase text-ink-muted">
+            <label htmlFor="shift-dialog-notes" className="block text-xs font-bold uppercase text-muted">
               Notas del turno (opcional)
             </label>
             <button
@@ -118,7 +118,7 @@ export function ShiftControlDialog({
             data-testid="shift-dialog-cancel-btn"
             disabled={isSubmitting}
             onClick={onCancel}
-            className="min-h-[44px] px-4 rounded-control border border-border bg-surface text-ink font-semibold text-sm hover:bg-gray-50 disabled:opacity-50"
+            className="min-h-[44px] px-4 rounded-control border border-border bg-surface text-ink font-semibold text-sm hover:bg-canvas disabled:opacity-50"
           >
             Cancelar
           </button>

@@ -280,6 +280,26 @@ describe('Federated Auth Contract and Orchestration', () => {
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     });
 
+    it('updates document theme on valid window theme-change events and removes listener on unmount', () => {
+      const { unmount } = render(<App theme="light" />);
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: 'dark' }));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: { theme: 'light' } }));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: 'invalid-theme' }));
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: { theme: 123 } }));
+      window.dispatchEvent(new Event('theme-change'));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+      unmount();
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: 'dark' }));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    });
+
     it('reads session from localStorage if currentUser prop is not passed', () => {
       const storedSession = {
         accessToken: 'jwt-123',

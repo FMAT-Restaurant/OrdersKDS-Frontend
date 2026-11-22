@@ -22,6 +22,23 @@ import {
 
 type ShellViewMode = 'kds' | 'ticket';
 
+function extractThemeFromEvent(event: Event): 'light' | 'dark' | null {
+  if (!(event instanceof CustomEvent)) {
+    return null;
+  }
+  const detail: unknown = event.detail;
+  if (detail === 'light' || detail === 'dark') {
+    return detail;
+  }
+  if (typeof detail === 'object' && detail !== null && 'theme' in detail) {
+    const candidate = (detail as { theme?: unknown }).theme;
+    if (candidate === 'light' || candidate === 'dark') {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function getInitialView(user: ShellUser): ShellViewMode {
   if (!hasKitchenModuleAccess(user) && hasWaiterModuleAccess(user)) {
     return 'ticket';
@@ -88,6 +105,17 @@ function App({
     }
   }, [theme]);
 
+  useEffect(() => {
+    const handleThemeChange = (event: Event) => {
+      const nextTheme = extractThemeFromEvent(event);
+      if (nextTheme) {
+        document.documentElement.dataset.theme = nextTheme;
+      }
+    };
+    window.addEventListener('theme-change', handleThemeChange);
+    return () => window.removeEventListener('theme-change', handleThemeChange);
+  }, []);
+
   const effectiveTokenProvider: TokenProvider = useCallback(() => {
     if (token) return Promise.resolve(token);
     if (tokenProvider) return tokenProvider();
@@ -123,16 +151,18 @@ function App({
             apiBaseUrl={resolveDefaultApiBaseUrl()}
           />
         ) : (
-          <div className="p-6 flex flex-col items-center justify-start min-h-full bg-slate-100 text-slate-900">
-            <div className="orders-kds-root w-full max-w-4xl">
-              <OrderTicketWidget
-                tokenProvider={effectiveTokenProvider}
-                userId={activeUser.id || activeUser.sub || '00000000-0000-0000-0000-000000000001'}
-                apiBaseUrl={resolveDefaultApiBaseUrl()}
-                webSocketBaseUrl={resolveDefaultWsBaseUrl()}
-                entityLabel="orden"
-                allowRemoveAllItems
-              />
+          <div className="orders-kds-root min-h-full w-full">
+            <div className="p-6 flex flex-col items-center justify-start min-h-full bg-canvas text-ink">
+              <div className="w-full max-w-4xl">
+                <OrderTicketWidget
+                  tokenProvider={effectiveTokenProvider}
+                  userId={activeUser.id || activeUser.sub || '00000000-0000-0000-0000-000000000001'}
+                  apiBaseUrl={resolveDefaultApiBaseUrl()}
+                  webSocketBaseUrl={resolveDefaultWsBaseUrl()}
+                  entityLabel="orden"
+                  allowRemoveAllItems
+                />
+              </div>
             </div>
           </div>
         )}

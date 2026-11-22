@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Order, OrderItem } from '../../../shared/api/schemas.ts';
-import { getItemKey, getOrderNumberDisplay } from '../orderNumberDisplay.ts';
+import {
+  formatOrderTableLabel,
+  getItemKey,
+  getOrderKey,
+  getOrderNumberDisplay,
+} from '../orderNumberDisplay.ts';
 
 export interface ConfirmRejectItemSelection {
   readonly itemId: string;
@@ -42,7 +47,7 @@ function PartialAvailabilitySelector({
   const inputId = `confirm-reject-available-input${suffix}`;
   return (
     <div
-      className="p-3 bg-amber-50 rounded-control border border-amber-200 text-amber-950 space-y-2"
+      className="p-3 bg-amber-500/15 rounded-control border border-amber-500/40 text-ink space-y-2"
       data-testid={`confirm-reject-partial-availability${suffix}`}
     >
       <p className="font-semibold text-xs sm:text-sm">
@@ -60,7 +65,7 @@ function PartialAvailabilitySelector({
               aria-label={`Disminuir cantidad disponible de ${targetItem.name}`}
               disabled={isSubmitting || availableQuantity <= 0}
               onClick={() => onChange(Math.max(0, availableQuantity - 1))}
-              className="w-9 h-9 rounded border border-amber-400 bg-white font-bold text-base text-amber-900 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+              className="w-9 h-9 rounded border border-amber-500/60 bg-surface font-bold text-base text-ink hover:bg-canvas disabled:opacity-50 cursor-pointer"
             >
               −
             </button>
@@ -80,7 +85,7 @@ function PartialAvailabilitySelector({
                   : Math.max(0, Math.min(maxAvailable, parsed));
                 onChange(clamped);
               }}
-              className="w-16 h-9 text-center font-bold border border-amber-400 rounded bg-white text-ink"
+              className="w-16 h-9 text-center font-bold border border-amber-500/60 rounded bg-canvas text-ink"
             />
             <button
               type="button"
@@ -88,17 +93,17 @@ function PartialAvailabilitySelector({
               aria-label={`Aumentar cantidad disponible de ${targetItem.name}`}
               disabled={isSubmitting || availableQuantity >= maxAvailable}
               onClick={() => onChange(Math.min(maxAvailable, availableQuantity + 1))}
-              className="w-9 h-9 rounded border border-amber-400 bg-white font-bold text-base text-amber-900 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+              className="w-9 h-9 rounded border border-amber-500/60 bg-surface font-bold text-base text-ink hover:bg-canvas disabled:opacity-50 cursor-pointer"
             >
               +
             </button>
           </div>
-          <p className="w-full text-xs text-amber-900">
+          <p className="w-full text-xs text-body">
             El mesero verá: Solicitados: {requestedQuantity}, Disponibles: {availableQuantity}.
           </p>
         </div>
       ) : (
-        <p className="text-xs text-amber-900">
+        <p className="text-xs text-body">
           Se notificará al mesero: Solicitados: {requestedQuantity}, Disponibles: 0.
         </p>
       )}
@@ -136,7 +141,7 @@ function MultiItemRejectList({
           <div
             key={itemId}
             className={`rounded-control border p-2.5 space-y-2 ${
-              isSelected ? 'border-red-300 bg-red-50/40' : 'border-border bg-surface'
+              isSelected ? 'border-red-500/60 bg-red-500/10' : 'border-border bg-surface'
             }`}
           >
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
@@ -193,13 +198,6 @@ function resolveEligibleRejectItems(
   return nonCancelled.length > 0 ? nonCancelled : order.items;
 }
 
-function formatRejectTableDisplay(order: Order): string {
-  if (order.tableNumber !== null && order.tableNumber !== undefined) {
-    return `Mesa ${order.tableNumber}`;
-  }
-  return order.isTakeaway ? 'Para llevar' : '';
-}
-
 function toggleRejectSelection(
   activeMap: Record<string, number>,
   itemId: string,
@@ -211,10 +209,6 @@ function toggleRejectSelection(
     nextMap[itemId] = 0;
   }
   return nextMap;
-}
-
-function resolveRejectDisplayId(order: Order): string {
-  return order.id ?? order.orderId ?? order.publicId ?? 'unknown';
 }
 
 function buildConfirmRejectPayload(
@@ -241,7 +235,7 @@ function resolveRejectStateContext(
   return {
     firstItem,
     firstItemId,
-    targetKey: `${resolveRejectDisplayId(order)}:${scope}:${isOpen}`,
+    targetKey: `${getOrderKey(order) || 'unknown'}:${scope}:${isOpen}`,
     fallbackMap: firstItemId ? { [firstItemId]: 0 } : ({} as Record<string, number>),
   };
 }
@@ -328,7 +322,10 @@ function renderRejectAvailabilityContent({
           onChangeQuantity={onChangeQuantity}
         />
         {selectedEntries.length === 0 && (
-          <p role="alert" className="text-xs font-semibold text-red-700">
+          <p
+            role="alert"
+            className="rounded px-2 py-1 bg-red-50 border border-red-200 text-xs font-semibold text-red-800"
+          >
             Selecciona al menos un platillo afectado.
           </p>
         )}
@@ -411,9 +408,9 @@ export function ConfirmRejectDialog({
   const hasValidSelection = !isMultiItemMode || selectedEntries.length > 0;
   const isSubmitDisabled = isSubmitting || !hasValidSelection;
 
-  const displayId = resolveRejectDisplayId(order);
+  const displayId = getOrderKey(order) || 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
-  const tableDisplay = formatRejectTableDisplay(order);
+  const tableDisplay = formatOrderTableLabel(order) ?? '';
 
   const handleToggleItem = (itemId: string) => {
     setSelectionState({
@@ -480,7 +477,7 @@ export function ConfirmRejectDialog({
             onClick={onCancel}
             disabled={isSubmitting}
             style={{ minHeight: 48 }}
-            className="w-full sm:w-auto min-h-[48px] px-4 py-2.5 rounded-control font-bold text-sm bg-surface text-ink border border-border hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer disabled:opacity-50"
+            className="w-full sm:w-auto min-h-[48px] px-4 py-2.5 rounded-control font-bold text-sm bg-surface text-ink border border-border hover:bg-canvas focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer disabled:opacity-50"
           >
             Cancelar
           </button>

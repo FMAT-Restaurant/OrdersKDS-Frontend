@@ -372,6 +372,54 @@
   cursor: default;
 }
 
+.orders-kds-root .order-ticket dialog.order-ticket__dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 1rem;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.orders-kds-root .order-ticket .order-ticket__add-dish-form {
+  display: grid;
+  gap: 0.875rem;
+  width: 100%;
+  max-width: 30rem;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid #d5dbe5;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+.orders-kds-root .order-ticket .order-ticket__dialog-subtitle {
+  color: #475569;
+  font-size: 0.875rem;
+}
+
+.orders-kds-root .order-ticket .order-ticket__dialog-error {
+  color: #b91c1c;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.orders-kds-root .order-ticket .order-ticket__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
 .orders-kds-root .order-ticket dialog button.order-ticket__add-submit {
   min-width: 7rem;
   min-height: 3rem;
@@ -578,4 +626,276 @@
     flex: 1 1 calc(50% - 0.5rem);
     min-width: unset;
   }
+}
+
+/* Dark theme ([data-theme="dark"]) — WCAG 2.1 AA high-contrast palette */
+[data-theme="dark"] .orders-kds-root .order-ticket,
+.orders-kds-root[data-theme="dark"] .order-ticket {
+  color: var(--color-ink, #ffffff);
+  background: var(--color-surface, #161311);
+  border-color: var(--color-border, #2c2420);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__header h2,
+.orders-kds-root[data-theme="dark"] .order-ticket__header h2 {
+  color: var(--color-ink, #ffffff);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__session,
+.orders-kds-root[data-theme="dark"] .order-ticket__session,
+[data-theme="dark"] .orders-kds-root .order-ticket__connection,
+.orders-kds-root[data-theme="dark"] .order-ticket__connection,
+[data-theme="dark"] .orders-kds-root .order-ticket__item p,
+.orders-kds-root[data-theme="dark"] .order-ticket__item p {
+  color: var(--color-body, #d6cfc9);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__status,
+.orders-kds-root[data-theme="dark"] .order-ticket__status {
+  color: #dbeafe;
+  background: #1e3a5f;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='RESERVED'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='RESERVED'],
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='DELIVERED'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='DELIVERED'],
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='PAID'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='PAID'] {
+  color: #dcfce7;
+  background: #14532d;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='DRAFT'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='DRAFT'] {
+  color: #e8e3df;
+  background: #2c2420;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='REJECTED'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='REJECTED'],
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='EXPIRED'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='EXPIRED'],
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='CANCELLED'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='CANCELLED'],
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='WASTED'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='WASTED'],
+[data-theme="dark"] .orders-kds-root .order-ticket__status[data-status='VOIDED'],
+.orders-kds-root[data-theme="dark"] .order-ticket__status[data-status='VOIDED'] {
+  color: #fee2e2;
+  background: #7f1d1d;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__stock-status,
+.orders-kds-root[data-theme="dark"] .order-ticket__stock-status {
+  color: #fef3c7;
+  background: #422006;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__alert,
+.orders-kds-root[data-theme="dark"] .order-ticket__alert {
+  color: #fecaca;
+  background: #2c1414;
+  border-inline-start-color: #ef4444;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__alert .order-ticket__missing-ingredients,
+.orders-kds-root[data-theme="dark"] .order-ticket__alert .order-ticket__missing-ingredients {
+  color: #fde68a;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__rejection-breakdown,
+.orders-kds-root[data-theme="dark"] .order-ticket__rejection-breakdown {
+  background: #241a0d;
+  border-color: #78350f;
+  color: #f5efe6;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__rejection-breakdown h3,
+.orders-kds-root[data-theme="dark"] .order-ticket__rejection-breakdown h3 {
+  color: #fde68a;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__rejection-breakdown h4,
+.orders-kds-root[data-theme="dark"] .order-ticket__rejection-breakdown h4 {
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__rejection-breakdown .order-ticket__missing-ingredients,
+.orders-kds-root[data-theme="dark"] .order-ticket__rejection-breakdown .order-ticket__missing-ingredients {
+  color: #fdba74;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__rejection-breakdown ul,
+.orders-kds-root[data-theme="dark"] .order-ticket__rejection-breakdown ul {
+  color: #f5efe6;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__item,
+.orders-kds-root[data-theme="dark"] .order-ticket__item {
+  background: #1e1a17;
+  border-color: var(--color-border, #2c2420);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__stepper-button,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__stepper-button {
+  color: var(--color-ink, #ffffff);
+  background: #26201d;
+  border-color: #574c45;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__stepper-button:hover:not(:disabled),
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__stepper-button:hover:not(:disabled) {
+  background: #332b26;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket input,
+.orders-kds-root[data-theme="dark"] .order-ticket input,
+[data-theme="dark"] .orders-kds-root .order-ticket textarea,
+.orders-kds-root[data-theme="dark"] .order-ticket textarea {
+  color: var(--color-ink, #ffffff);
+  background: var(--color-canvas, #0a0908);
+  border-color: #574c45;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket input.order-ticket__dish-name-readonly,
+.orders-kds-root[data-theme="dark"] .order-ticket input.order-ticket__dish-name-readonly {
+  background: #231e1b;
+  border-color: #463c36;
+  color: #e8e3df;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__button-secondary,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__button-secondary,
+[data-theme="dark"] .orders-kds-root .order-ticket dialog button.order-ticket__redo-cancel,
+.orders-kds-root[data-theme="dark"] .order-ticket dialog button.order-ticket__redo-cancel {
+  color: #f5f2ef;
+  background: #231e1b;
+  border-color: #574c45;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__button-secondary:hover:not(:disabled),
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__button-secondary:hover:not(:disabled),
+[data-theme="dark"] .orders-kds-root .order-ticket dialog button.order-ticket__redo-cancel:hover:not(:disabled),
+.orders-kds-root[data-theme="dark"] .order-ticket dialog button.order-ticket__redo-cancel:hover:not(:disabled) {
+  background: #2f2824;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__item-remove,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__item-remove {
+  color: #fecaca;
+  background: #2c1414;
+  border-color: #991b1b;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__item-remove:hover:not(:disabled),
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__item-remove:hover:not(:disabled) {
+  background: #3f1818;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__add-item-btn,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__add-item-btn {
+  color: #93c5fd;
+  background: #1e1a17;
+  border-color: #574c45;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__add-item-btn:hover:not(:disabled),
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__add-item-btn:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #60a5fa;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn,
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__chip.order-ticket__chip--add-order,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__chip.order-ticket__chip--add-order {
+  color: #ffffff;
+  background: #15803d;
+  border-color: #166534;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn:hover:not(:disabled),
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__add-item-btn.order-ticket__add-order-btn:hover:not(:disabled),
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__chip.order-ticket__chip--add-order:hover:not(:disabled),
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__chip.order-ticket__chip--add-order:hover:not(:disabled) {
+  background: #14532d;
+  border-color: #14532d;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__chip,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__chip {
+  color: #e8e3df;
+  background: #26201d;
+  border-color: #574c45;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__chip:hover,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__chip:hover {
+  background: #332b26;
+  border-color: #7c6f66;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__table-groups,
+.orders-kds-root[data-theme="dark"] .order-ticket__table-groups {
+  background: #110e0c;
+  border-color: var(--color-border, #2c2420);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__table-groups-header,
+.orders-kds-root[data-theme="dark"] .order-ticket__table-groups-header {
+  color: var(--color-ink, #ffffff);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__table-group,
+.orders-kds-root[data-theme="dark"] .order-ticket__table-group {
+  background: var(--color-surface, #161311);
+  border-color: var(--color-border, #2c2420);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket__table-group-title,
+.orders-kds-root[data-theme="dark"] .order-ticket__table-group-title {
+  color: var(--color-body, #d6cfc9);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__table-order-chip,
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__table-order-chip {
+  color: #e8e3df;
+  background: #231e1b;
+  border-color: #463c36;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button.order-ticket__table-order-chip[data-active='true'],
+.orders-kds-root[data-theme="dark"] .order-ticket button.order-ticket__table-order-chip[data-active='true'] {
+  color: #ffffff;
+  background: #1d4ed8;
+  border-color: #60a5fa;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket .order-ticket__add-dish-form,
+.orders-kds-root[data-theme="dark"] .order-ticket .order-ticket__add-dish-form {
+  background: var(--color-surface, #161311);
+  border-color: var(--color-border, #2c2420);
+  color: var(--color-ink, #ffffff);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket .order-ticket__dialog-subtitle,
+.orders-kds-root[data-theme="dark"] .order-ticket .order-ticket__dialog-subtitle {
+  color: var(--color-body, #d6cfc9);
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket .order-ticket__dialog-error,
+.orders-kds-root[data-theme="dark"] .order-ticket .order-ticket__dialog-error,
+[data-theme="dark"] .orders-kds-root .order-ticket__error,
+.orders-kds-root[data-theme="dark"] .order-ticket__error {
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .orders-kds-root .order-ticket button:focus-visible,
+.orders-kds-root[data-theme="dark"] .order-ticket button:focus-visible,
+[data-theme="dark"] .orders-kds-root .order-ticket input:focus-visible,
+.orders-kds-root[data-theme="dark"] .order-ticket input:focus-visible,
+[data-theme="dark"] .orders-kds-root .order-ticket textarea:focus-visible,
+.orders-kds-root[data-theme="dark"] .order-ticket textarea:focus-visible {
+  outline-color: #60a5fa;
 }

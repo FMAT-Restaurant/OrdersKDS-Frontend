@@ -118,7 +118,7 @@ function OrderItemReadyButton({
       className={`min-h-[36px] px-2.5 py-1 rounded-control text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
         isFinished
           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-80'
-          : 'bg-surface hover:bg-emerald-50 active:bg-emerald-100 text-body hover:text-emerald-700 border border-border hover:border-emerald-300 cursor-pointer shadow-sm'
+          : 'bg-surface hover:bg-emerald-500/15 active:bg-emerald-500/25 text-body hover:text-emerald-600 border border-border hover:border-emerald-300 cursor-pointer shadow-sm'
       }`}
     >
       {isFinished ? (
@@ -136,7 +136,7 @@ function OrderItemReadyButton({
         </>
       ) : (
         <>
-          <span className="w-3.5 h-3.5 rounded-full border border-gray-400 inline-block shrink-0" />
+          <span className="w-3.5 h-3.5 rounded-full border border-muted inline-block shrink-0" />
           <span>Listo</span>
         </>
       )}
@@ -245,9 +245,9 @@ function OrderCardItem({
       className={`border-b border-border last:border-b-0 flex flex-col justify-center py-2 gap-1 ${
         isCompactDensity ? 'min-h-[40px] py-1' : 'min-h-[64px] py-2'
       } ${
-        isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-50 px-2' : ''
+        isRedoPending ? 'rounded-md border border-amber-400/70 bg-amber-500/15 px-2' : ''
       } ${
-        isPendingUndo ? 'rounded-md border border-amber-300 bg-amber-50/70 px-2' : ''
+        isPendingUndo ? 'rounded-md border border-amber-300 bg-amber-500/15 px-2' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-2 w-full">
@@ -273,7 +273,7 @@ function OrderCardItem({
                 setIsDetailsExpanded((prev) => !prev);
               }}
               aria-expanded={isDetailsExpanded}
-              className="inline-flex items-center gap-0.5 text-[11px] font-bold text-fmat-primary bg-orange-50 hover:bg-orange-100 border border-orange-200 px-1.5 py-0.5 rounded cursor-pointer select-none leading-none shrink-0"
+              className="inline-flex items-center gap-0.5 text-[11px] font-bold text-fmat-primary bg-fmat-soft hover:opacity-90 border border-fmat-primary/30 px-1.5 py-0.5 rounded cursor-pointer select-none leading-none shrink-0"
             >
               <span>{isDetailsExpanded ? '− notas' : '+ notas'}</span>
               <span className="sr-only">
@@ -587,9 +587,9 @@ function OrderCardReservedActions(props: Readonly<OrderCardReservedActionsProps>
               : 'min-h-[64px] px-4 py-2.5 text-sm'
           } flex-1 rounded-control font-bold ${
             isTtlExpired
-              ? 'bg-gray-400 text-gray-200 cursor-not-allowed opacity-60'
-              : 'bg-fmat-primary text-white hover:bg-fmat-primary-hover active:scale-[.98]'
-          } focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center select-none shadow-sm border-0`}
+              ? 'bg-canvas text-muted border border-border cursor-not-allowed opacity-60'
+              : 'bg-fmat-primary text-white hover:bg-fmat-primary-hover active:scale-[.98] border-0'
+          } focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center select-none shadow-sm`}
         >
           {isTtlExpired ? 'Expirada (Bloqueada)' : 'Iniciar preparación'}
         </button>
@@ -893,7 +893,7 @@ export function OrderCard({
       className={`h-full min-h-[300px] sm:min-h-0 flex flex-col rounded-card border transition-all duration-150 select-none overflow-hidden bg-surface ${
         isFocused
           ? 'border-fmat-primary ring-2 ring-fmat-primary shadow-xl'
-          : 'border-border hover:border-gray-400 shadow hover:shadow-md'
+          : 'border-border hover:border-muted shadow hover:shadow-md'
       }`}
     >
       {/* Clickable Card Header for Order Selection - Solid Orange Banner (Image 10) */}

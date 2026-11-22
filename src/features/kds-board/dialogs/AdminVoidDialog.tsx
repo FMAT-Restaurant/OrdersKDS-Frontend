@@ -4,7 +4,7 @@ import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
 import { pointerAction } from '../pointerAction.ts';
-import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
+import { formatOrderTableLabel, getOrderKey, getOrderNumberDisplay } from '../orderNumberDisplay.ts';
 import { VirtualKeyboard } from './VirtualKeyboard.tsx';
 
 const InPreparationOrderSchema = OrderSchema.extend({
@@ -56,12 +56,12 @@ const ADMIN_QUICK_REASONS: readonly QuickReason[] = [
 
 function getReasonButtonClass(isSelected: boolean, isContradictory: boolean): string {
   if (isContradictory) {
-    return 'opacity-40 cursor-not-allowed bg-gray-100 text-muted border-border';
+    return 'opacity-40 cursor-not-allowed bg-canvas text-muted border-border';
   }
   if (isSelected) {
     return 'bg-fmat-primary text-white border-fmat-primary shadow-sm';
   }
-  return 'bg-surface text-ink border-border hover:bg-gray-50';
+  return 'bg-surface text-ink border-border hover:bg-canvas';
 }
 
 function getChargeSwitchDescription(
@@ -92,16 +92,6 @@ function getChargeSwitchTitle(
     return 'Activa una razón personalizada para habilitar la edición manual del cobro';
   }
   return undefined;
-}
-
-function getTableDisplay(order: Order): string | null {
-  if (order.tableNumber != null) {
-    return `Mesa ${order.tableNumber}`;
-  }
-  if (order.isTakeaway) {
-    return 'Para llevar';
-  }
-  return null;
 }
 
 function AdminVoidWarningBanner({ chargeCustomer }: Readonly<{ chargeCustomer: boolean }>) {
@@ -226,7 +216,7 @@ function AdminCustomReasonSection({
           data-testid="admin-void-toggle-custom-reason"
           disabled={!isOperable || isSubmitting}
           {...pointerAction(onToggleActive)}
-          className="text-xs font-bold px-2 py-1 rounded border border-border text-fmat-primary hover:bg-gray-50 cursor-pointer disabled:opacity-40"
+          className="text-xs font-bold px-2 py-1 rounded border border-border text-fmat-primary hover:bg-canvas cursor-pointer disabled:opacity-40"
         >
           {customReasonActive ? 'Quitar razón personalizada' : '+ Razón personalizada'}
         </button>
@@ -295,9 +285,9 @@ export function AdminVoidDialog({
 
   const validation = InPreparationOrderSchema.safeParse(order);
   const isOperable = validation.success && order.status === OrderStatus.IN_PREPARATION;
-  const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const displayId = getOrderKey(order) || 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
-  const tableDisplay = getTableDisplay(order);
+  const tableDisplay = formatOrderTableLabel(order);
 
   const hasChargeReasonsSelected = selectedReasons.some((label) => {
     const r = ADMIN_QUICK_REASONS.find((item) => item.label === label);
@@ -404,7 +394,7 @@ export function AdminVoidDialog({
               {...pointerAction(handleToggleCharge)}
               className={`admin-void-switch relative inline-flex h-8 w-14 shrink-0 rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-fmat-primary focus:ring-offset-2 items-center p-0.5 ${
                 isChargeToggleDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-              } ${chargeCustomer ? 'bg-[#c87a55]' : 'bg-gray-300'}`}
+              } ${chargeCustomer ? 'bg-[#c87a55]' : 'bg-muted/40'}`}
             >
               <span
                 aria-hidden="true"
@@ -465,7 +455,7 @@ export function AdminVoidDialog({
             disabled={isSubmitting}
             {...pointerAction(onCancel)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-gray-100 text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-canvas text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Cancelar
           </button>

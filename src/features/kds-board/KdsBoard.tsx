@@ -67,6 +67,13 @@ function matchesKdsTab(order: Order, currentTab: KdsTabType, nowMs?: number): bo
   return order.status !== OrderStatus.DELIVERED || isRedoOrder(order);
 }
 
+function getStandardTabClass(isSelected: boolean): string {
+  if (isSelected) {
+    return `${BASE_TAB_CLASS} bg-fmat-primary text-white shadow-md border border-fmat-primary`;
+  }
+  return `${BASE_TAB_CLASS} bg-surface text-ink hover:text-ink hover:bg-canvas border border-border shadow hover:shadow-md`;
+}
+
 function getExpiredTabClass(isSelected: boolean, count: number): string {
   if (count > 0) {
     if (isSelected) {
@@ -74,10 +81,7 @@ function getExpiredTabClass(isSelected: boolean, count: number): string {
     }
     return `${BASE_TAB_CLASS} bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 shadow hover:shadow-md font-bold`;
   }
-  if (isSelected) {
-    return `${BASE_TAB_CLASS} bg-fmat-primary text-white shadow-md border border-fmat-primary`;
-  }
-  return `${BASE_TAB_CLASS} bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md`;
+  return getStandardTabClass(isSelected);
 }
 
 function getRedoTabClass(isSelected: boolean, count: number): string {
@@ -87,10 +91,7 @@ function getRedoTabClass(isSelected: boolean, count: number): string {
     }
     return `${BASE_TAB_CLASS} bg-red-600 hover:bg-red-700 text-white border border-red-700 shadow-lg animate-pulse font-extrabold`;
   }
-  if (isSelected) {
-    return `${BASE_TAB_CLASS} bg-fmat-primary text-white shadow-md border border-fmat-primary`;
-  }
-  return `${BASE_TAB_CLASS} bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md`;
+  return getStandardTabClass(isSelected);
 }
 
 export interface KdsBoardProps {
@@ -331,7 +332,7 @@ function KdsPendingUndoStrip({
     <div
       data-testid="kds-pending-undo-strip"
       aria-live="polite"
-      className="mb-3 flex flex-wrap items-center gap-2 rounded-control border border-amber-300 bg-amber-50 px-3 py-2 shadow-sm shrink-0"
+      className="mb-3 flex flex-wrap items-center gap-2 rounded-control border border-amber-500/70 bg-surface px-3 py-2 shadow-sm shrink-0"
     >
       {hiddenEntries.map((entry) => {
         const label = formatPendingStripLabel(entry);
@@ -339,7 +340,7 @@ function KdsPendingUndoStrip({
           <div
             key={entry.orderId}
             data-testid={`kds-pending-strip-item-${entry.orderId}`}
-            className="flex items-center gap-2 rounded bg-white border border-amber-300 px-2.5 py-1 text-xs sm:text-sm font-bold text-amber-950"
+            className="flex items-center gap-2 rounded bg-canvas border border-amber-500/50 px-2.5 py-1 text-xs sm:text-sm font-bold text-ink"
           >
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
             <span>
@@ -391,17 +392,9 @@ function KdsHeader({
   const isDeliveredSelected = tab === 'delivered';
   const isExpiredSelected = tab === 'expired';
 
-  const pendingTabClass = isPendingSelected
-    ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
-    : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md';
-
-  const inPrepTabClass = isInPrepSelected
-    ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
-    : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md';
-
-  const deliveredTabClass = isDeliveredSelected
-    ? 'bg-fmat-primary text-white shadow-md border border-fmat-primary'
-    : 'bg-surface text-ink hover:text-ink hover:bg-gray-50 border border-border shadow hover:shadow-md';
+  const pendingTabClass = getStandardTabClass(isPendingSelected);
+  const inPrepTabClass = getStandardTabClass(isInPrepSelected);
+  const deliveredTabClass = getStandardTabClass(isDeliveredSelected);
 
   return (
     <header className="px-3 sm:px-4 xl:px-6 py-2.5 sm:py-3 bg-surface border-b border-border flex flex-col lg:flex-row lg:items-center justify-between gap-2 xl:gap-3 shadow-sm">
@@ -419,13 +412,13 @@ function KdsHeader({
           tabIndex={0}
           data-testid="tab-pending"
           {...pointerAction(() => onTabChange('pending'))}
-          className={`${BASE_TAB_CLASS} ${pendingTabClass}`}
+          className={pendingTabClass}
         >
           <span>Pendientes</span>
           {pendingCount > 0 && (
             <span
               data-testid="pending-badge"
-              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${isPendingSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${isPendingSelected ? 'bg-white/20 text-white' : 'bg-canvas text-body border border-border'
                 }`}
             >
               {pendingCount}
@@ -441,13 +434,13 @@ function KdsHeader({
           tabIndex={0}
           data-testid="tab-active-view"
           {...pointerAction(() => onTabChange('in_preparation'))}
-          className={`${BASE_TAB_CLASS} ${inPrepTabClass}`}
+          className={inPrepTabClass}
         >
           <span>En Preparación</span>
           {inPrepCount > 0 && (
             <span
               data-testid="in-prep-badge"
-              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${isInPrepSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+              className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[11px] font-bold rounded-full ${isInPrepSelected ? 'bg-white/20 text-white' : 'bg-canvas text-body border border-border'
                 }`}
             >
               {inPrepCount}
@@ -484,7 +477,7 @@ function KdsHeader({
           tabIndex={0}
           data-testid="tab-delivered"
           {...pointerAction(() => onTabChange('delivered'))}
-          className={`${BASE_TAB_CLASS} ${deliveredTabClass}`}
+          className={deliveredTabClass}
         >
           Entregadas
         </button>
@@ -620,7 +613,7 @@ function KdsFooter({
           disabled={currentPage <= 1}
           {...pointerAction(() => onPageChange(currentPage - 1))}
           style={{ minHeight: 64 }}
-          className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-fmat-primary border-2 border-fmat-primary disabled:opacity-40 disabled:border-border disabled:text-muted disabled:cursor-not-allowed hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm cursor-pointer"
+          className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-fmat-primary border-2 border-fmat-primary disabled:opacity-40 disabled:border-border disabled:text-muted disabled:cursor-not-allowed hover:bg-fmat-soft focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm cursor-pointer"
         >
           Anterior
         </button>
@@ -691,7 +684,7 @@ function KdsGridContent({
       <output
         data-testid="kds-loading"
         aria-live="polite"
-        className="flex items-center justify-center h-full text-2xl font-semibold text-gray-400"
+        className="flex items-center justify-center h-full text-2xl font-semibold text-muted"
       >
         Cargando comanda...
       </output>

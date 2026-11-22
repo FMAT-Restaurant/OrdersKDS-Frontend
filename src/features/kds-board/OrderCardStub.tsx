@@ -1,25 +1,11 @@
 import type { KeyboardEvent } from 'react';
 import type { Order } from '../../shared/api/schemas.ts';
+import { getOrderKey, getOrderNumberDisplay } from './orderNumberDisplay.ts';
 
 export interface OrderCardStubProps {
   readonly order: Order;
   readonly onClick?: (order: Order) => void;
   readonly isFocused?: boolean;
-}
-
-function getOrderNumberDisplay(
-  orderNumber: number | null | undefined,
-  displayId: string,
-): string {
-  if (orderNumber != null) {
-    return String(orderNumber);
-  }
-  const isUuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(displayId);
-  if (isUuid) {
-    return displayId.slice(-4).toUpperCase();
-  }
-  return displayId.replace(/^ord-/, '');
 }
 
 /**
@@ -33,7 +19,7 @@ export function OrderCardStub({
   onClick,
   isFocused = false,
 }: Readonly<OrderCardStubProps>) {
-  const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const displayId = getOrderKey(order) || 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -58,7 +44,7 @@ export function OrderCardStub({
         className={`w-full h-full p-5 rounded-fmat border transition-all duration-150 select-none cursor-pointer flex flex-col justify-between min-h-[160px] text-left ${
           isFocused
             ? 'bg-surface border-fmat-primary ring-2 ring-fmat-primary shadow-md'
-            : 'bg-surface/90 border-border hover:border-gray-400 shadow hover:shadow-md'
+            : 'bg-surface/90 border-border hover:border-muted shadow hover:shadow-md'
         } focus:outline-none focus:ring-2 focus:ring-fmat-primary`}
       >
         <div className="flex items-center justify-between w-full">
@@ -71,7 +57,7 @@ export function OrderCardStub({
           </span>
           {order.tableNumber !== null && order.tableNumber !== undefined && (
             <span
-              className="text-sm font-semibold text-body bg-gray-100 px-2.5 py-1 rounded border border-border whitespace-nowrap"
+              className="text-sm font-semibold text-body bg-canvas px-2.5 py-1 rounded border border-border whitespace-nowrap"
               data-testid={`order-table-${displayId}`}
             >
               Mesa {order.tableNumber}

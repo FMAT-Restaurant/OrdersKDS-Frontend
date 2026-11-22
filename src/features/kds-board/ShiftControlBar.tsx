@@ -88,7 +88,7 @@ export function ShiftControlBar({
             data-testid="shift-rollover-btn"
             disabled={isPendingAction}
             onClick={() => setDialogMode('rollover')}
-            className="min-h-[40px] px-2.5 py-1 rounded-control border border-border bg-surface text-ink text-xs font-bold hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
+            className="min-h-[40px] px-2.5 py-1 rounded-control border border-border bg-surface text-ink text-xs font-bold hover:bg-canvas disabled:opacity-50 whitespace-nowrap"
           >
             Nuevo turno
           </button>
