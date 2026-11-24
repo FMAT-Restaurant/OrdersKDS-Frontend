@@ -42,11 +42,11 @@ fi
 NODE_VERSION=$(node --version 2>&1)
 NODE_MAJOR=$(echo "$NODE_VERSION" | sed -n 's/v\([0-9]*\)\..*/\1/p')
 
-if [ -z "$NODE_MAJOR" ]; then
+if [[ -z "$NODE_MAJOR" ]]; then
     abort "Could not parse Node.js version from: $NODE_VERSION"
 fi
 
-if [ "$NODE_MAJOR" -lt 24 ]; then
+if [[ "$NODE_MAJOR" -lt 24 ]]; then
     abort "Node.js 24+ required.  Found: $NODE_VERSION"
 fi
 
@@ -85,7 +85,7 @@ ok "Playwright browsers installed"
 # ---------------------------------------------------------------------------
 step "Generating .env.local from .env.example"
 
-if [ -f ".env.local" ]; then
+if [[ -f ".env.local" ]]; then
     warn ".env.local already exists -- skipping generation."
     warn "Edit it manually or delete it and re-run this script to regenerate."
 else
@@ -103,14 +103,19 @@ echo -e "========================================${NC}"
 echo ""
 echo "Next steps:"
 echo ""
-echo "  1. Edit .env.local and set the API and WebSocket URLs:"
-echo -e "       ${YELLOW}VITE_API_BASE_URL=http://localhost:8080${NC}"
-echo -e "       ${YELLOW}VITE_WS_URL=ws://localhost:8080/ws${NC}"
+echo "  1. Review .env.local (defaults to 'auto' against Kong Gateway on :8000):"
+echo -e "       ${YELLOW}VITE_API_BASE_URL=auto${NC}"
+echo -e "       ${YELLOW}VITE_WS_URL=auto${NC}"
+echo -e "       ${YELLOW}FEDERATION_REMOTE_URL=http://localhost:5177${NC}"
 echo ""
-echo "  2. Start the development server:"
+echo "  2. Start the development server (ordenesApp):"
 echo -e "       ${YELLOW}pnpm dev${NC}"
 echo ""
-echo "  Dev server : http://localhost:5173"
+echo "  3. (Optional) Start both Module Federation remotes:"
+echo -e "       ${YELLOW}pnpm run dev:federation${NC}         # ordenesApp -> http://localhost:5177"
+echo -e "       ${YELLOW}pnpm run dev:federation:cocina${NC}  # cocinaApp  -> http://localhost:5179"
 echo ""
-echo "  For the full daily workflow see QUICKSTART.md section 6."
+echo "  Dev server : http://localhost:5177"
+echo ""
+echo "  For the full daily workflow see QUICKSTART.md section 6 and 7."
 echo ""

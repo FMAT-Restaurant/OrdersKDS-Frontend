@@ -10,6 +10,8 @@
 Quick reference for the CI/CD standard required by the course.
 Full setup instructions are in [README.md](README.md); the contributing
 workflow is in [docs/CONTRIBUTING_Frontend.md](docs/CONTRIBUTING_Frontend.md).
+Docker setup (standard single image + optional dual-remote `cocinaApp` build)
+is in [docs/GUIA_DOCKER.md](docs/GUIA_DOCKER.md).
 
 ---
 
@@ -45,7 +47,7 @@ Select **Read and write permissions** and save. This is required by the
 
 Branch protection is configured in `Settings → Branches` (or Rulesets) for
 **both** `develop` and `main`. The full rule set is documented in
-[docs/CONTRIBUTING_Frontend.md §15](docs/CONTRIBUTING_Frontend.md).
+[docs/CONTRIBUTING_Frontend.md](docs/CONTRIBUTING_Frontend.md).
 
 Summary:
 
@@ -65,9 +67,9 @@ Summary:
 
 ```
 lint-and-types
+build-federation
 unit-tests
 sonarcloud
-build-federation
 e2e
 a11y
 zap-baseline
@@ -90,23 +92,20 @@ File: `.github/workflows/ci.yml`
 push/PR to develop or main
         │
         ├─ validate-pr          (PR only) — branch name + Conventional Commits title
-        ├─ lint-and-types        — gitleaks, ESLint, tsc --noEmit
-        │
-        └─ unit-tests            — vitest --coverage, uploads lcov.info + junit.xml
-               │
-               ├─ sonarcloud    — downloads artifacts, SonarCloud + Quality Gate
-               │
-               └─ build-federation — pnpm build, uploads federation-dist artifact
+        └─ lint-and-types       — gitleaks, ESLint, tsc --noEmit
+                │
+                └─ build-federation — pnpm run build (uploads federation-dist)
                         │
+                        ├─ unit-tests   — pnpm run test:coverage → sonarcloud
                         ├─ e2e          — Playwright (Chromium + WebKit)
                         ├─ a11y         — axe-core via Playwright
-                        └─ zap-baseline — OWASP ZAP baseline against preview server (reports to Discord)
+                        └─ zap-baseline — OWASP ZAP baseline on preview (:4173)
 
 Runs after any failure:
-        notify-on-failure        — Discord webhook alert
+        notify-on-failure       — Discord webhook alert
 
 Runs only on push to main (after all checks pass):
-        build-and-push           — Docker image → ghcr.io, Discord notification
+        build-and-push          — Docker image → ghcr.io, Discord notification
 ```
 
 ---
@@ -126,13 +125,13 @@ Common failures and fixes:
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `ESLint` fails | Rule violation | Run `pnpm run lint --fix` locally |
-| `tsc --noEmit` fails | Type error or missing type | Add type annotation; avoid `any` |
-| `vitest` fails | Test assertion or import error | Run `pnpm run test:unit -u` locally |
+| `tsc --noEmit` fails | Type error or missing type | Run `pnpm exec tsc --noEmit` locally and add proper types |
+| `vitest` fails | Test assertion or missing `dist/` | Run `pnpm run build && pnpm run test:unit` locally |
 | SonarCloud Quality Gate fails | Coverage < 85 % or new issues | Check the SonarCloud dashboard |
-| `gitleaks` fails | Secret detected in a commit | Rotate the secret; see CONTRIBUTING §12 |
-| `build-federation` fails | `vite build` error | Run `pnpm run build` locally; check `vite.config.ts` |
+| `gitleaks` fails | Secret detected in a commit | Rotate the secret; see `docs/CONTRIBUTING_Frontend.md` |
+| `build-federation` fails | `vite build` error | Run `pnpm run build` and `pnpm run build:cocina` locally |
 | `e2e` fails | Component or route broken | Run `pnpm run test:e2e` locally with `--headed` |
-| `zap-baseline` fails (MEDIUM+) | Security issue in the app | Check `.zap/rules.tsv` and fix the finding |
+| `zap-baseline` fails (MEDIUM+) | Security issue in headers/app | Check `.zap/rules.tsv` and `vite.config.ts` headers |
 
 ---
 
@@ -145,38 +144,30 @@ Every team member needs the tools below **before** running the setup steps.
 | Tool | Minimum version | Used for | Download |
 |---|---|---|---|
 | **Git** | 2.40+ | Clone, branches, commits | https://git-scm.com/downloads |
-| **Docker Desktop** (includes Compose v2) | Docker 24+ | Backend services (postgres, redis, rabbitmq) when running full stack locally | https://www.docker.com/products/docker-desktop |
+| **Docker Desktop** (includes Compose v2) | Docker 24+ | Backend services (`orders-backend`) and optional Nginx container build | https://www.docker.com/products/docker-desktop |
 | **Node.js** | 24 LTS | JavaScript runtime for pnpm, Vite, Vitest, Playwright | https://nodejs.org |
-| **pnpm** | 9+ | Package manager | `npm install -g pnpm` or `corepack enable && corepack prepare pnpm@latest --activate` |
+| **pnpm** | 9+ (pinned `12.18.0` via Corepack/CI) | Package manager | `corepack enable` or `npm install -g pnpm` |
 | **VS Code** (recommended) | — | Editor with TypeScript and ESLint integration | https://code.visualstudio.com |
 
-> You do **not** need Python, PostgreSQL, or any backend tooling on your
-> machine to develop the frontend. The backend can be mocked using MSW
-> (Mock Service Worker) while TASK-30 is implemented.
+> You do **not** need Python or PostgreSQL to run unit/E2E tests against MSW/Playwright mocks. To test real end-to-end flows, run `orders-backend` locally or in Docker (see §7).
 
 #### 5.2 VS Code extensions (recommended)
-
-Install via the Extensions sidebar or `code --install-extension <id>`:
 
 | Extension | ID | Purpose |
 |---|---|---|
 | ESLint | `dbaeumer.vscode-eslint` | Lint errors in-editor |
 | Prettier | `esbenp.prettier-vscode` | Auto-format on save |
-| SonarLint | `SonarSource.sonarlint-vscode` | Live quality issues (connected to SonarCloud) |
+| SonarLint | `SonarSource.sonarlint-vscode` | Live quality issues |
 | Tailwind CSS IntelliSense | `bradlc.vscode-tailwindcss` | Autocomplete for Tailwind classes |
 | Playwright Test for VS Code | `ms-playwright.playwright` | Run/debug E2E tests in-editor |
 
 #### 5.3 Windows-specific notes
 
-1. Docker Desktop requires **WSL 2**. If it asks for it, run in an
-   administrator PowerShell and restart:
-
+1. Docker Desktop requires **WSL 2**. If prompted, run in an administrator PowerShell and restart:
    ```powershell
    wsl --install
    ```
-
 2. If PowerShell blocks scripts, run once per machine:
-
    ```powershell
    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
    ```
@@ -186,17 +177,18 @@ Install via the Extensions sidebar or `code --install-extension <id>`:
 ```powershell
 git --version           # 2.40 or newer
 node --version          # v24.x
-pnpm --version          # 9.x
-docker --version        # Docker version 24 or newer (optional, for full stack)
+pnpm --version          # 9.x or 12.x
+docker --version        # Docker version 24 or newer (needed for backend/container testing)
 ```
 
 #### 5.5 Ports that must be free
 
 | Port | Service |
 |---|---|
-| `5173` | Vite dev server |
-| `4173` | Vite preview server (used by ZAP scan and Module Federation) |
-| `8080` | API Gateway (backend) |
+| `5177` | `ordenesApp` Vite dev / preview server (`http://localhost:5177`) |
+| `5179` | `cocinaApp` Vite dev / preview server (`http://localhost:5179`) |
+| `8000` | `orders-backend` / Kong API Gateway (`REST` + `WebSocket`) |
+| `4173` | Optional CI `zap-baseline` preview port |
 
 ---
 
@@ -204,214 +196,204 @@ docker --version        # Docker version 24 or newer (optional, for full stack)
 
 #### 6.1 First-time setup (run once after cloning)
 
-The bootstrap script verifies all prerequisites, installs dependencies with a
-frozen lockfile, installs the Playwright browsers, and creates `.env.local`
-from the template.
+The bootstrap script verifies Node.js 24+ and pnpm, installs dependencies with `--frozen-lockfile`, installs Playwright Chromium + WebKit browsers, and creates `.env.local` from `.env.example`.
 
 **Windows PowerShell:**
 
 ```powershell
-git clone https://github.com/<org>/ordenes-kds-frontend.git
-cd ordenes-kds-frontend
+git clone https://github.com/FMAT-Restaurant/OrdersKDS-Frontend.git
+cd OrdersKDS-Frontend
 .\scripts\bootstrap.ps1
 ```
 
 **macOS / Linux:**
 
 ```bash
-git clone https://github.com/<org>/ordenes-kds-frontend.git
-cd ordenes-kds-frontend
+git clone https://github.com/FMAT-Restaurant/OrdersKDS-Frontend.git
+cd OrdersKDS-Frontend
 bash scripts/bootstrap.sh
 ```
 
-The script prints the next steps when it finishes.  The only manual step is
-editing `.env.local` to point at the backend:
+`.env.example` already configures `auto` mode (`VITE_API_BASE_URL=auto`, `VITE_WS_URL=auto`), which resolves automatically to `http://<current-host>:8000/api/v1/orders` (for `ordenesApp`) or `/api/v1/kitchen` (for `cocinaApp`).
 
-```dotenv
-VITE_API_BASE_URL=http://localhost:8080
-VITE_WS_URL=ws://localhost:8080/ws
-```
-
-Then start the dev server:
+Start the dev server:
 
 ```bash
 pnpm dev
-# Dev harness available at http://localhost:5173
+# Available at http://localhost:5177
 ```
 
-#### 6.2 Daily routine (every time you open the repo)
+#### 6.2 Daily routine
 
-No activation step is needed (unlike the Python venv in the backend).
-Open a terminal in the repository root and:
+No virtual environment activation is needed:
 
 ```bash
-# Pull the latest changes
 git pull --rebase origin develop
-
-# Sync dependencies if package.json or pnpm-lock.yaml changed after the pull
-# (safe to run always — fast no-op when nothing changed)
 pnpm install --frozen-lockfile
-
-# Start the development server
 pnpm dev
 ```
-
-Dev server is available at `http://localhost:5173`.
 
 | Quick reference | Command |
 |---|---|
+| Start dev server (`ordenesApp`, port `5177`) | `pnpm dev` |
+| Build `ordenesApp` (`dist/`) | `pnpm run build` |
+| Build `cocinaApp` (`dist-cocina/`) | `pnpm run build:cocina` |
+| Build + preview `ordenesApp` (`:5177`) | `pnpm run dev:federation` |
+| Build + preview `cocinaApp` (`:5179`) | `pnpm run dev:federation:cocina` |
+| Run unit tests | `pnpm run test:unit` |
 | Run unit tests with coverage | `pnpm run test:coverage` |
-| Run E2E tests | `pnpm run test:e2e` |
-| Run accessibility tests | `pnpm run test:a11y` |
-| Build the federation bundle | `pnpm run build` |
-| Preview the built bundle | `pnpm run preview` |
+| Run E2E tests (Chromium + WebKit) | `pnpm run test:e2e` |
+| Run accessibility tests (`axe-core`) | `pnpm run test:a11y` |
 | Lint | `pnpm run lint` |
 | Type check | `pnpm exec tsc --noEmit` |
 
-#### 6.3 After a dependency update (someone changed package.json)
+#### 6.3 After a dependency update
 
-If `pnpm-lock.yaml` changed after a `git pull`, the frozen install will fail
-with a lockfile mismatch.  Run the regular install instead:
+If `pnpm-lock.yaml` changed after a `git pull`, run `pnpm install` (without `--frozen-lockfile` only when you are updating dependencies) and commit the lockfile if you added the package.
 
-```bash
-pnpm install
-```
+#### 6.4 Working without the backend (Dev Sandbox & MSW)
 
-Commit the updated lockfile if you were the one adding the dependency.
+- **Automated tests (Vitest / Playwright):** MSW handlers and fixtures live in `tests/mocks/` and `e2e/fixtures/`.
+- **Interactive local sandbox:** When running standalone without a Shell session, `DevSandboxApp` (`src/DevSandboxApp.tsx` + `src/features/dev-sandbox/mockSandboxFetch.ts`) provides role/view switching (`Admin`, `Chef`, `Cocinero`, `Mesero`) and simulated flows.
 
-#### 6.4 Working without the backend (MSW mocks)
+#### 6.5 Testing Module Federation remotes (`ordenesApp` & `cocinaApp`)
 
-While the backend is not yet implemented or not running locally, the frontend
-uses **Mock Service Worker (MSW)** to intercept REST and WebSocket calls.
-Handlers live in `src/mocks/`.  No additional configuration is required —
-the dev server starts with mocks active by default when
-`VITE_APP_ENV=development`.
-
-#### 6.5 Testing the Module Federation remote
+With `@originjs/vite-plugin-federation`, `remoteEntry.js` is emitted during build:
 
 ```bash
-# Build the remote and serve it on port 4173
-pnpm run build
-pnpm run preview
+# Terminal 1 — Waiter / Orders remote (ordenesApp on :5177)
+pnpm run dev:federation
+# Exposed at: http://localhost:5177/assets/remoteEntry.js
 
-# remoteEntry.js is now available at:
-# http://localhost:4173/assets/remoteEntry.js
-# Point the Auth Shell remote URL here during local integration.
+# Terminal 2 — Kitchen remote (cocinaApp on :5179)
+pnpm run dev:federation:cocina
+# Exposed at: http://localhost:5179/assets/remoteEntry.js
 ```
 
 #### 6.6 Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `pnpm install` fails with lockfile mismatch | package.json changed | Run `pnpm install` (without `--frozen-lockfile`) |
-| `pnpm dev` — port 5173 in use | Another Vite server running | Kill the other process or use `pnpm dev --port 5174` |
-| TypeScript errors on start | Outdated types after `git pull` | Run `pnpm install` to update type definitions |
-| E2E tests time out | Preview server not running | Ensure `pnpm run preview` is running, or check `webServer` in `playwright.config.ts` |
-| `remoteEntry.js` not found | Bundle not built | Run `pnpm run build` before `pnpm run preview` |
-| SonarLint shows no issues | Not connected to SonarCloud | Check `.sonarlint/connectedMode.json` and verify the token in VS Code settings |
-| Playwright browsers missing | Bootstrap not run or browsers removed | Run `pnpm exec playwright install --with-deps chromium webkit` |
+| `pnpm install` fails with lockfile mismatch | `package.json` changed | Run `pnpm install` |
+| `css-scoping.test.ts` fails during `test:unit` | `dist/` has not been built yet | Run `pnpm run build` before `pnpm run test:unit` |
+| `pnpm preview` — port `5177` or `5179` in use | Another Vite server running | Stop the conflicting process (`strictPort: true`) |
+| `remoteEntry.js` returns 404 | Bundle not built | Run `pnpm run dev:federation` or `pnpm run dev:federation:cocina` |
+| Playwright browsers missing | Bootstrap not run | Run `pnpm exec playwright install --with-deps chromium webkit` |
 
 ---
 
-### §7 — Quick Test Environment Startup (Joint Testing with Backend, Terminal & Docker Desktop)
+### §7 — Exact Step-by-Step Joint Testing Guide (Frontend + `orders-backend` + Docker)
 
-To run manual end-to-end functional tests (viewing real orders on the KDS board, starting preparation, marking items ready, voiding orders with the virtual keyboard, etc.), **this frontend must run alongside `orders-backend`**.
+To test real end-to-end flows (real PostgreSQL persistence, Redis catalog, RabbitMQ Saga events, and live WebSocket push), run **`orders-backend`** and **`orders-frontend`** together.
 
-#### Step 0 — Packaging & Running the Frontend Docker Container (for Docker Desktop)
-If you want to package the frontend using its multi-stage `Dockerfile` (Node 20 build + Nginx with CORS headers) and run it as a container in **Docker Desktop**:
+#### Step 0 — Optional: Build and Run the Frontend Docker Container
+
+In normal local or standalone Docker usage, you only need **1 single Docker image** (`orders-frontend:latest`). The [`Dockerfile`](Dockerfile) uses `node:20-alpine` (with Corepack + `pnpm@12.18.0`) and `nginxinc/nginx-unprivileged:alpine` listening on unprivileged port `8080`, and that single image already bundles all **5 modules** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) so both Waiter and Kitchen views work from one container.
 
 ```powershell
-# 1. Navigate to the frontend repository root
 cd C:\path\to\orders-frontend
 
-# 2. Build (package) the Docker image
+# 1. Build and run the single frontend image on http://localhost:5177
 docker build -t orders-frontend:latest .
-
-# 3. Remove any previous container with the same name and start the new container on port 3000
 docker rm -f orders-frontend 2>$null
-docker run -d --name orders-frontend -p 3000:8080 orders-frontend:latest
+docker run -d --name orders-frontend -p 5177:8080 orders-frontend:latest
 
-# 4. In Docker Desktop -> Containers, verify "orders-frontend" is Running (green dot) on 3000:8080.
-#    Open http://localhost:3000 in your browser (it connects automatically to http://localhost:8000).
+# 2. Verify app and Module Federation manifest respond 200 OK
+curl -I http://localhost:5177/
+curl -I http://localhost:5177/assets/remoteEntry.js
 ```
 
-#### Step 1 — Start the Backend & Seed Data First (Terminal 1 + Docker Desktop)
-Before starting the frontend, follow **§8 of the Backend `QUICKSTART.md`** in a first PowerShell window (**Terminal 1**):
+> **Optional / Advanced — Separate `cocinaApp` image (`:5179`, only for 6-module Auth Shell + Kong dual-remote integration `INT-06`/`INT-07`):**
+> `vite.config.ts` sets the Module Federation remote name (`ordenesApp` vs `cocinaApp`) and default Kong API prefix (`/api/v1/orders` vs `/api/v1/kitchen`) at build time. Only when integrating with the **Auth Shell + Kong** team setup that explicitly loads two separate remotes (`ordenesApp` on `:5177` and `cocinaApp` on `:5179`), also build the kitchen remote image:
+> ```powershell
+> docker build --build-arg BUILD_MODE=cocina -t cocina-frontend:latest .
+> docker rm -f cocina-frontend 2>$null
+> docker run -d --name cocina-frontend -p 5179:8080 cocina-frontend:latest
+> curl -I http://localhost:5179/assets/remoteEntry.js
+> ```
 
-1. Open **Docker Desktop** and wait until the bottom status bar shows **Engine running**.
-2. In **Terminal 1** (inside `orders-backend`), run:
+#### Step 1 — Start `orders-backend` First (Terminals 1 & 2 + Docker Desktop)
+
+1. Open **Docker Desktop** and wait for **Engine running**.
+2. In **Terminal 1** (`orders-backend`):
    ```powershell
    cd C:\path\to\orders-backend
    .\.venv\Scripts\Activate.ps1
    python scripts/setup_env.py
-   docker compose up -d
+   docker compose up -d postgres redis rabbitmq
+   docker compose ps
    alembic upgrade head
-   python scripts/seed_demo.py
+   python scripts/seed_demo.py --reset
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
-3. Verify in **Docker Desktop → Containers** that `ordenes-postgres`, `ordenes-redis`, and `ordenes-rabbitmq` are **Running** (green dot), and leave `uvicorn` running on port `8000` in **Terminal 1**.
+   *(You can also start all 6 backend containers with `docker-compose.ci.yml` — see `orders-backend/QUICKSTART.md §8 Mode B`. Remember `seed_demo.py --reset` generates **fresh random UUIDv4s** and prints the 8 seeded `OrderId`s in stdout.)*
+3. In **Terminal 2** (`orders-backend`), start the background workers so outbox events, Saga timeout (60 s), RabbitMQ consumers, and live WebSocket updates work:
+   ```powershell
+   cd C:\path\to\orders-backend
+   .\.venv\Scripts\Activate.ps1
+   python -m app.workers.run_all
+   ```
 
-#### Step 2 — Configure `.env.local` in the Frontend (Terminal 2)
-Open a **second PowerShell window (Terminal 2)** for the frontend.
-
-> **Important port note:** `.env.example` defaults to `http://localhost:8080` (the API Gateway port). When testing locally directly against `orders-backend` (`uvicorn` on port `8000`) without the API Gateway, point `VITE_API_BASE_URL` and `VITE_WS_URL` to **`localhost:8000`**:
+#### Step 2 — Configure `.env.local` in `orders-frontend` (Terminal 3)
 
 ```powershell
-# 1. Navigate to the frontend repository root
 cd C:\path\to\orders-frontend
 
-# 2. (First time only) If node_modules is not installed yet:
+# First time only (if node_modules is not installed yet):
 # .\scripts\bootstrap.ps1
 
-# 3. Point .env.local to the local backend running on port 8000
-Set-Content -Path .env.local -Value "VITE_API_BASE_URL=http://localhost:8000`nVITE_WS_URL=ws://localhost:8000/ws`nFEDERATION_REMOTE_URL=http://localhost:4173`nVITE_APP_ENV=development"
+# Copy .env.example (already sets VITE_API_BASE_URL=auto and VITE_WS_URL=auto for :8000)
+Copy-Item .env.example .env.local -Force
 ```
 
-*(Optional)* By default in local development, `src/shared/api/client.ts` automatically generates a valid development JWT with the `kitchen` role. If you want to test the UI with a specific token generated by `orders-backend/scripts/dev_token.py` (for example `--role admin` or `--role chef`), add `VITE_API_TOKEN=<your-jwt>` to `.env.local`.
+> **How `auto` works:** `resolveDefaultApiBaseUrl()` and `resolveDefaultWsBaseUrl()` automatically target `http://<host>:8000/api/v1/orders` (`ws://.../api/v1/orders`) in standard mode and `http://<host>:8000/api/v1/kitchen` in `cocina` mode. You can override them explicitly in `.env.local` if connecting to a remote host or Kong Gateway on another port.
 
-#### Step 3 — Start the Frontend Dev Server (Terminal 2)
-In **Terminal 2**, start Vite:
+#### Step 3 — Start the Frontend (Terminal 3)
 
 ```powershell
+# Development server (HMR) on http://localhost:5177
 pnpm dev
+
+# Or serve built Module Federation remote locally:
+# pnpm run dev:federation         -> http://localhost:5177
 ```
 
-Open **`http://localhost:5173`** in your browser.
+#### Step 4 — Manual Verification with Seeded Data (`seed_demo.py --reset`)
 
-*(Optional — Module Federation mode with Auth Shell)*: If you are testing remote integration with Team 6's Auth Shell, build and serve the federated bundle on port `4173` instead:
+Each `seed_demo.py` run assigns **new random UUIDv4 IDs** printed in Terminal 1 (`OrderId: <uuid>`) and visible in the KDS cards / `GET /orders` by Shift **Folio (`#1`–`#8`)**:
 
+| Folio | Location | Initial Status | Where it appears & what to test |
+|---|---|---|---|
+| `#1` | **Mesa 5** | `RESERVED` | **Activas** tab in KDS. Click **"Iniciar preparación"** (or press `Enter`) → moves to `IN_PREPARATION`. |
+| `#2` | **Mesa 12** | `IN_PREPARATION` | **Activas** tab with live timer. Mark items `READY` (touch or keys `1`–`9`), or test Admin/Chef void dialogs with the virtual keyboard. |
+| `#3` | **Mesa 3** | `DELIVERED` | **Entregadas** tab in KDS (`view=delivered`). Test dish redo (`PATCH .../items/{itemId}/redo`) or request bill (`POST .../request-bill`). |
+| `#4` | **Mesa 8** | `CREATED` | Draft order in `OrderTicketWidget`. Edit items, confirm (`POST .../confirm`), or cancel (`PATCH .../cancel`). |
+| `#5` | **Para llevar** | `CREATED` | Takeaway draft order (`isTakeaway: true`) for testing confirm / RabbitMQ Saga. |
+| `#6` | **Mesa 15** | `RESERVED` | Multi-station items (`parrilla` + `fria`) for KDS station selector filtering. |
+| `#7` | **Mesa 9** | `REJECTED` | Shows `rejectionDetails` in `OrderTicketWidget` for modification or cancellation. |
+| `#8` | **Mesa 11** | `RESERVED` | Reserved > 15 min ago; appears in the **"Caducados"** KDS tab with 10 min grace countdown. |
+
+Reset seeded state with fresh random UUIDv4s at any time from **Terminal 1** (`orders-backend`):
+```powershell
+python scripts/seed_demo.py --reset
+```
+
+Run automated verification suites from **Terminal 3** (`orders-frontend`):
 ```powershell
 pnpm run build
-pnpm run preview
-# Federated entry point available at: http://localhost:4173/assets/remoteEntry.js
+pnpm run test:unit
+pnpm run test:e2e
+pnpm run test:a11y
 ```
 
-#### Step 4 — Manual Testing Guide with the Seeded Orders
-Once `http://localhost:5173` loads, the KDS board fetches the seeded orders from `http://localhost:8000/kds/queue`:
-
-| Seeded Order (`seed_demo.py`) | Table | Status | Where it appears & what to test in the UI |
-|---|---|---|---|
-| `11111111-1111-1111-1111-111111111111` | **Table 5** | `RESERVED` | Appears in the **Activas** tab. Test clicking **"Iniciar preparación"** (or pressing `Enter` via Bump Bar) to transition it to `IN_PREPARATION`. |
-| `22222222-2222-2222-2222-222222222222` | **Table 12** | `IN_PREPARATION` | Appears in the **Activas** tab with live elapsed timer and semaphore badge. Test clicking individual pending items (or pressing numeric keys `1`–`9`) to mark them `READY`, or test **Admin / Chef Void dialogs** with the on-screen virtual keyboard. |
-| `33333333-3333-3333-3333-333333333333` | **Table 3** | `DELIVERED` | Switch to the **Entregadas** tab at the top of the KDS board to inspect completed orders. |
-| `44444444-4444-4444-4444-444444444444` | **Table 8** | `CREATED` | Draft order (not yet in kitchen). Confirm it via Swagger (`POST /orders/{id}/confirm`) or test it with `OrderTicketWidget`. |
-
-- **Resetting test data at any time:** If you finish testing transitions and want to restore the 4 orders to their initial state, run `python scripts/seed_demo.py --reset` in **Terminal 1** (backend) and refresh the browser.
-- **Running visual Playwright E2E tests for evidence:**
-  ```powershell
-  # Run all E2E tests and open the HTML evidence report
-  pnpm run test:e2e
-  pnpm exec playwright show-report
-  ```
-
 ---
-
 ---
 
 ## Versión en Español
 
 Referencia rápida para el estándar de CI/CD requerido por el curso.
 Las instrucciones completas están en [README.md](README.md); el flujo de contribución está en [docs/CONTRIBUTING_Frontend.md](docs/CONTRIBUTING_Frontend.md).
+La configuración Docker (imagen única estándar + build dual opcional para `cocinaApp`) está en [docs/GUIA_DOCKER.md](docs/GUIA_DOCKER.md).
 
 ---
 
@@ -462,9 +444,9 @@ Resumen:
 
 ```
 lint-and-types
+build-federation
 unit-tests
 sonarcloud
-build-federation
 e2e
 a11y
 zap-baseline
@@ -484,23 +466,20 @@ Archivo: `.github/workflows/ci.yml`
 push/PR a develop o main
         │
         ├─ validate-pr          (solo PR) — nombre de rama + título Conventional Commits
-        ├─ lint-and-types        — gitleaks, ESLint, tsc --noEmit
-        │
-        └─ unit-tests            — vitest --coverage, sube lcov.info + junit.xml
-               │
-               ├─ sonarcloud    — descarga artefactos, SonarCloud + Quality Gate
-               │
-               └─ build-federation — pnpm build, sube artefacto federation-dist
+        └─ lint-and-types       — gitleaks, ESLint, tsc --noEmit
+                │
+                └─ build-federation — pnpm run build (sube artefacto federation-dist)
                         │
+                        ├─ unit-tests   — pnpm run test:coverage → sonarcloud
                         ├─ e2e          — Playwright (Chromium + WebKit)
                         ├─ a11y         — axe-core vía Playwright
-                        └─ zap-baseline — OWASP ZAP baseline contra el preview server (reporta a Discord)
+                        └─ zap-baseline — OWASP ZAP baseline contra preview (:4173)
 
 Se ejecuta tras cualquier fallo:
-        notify-on-failure        — alerta por webhook de Discord
+        notify-on-failure       — alerta por webhook de Discord
 
 Se ejecuta solo en push a main (después de que todos los checks pasen):
-        build-and-push           — imagen Docker → ghcr.io, notificación a Discord
+        build-and-push          — imagen Docker → ghcr.io, notificación a Discord
 ```
 
 ---
@@ -517,13 +496,14 @@ Fallos comunes y soluciones:
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| `ESLint` falla | Violación de regla | Ejecuta `pnpm run lint` localmente |
-| `tsc --noEmit` falla | Error de tipo o `any` | Agrega la anotación de tipo correcta |
-| `vitest` falla | Assertion o import incorrecto | Ejecuta `pnpm run test:unit` localmente |
+| `ESLint` falla | Violación de regla | Ejecuta `pnpm run lint --fix` localmente |
+| `tsc --noEmit` falla | Error de tipo o `any` | Ejecuta `pnpm exec tsc --noEmit` localmente |
+| `vitest` falla | Aserción incorrecta o falta `dist/` | Ejecuta `pnpm run build && pnpm run test:unit` localmente |
 | SonarCloud Quality Gate falla | Cobertura < 85 % o nuevos issues | Revisa el dashboard de SonarCloud |
 | `gitleaks` falla | Secreto detectado en un commit | Rota el secreto inmediatamente |
-| `build-federation` falla | Error de `vite build` | Ejecuta `pnpm run build` localmente |
+| `build-federation` falla | Error de `vite build` | Ejecuta `pnpm run build` y `pnpm run build:cocina` localmente |
 | `e2e` falla | Componente o ruta rota | Ejecuta `pnpm run test:e2e` con `--headed` |
+| `zap-baseline` falla (MEDIUM+) | Cabeceras o configuración de seguridad | Revisa `.zap/rules.tsv` y `vite.config.ts` |
 
 ---
 
@@ -534,23 +514,20 @@ Fallos comunes y soluciones:
 | Herramienta | Versión mínima | Para qué sirve | Descarga |
 |---|---|---|---|
 | **Git** | 2.40+ | Clonar, ramas, commits | https://git-scm.com/downloads |
-| **Docker Desktop** (incluye Compose v2) | Docker 24+ | Servicios del backend cuando se ejecuta el stack completo localmente | https://www.docker.com/products/docker-desktop |
+| **Docker Desktop** (incluye Compose v2) | Docker 24+ | Servicios de `orders-backend` y empaquetamiento Docker opcional | https://www.docker.com/products/docker-desktop |
 | **Node.js** | 24 LTS | Runtime de JavaScript para pnpm, Vite, Vitest, Playwright | https://nodejs.org |
-| **pnpm** | 9+ | Manejador de paquetes | `npm install -g pnpm` |
+| **pnpm** | 9+ (fijado `12.18.0` vía Corepack/CI) | Manejador de paquetes | `corepack enable` o `npm install -g pnpm` |
 | **VS Code** (recomendado) | — | Editor con integración de TypeScript y ESLint | https://code.visualstudio.com |
 
-> **No necesitas** instalar Python, PostgreSQL ni ninguna herramienta del backend para desarrollar el frontend. El backend se puede simular con MSW (Mock Service Worker) mientras se implementa TASK-30.
+> **No necesitas** instalar Python ni PostgreSQL para correr pruebas unitarias o E2E con mocks MSW/Playwright. Para probar flujos reales de punta a punta, levanta `orders-backend` (ver §7).
 
 #### 5.2 Notas específicas de Windows
 
 1. Docker Desktop requiere **WSL 2**. Si lo solicita, ejecuta en PowerShell como administrador y reinicia:
-
    ```powershell
    wsl --install
    ```
-
 2. Si PowerShell bloquea scripts, ejecuta una vez por máquina:
-
    ```powershell
    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
    ```
@@ -560,235 +537,211 @@ Fallos comunes y soluciones:
 ```powershell
 git --version           # 2.40 o superior
 node --version          # v24.x
-pnpm --version          # 9.x
+pnpm --version          # 9.x o 12.x
+docker --version        # Docker version 24 o superior (para backend / contenedores)
 ```
 
 #### 5.4 Puertos que deben estar libres
 
 | Puerto | Servicio |
 |---|---|
-| `5173` | Servidor de desarrollo Vite |
-| `4173` | Servidor de preview Vite (usado por ZAP y Module Federation) |
-| `8080` | API Gateway (backend) |
+| `5177` | Servidor Vite dev / preview de `ordenesApp` (`http://localhost:5177`) |
+| `5179` | Servidor Vite dev / preview de `cocinaApp` (`http://localhost:5179`) |
+| `8000` | `orders-backend` / API Gateway Kong (`REST` + `WebSocket`) |
+| `4173` | Puerto temporal usado por `zap-baseline` en CI |
 
 ---
 
 ### §6 — Desarrollo local
 
-#### 6.1 Configuracion inicial (ejecutar una sola vez al clonar el repo)
+#### 6.1 Configuración inicial (ejecutar una sola vez al clonar el repo)
 
-El script de bootstrap verifica todos los prerequisitos, instala las
-dependencias con lockfile fijo, instala los navegadores de Playwright
-y crea `.env.local` desde la plantilla.
+El script de bootstrap verifica Node.js 24+ y pnpm, instala las dependencias con `--frozen-lockfile`, instala los navegadores de Playwright (Chromium y WebKit) y crea `.env.local` desde `.env.example`.
 
 **Windows PowerShell:**
 
 ```powershell
-git clone https://github.com/<org>/ordenes-kds-frontend.git
-cd ordenes-kds-frontend
+git clone https://github.com/FMAT-Restaurant/OrdersKDS-Frontend.git
+cd OrdersKDS-Frontend
 .\scripts\bootstrap.ps1
 ```
 
 **macOS / Linux:**
 
 ```bash
-git clone https://github.com/<org>/ordenes-kds-frontend.git
-cd ordenes-kds-frontend
+git clone https://github.com/FMAT-Restaurant/OrdersKDS-Frontend.git
+cd OrdersKDS-Frontend
 bash scripts/bootstrap.sh
 ```
 
-El script imprime los proximos pasos al terminar.  El unico paso manual es
-editar `.env.local` para apuntar al backend:
+`.env.example` ya viene configurado en modo `auto` (`VITE_API_BASE_URL=auto`, `VITE_WS_URL=auto`), resolviendo automáticamente hacia `http://<host-actual>:8000/api/v1/orders` (para `ordenesApp`) o `/api/v1/kitchen` (para `cocinaApp`).
 
-```dotenv
-VITE_API_BASE_URL=http://localhost:8080
-VITE_WS_URL=ws://localhost:8080/ws
-```
-
-Luego inicia el servidor de desarrollo:
+Inicia el servidor de desarrollo:
 
 ```bash
 pnpm dev
-# Dev harness disponible en http://localhost:5173
+# Disponible en http://localhost:5177
 ```
 
-#### 6.2 Rutina diaria (cada vez que abres el repo)
+#### 6.2 Rutina diaria
 
-No se necesita activar ningun entorno virtual (a diferencia del backend con Python).
-Abre una terminal en la raiz del repositorio y:
+No se necesita activar ningún entorno virtual:
 
 ```bash
-# Traer los ultimos cambios
 git pull --rebase origin develop
-
-# Sincronizar dependencias si package.json o pnpm-lock.yaml cambiaron
-# (seguro ejecutar siempre — muy rapido si no hay cambios)
 pnpm install --frozen-lockfile
-
-# Iniciar el servidor de desarrollo
 pnpm dev
 ```
 
-El servidor de desarrollo estara disponible en `http://localhost:5173`.
-
-| Referencia rapida | Comando |
+| Referencia rápida | Comando |
 |---|---|
+| Servidor de desarrollo (`ordenesApp`, puerto `5177`) | `pnpm dev` |
+| Compilar `ordenesApp` (`dist/`) | `pnpm run build` |
+| Compilar `cocinaApp` (`dist-cocina/`) | `pnpm run build:cocina` |
+| Compilar y previsualizar `ordenesApp` (`:5177`) | `pnpm run dev:federation` |
+| Compilar y previsualizar `cocinaApp` (`:5179`) | `pnpm run dev:federation:cocina` |
+| Pruebas unitarias | `pnpm run test:unit` |
 | Pruebas unitarias con cobertura | `pnpm run test:coverage` |
-| Pruebas E2E | `pnpm run test:e2e` |
-| Pruebas de accesibilidad | `pnpm run test:a11y` |
-| Construir el bundle de federacion | `pnpm run build` |
-| Previsualizar el bundle | `pnpm run preview` |
+| Pruebas E2E (Chromium + WebKit) | `pnpm run test:e2e` |
+| Pruebas de accesibilidad (`axe-core`) | `pnpm run test:a11y` |
 | Lint | `pnpm run lint` |
-| Verificacion de tipos | `pnpm exec tsc --noEmit` |
+| Verificación de tipos | `pnpm exec tsc --noEmit` |
 
-#### 6.3 Despues de que alguien actualizo dependencias
+#### 6.3 Después de actualizar dependencias
 
-Si `pnpm-lock.yaml` cambio despues de un `git pull`, el install con lockfile
-fijo fallara. En ese caso ejecuta el install normal:
+Si `pnpm-lock.yaml` cambió tras un `git pull`, ejecuta `pnpm install` (sin `--frozen-lockfile` solo si tú agregaste/actualizaste dependencias) y haz commit del lockfile actualizado.
 
-```bash
-pnpm install
-```
+#### 6.4 Trabajar sin el backend (Sandbox de desarrollo y MSW)
 
-Haz commit del lockfile actualizado si fuiste tu quien agrego la dependencia.
+- **Pruebas automatizadas (Vitest / Playwright):** Los handlers y fixtures MSW viven en `tests/mocks/` y `e2e/fixtures/`.
+- **Sandbox interactivo local:** Al abrir la app sin sesión del Shell, `DevSandboxApp` (`src/DevSandboxApp.tsx` + `src/features/dev-sandbox/mockSandboxFetch.ts`) ofrece selector de rol/vista y datos simulados en memoria.
 
-#### 6.4 Trabajar sin el backend (mocks MSW)
+#### 6.5 Probar los remotos de Module Federation (`ordenesApp` y `cocinaApp`)
 
-Mientras el backend no esta implementado o no esta corriendo localmente, el frontend
-usa **Mock Service Worker (MSW)** para interceptar llamadas REST y WebSocket.
-Los handlers viven en `src/mocks/`.  No se requiere configuracion adicional —
-el servidor de desarrollo inicia con mocks activos por defecto cuando
-`VITE_APP_ENV=development`.
-
-#### 6.5 Probar el remoto de Module Federation
+Con `@originjs/vite-plugin-federation`, `remoteEntry.js` se genera al compilar:
 
 ```bash
-# Construir el remoto y servirlo en el puerto 4173
-pnpm run build
-pnpm run preview
+# Terminal 1 — Remoto de Órdenes / Mesero (ordenesApp en :5177)
+pnpm run dev:federation
+# Disponible en: http://localhost:5177/assets/remoteEntry.js
 
-# remoteEntry.js disponible en:
-# http://localhost:4173/assets/remoteEntry.js
-# Apunta la URL del remoto del Auth Shell aqui durante la integracion local.
+# Terminal 2 — Remoto de Cocina (cocinaApp en :5179)
+pnpm run dev:federation:cocina
+# Disponible en: http://localhost:5179/assets/remoteEntry.js
 ```
 
 #### 6.6 Problemas frecuentes
 
-| Sintoma | Causa probable | Solucion |
+| Síntoma | Causa probable | Solución |
 |---|---|---|
-| `pnpm install` falla por lockfile | package.json cambio | Ejecuta `pnpm install` (sin `--frozen-lockfile`) |
-| `pnpm dev` — puerto 5173 en uso | Otro servidor Vite corriendo | Cierra el otro proceso o usa `pnpm dev --port 5174` |
-| Errores de TypeScript al iniciar | Tipos desactualizados tras `git pull` | Ejecuta `pnpm install` |
-| Pruebas E2E dan timeout | Servidor de preview no corriendo | Asegurate de que `pnpm run preview` este corriendo |
-| `remoteEntry.js` no encontrado | Bundle no construido | Ejecuta `pnpm run build` antes de `pnpm run preview` |
-| SonarLint no muestra issues | No conectado a SonarCloud | Verifica `.sonarlint/connectedMode.json` |
+| `pnpm install` falla por lockfile | `package.json` cambió | Ejecuta `pnpm install` |
+| `css-scoping.test.ts` falla en `test:unit` | No se ha generado `dist/` aún | Ejecuta `pnpm run build` antes de `pnpm run test:unit` |
+| `pnpm preview` falla por puerto `5177` o `5179` | Otro proceso usa el puerto | Detén el otro proceso (`strictPort: true`) |
+| `remoteEntry.js` responde 404 | Bundle no compilado | Ejecuta `pnpm run dev:federation` o `pnpm run dev:federation:cocina` |
 | Navegadores de Playwright faltantes | Bootstrap no ejecutado | Ejecuta `pnpm exec playwright install --with-deps chromium webkit` |
 
 ---
 
-### §7 — Inicio de entorno rápido para pruebas manuales (en conjunto con el Backend, Terminal y Docker Desktop)
+### §7 — Guía Exacta Paso a Paso para Pruebas en Conjunto (Frontend + `orders-backend` + Docker)
 
-Para realizar pruebas manuales de funcionamiento de punta a punta en el Frontend (visualizar comandas reales en el tablero KDS, iniciar preparación, marcar platillos como listos, anular comandas con el teclado virtual, etc.), **es indispensable levantar primero en conjunto el repositorio `orders-backend`**.
+Para probar flujos reales de punta a punta (PostgreSQL real, catálogo en Redis, Saga por RabbitMQ y push WebSocket en vivo), levanta **`orders-backend`** y **`orders-frontend`** siguiendo estos pasos en orden.
 
-#### Paso 0 — Cómo empaquetar y levantar el contenedor Docker del Frontend (para Docker Desktop)
-Si deseas empaquetar el frontend usando su `Dockerfile` multi-etapa (compilación con Node 20 + servidor Nginx con CORS habilitado) y ejecutarlo desde **Docker Desktop**:
+#### Paso 0 — Opcional: Empaquetar y Levantar el Contenedor Docker del Frontend (1 sola imagen)
+
+Para uso local o en contenedor independiente solo necesitas **1 única imagen Docker** (`orders-frontend:latest`). El [`Dockerfile`](Dockerfile) multi-etapa compila con `node:20-alpine` (Corepack + `pnpm@12.18.0`) y sirve con `nginxinc/nginx-unprivileged:alpine` en el puerto `8080`, incluyendo en el mismo contenedor los **5 módulos federados** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) para operar tanto vista de Mesero como KDS de Cocina.
 
 ```powershell
-# 1. Entrar a la carpeta raíz del repositorio frontend
 cd C:\ruta\a\orders-frontend
 
-# 2. Empaquetar (construir) la imagen Docker del frontend
+# 1. Construir y levantar la imagen única en http://localhost:5177
 docker build -t orders-frontend:latest .
-
-# 3. Eliminar cualquier contenedor previo con el mismo nombre y levantarlo en el puerto 3000
 docker rm -f orders-frontend 2>$null
-docker run -d --name orders-frontend -p 3000:8080 orders-frontend:latest
+docker run -d --name orders-frontend -p 5177:8080 orders-frontend:latest
 
-# 4. En Docker Desktop -> Containers verás "orders-frontend" en estado Running (3000:8080).
-#    Abre http://localhost:3000 en tu navegador (se conecta automáticamente a http://localhost:8000).
+# 2. Verificar que la app y el manifiesto de Module Federation respondan 200 OK
+curl -I http://localhost:5177/
+curl -I http://localhost:5177/assets/remoteEntry.js
 ```
 
-#### Paso 1 — Levantar primero el Backend y sus datos de prueba (Terminal 1 + Docker Desktop)
-Antes de iniciar el frontend, sigue la sección **§8 del `QUICKSTART.md` del repositorio `orders-backend`** en una primera ventana de PowerShell (**Terminal 1**):
+> **Opcional / Avanzado — Segunda imagen separada `cocinaApp` (`:5179`, solo para integración dual con Shell de Auth + Kong `INT-06`/`INT-07`):**
+> `vite.config.ts` define en tiempo de compilación el nombre del remoto (`ordenesApp` vs `cocinaApp`) y el prefijo de API detrás de Kong (`/api/v1/orders` vs `/api/v1/kitchen`). Solo cuando integres con el **Auth Shell + Kong** que consume dos remotos por separado (`ordenesApp` en `:5177` y `cocinaApp` en `:5179`), compila también la imagen de cocina:
+> ```powershell
+> docker build --build-arg BUILD_MODE=cocina -t cocina-frontend:latest .
+> docker rm -f cocina-frontend 2>$null
+> docker run -d --name cocina-frontend -p 5179:8080 cocina-frontend:latest
+> curl -I http://localhost:5179/assets/remoteEntry.js
+> ```
 
-1. Abre la aplicación **Docker Desktop** y espera a que la esquina inferior izquierda muestre el indicador en verde **Engine running**.
-2. En la **Terminal 1** (ubicada en `orders-backend`), ejecuta paso a paso:
+#### Paso 1 — Levantar Primero `orders-backend` y sus Datos Demo (Terminales 1 y 2 + Docker Desktop)
+
+1. Abre **Docker Desktop** y espera el indicador verde **Engine running**.
+2. En **Terminal 1** (`orders-backend`):
    ```powershell
-   # 1. Entrar al repositorio del backend y activar su entorno virtual de Python (.venv)
    cd C:\ruta\a\orders-backend
    .\.venv\Scripts\Activate.ps1
-
-   # 2. Asegurar el archivo .env y levantar PostgreSQL, Redis y RabbitMQ en Docker
    python scripts/setup_env.py
-   docker compose up -d
-
-   # 3. Correr migraciones e inyectar las 4 órdenes y el catálogo de prueba (seed)
+   docker compose up -d postgres redis rabbitmq
+   docker compose ps
    alembic upgrade head
-   python scripts/seed_demo.py
-
-   # 4. Dejar corriendo el servidor de la API en el puerto 8000
+   python scripts/seed_demo.py --reset
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
-3. Verifica en **Docker Desktop → Containers** (desplegando `orders-backend`) que los 3 contenedores (`ordenes-postgres`, `ordenes-redis` y `ordenes-rabbitmq`) estén en estado **Running** (círculo verde), y **deja la Terminal 1 abierta** con `uvicorn` corriendo.
+   *(También puedes levantar los 6 contenedores del backend con `docker-compose.ci.yml`; ver `orders-backend/QUICKSTART.md §8 Modo B`. Recuerda que `seed_demo.py --reset` genera **UUIDv4 aleatorios nuevos** e imprime los 8 `OrderId` en consola.)*
+3. En **Terminal 2** (`orders-backend`), inicia los workers en segundo plano para que el outbox, el watcher de 60 s, RabbitMQ y el puente WebSocket funcionen en vivo:
+   ```powershell
+   cd C:\ruta\a\orders-backend
+   .\.venv\Scripts\Activate.ps1
+   python -m app.workers.run_all
+   ```
 
-#### Paso 2 — Configurar `.env.local` en el Frontend para apuntar al Backend (Terminal 2)
-Abre una **segunda ventana de PowerShell (Terminal 2)** para manejar el frontend.
-
-> **Nota importante sobre el puerto:** La plantilla `.env.example` apunta por defecto a `http://localhost:8080` (el puerto del API Gateway). Cuando pruebas localmente conectando el frontend directo contra tu `orders-backend` (`uvicorn` en el puerto `8000`), debes apuntar `VITE_API_BASE_URL` y `VITE_WS_URL` a **`localhost:8000`**:
+#### Paso 2 — Configurar `.env.local` en `orders-frontend` (Terminal 3)
 
 ```powershell
-# 1. Entrar a la carpeta raíz del repositorio frontend
 cd C:\ruta\a\orders-frontend
 
-# 2. (Solo la primera vez) Si aún no están instaladas las dependencias o Playwright:
+# Solo la primera vez (si aún no instalaste dependencias):
 # .\scripts\bootstrap.ps1
 
-# 3. Configurar .env.local apuntando al puerto 8000 de tu backend local
-Set-Content -Path .env.local -Value "VITE_API_BASE_URL=http://localhost:8000`nVITE_WS_URL=ws://localhost:8000/ws`nFEDERATION_REMOTE_URL=http://localhost:4173`nVITE_APP_ENV=development"
+# Copiar .env.example (ya usa VITE_API_BASE_URL=auto y VITE_WS_URL=auto hacia :8000)
+Copy-Item .env.example .env.local -Force
 ```
 
-*(Opcional — Cambiar el rol del token JWT en el Frontend)*: En desarrollo local, `src/shared/api/client.ts` genera automáticamente un token JWT válido con rol `kitchen`. Si deseas probar la interfaz con un token específico generado por `orders-backend/scripts/dev_token.py` (por ejemplo `--role admin` o `--role chef`), puedes agregar la línea `VITE_API_TOKEN=<tu-token>` dentro de `.env.local`.
+> **Cómo funciona `auto`:** `resolveDefaultApiBaseUrl()` y `resolveDefaultWsBaseUrl()` apuntan automáticamente a `http://<host-actual>:8000/api/v1/orders` en modo normal y a `http://<host-actual>:8000/api/v1/kitchen` en modo `cocina`. Si necesitas apuntar a otro host o puerto, define las URLs explícitamente en `.env.local`.
 
-#### Paso 3 — Levantar el servidor del Frontend en la Terminal 2
-En la **Terminal 2**, inicia el servidor de desarrollo de Vite:
+#### Paso 3 — Levantar el Frontend (Terminal 3)
 
 ```powershell
+# Servidor de desarrollo (HMR) en http://localhost:5177
 pnpm dev
+
+# O servir el remoto compilado de Module Federation:
+# pnpm run dev:federation         -> http://localhost:5177
 ```
 
-Abre en tu navegador **`http://localhost:5173`**.
+#### Paso 4 — Pruebas Manuales con los Datos Sembrados (`seed_demo.py --reset`)
 
-*(Opcional — Modo Module Federation con el Auth Shell)*: Si van a probar la integración del micro-frontend remoto cargándolo desde el *Auth Shell* (Equipo 6), compila y sirve el paquete federado en el puerto `4173`:
+Cada ejecución de `seed_demo.py` genera **UUIDv4 aleatorios nuevos** visibles en la Terminal 1 (`OrderId: <uuid>`) y en las tarjetas del KDS / `GET /orders` identificados por su **Folio de turno (`#1`–`#8`)**:
 
+| Folio | Mesa | Estado Inicial | Dónde aparece en el KDS / Widget y qué probar |
+|---|---|---|---|
+| `#1` | **Mesa 5** | `RESERVED` | Pestaña **Activas** del KDS. Pulsa **"Iniciar preparación"** (o `Enter`) → pasa a `IN_PREPARATION`. |
+| `#2` | **Mesa 12** | `IN_PREPARATION` | Pestaña **Activas** con cronómetro. Marca ítems `READY` (táctil o teclas `1`–`9`) o prueba diálogos de anulación Admin/Chef con teclado virtual. |
+| `#3` | **Mesa 3** | `DELIVERED` | Pestaña **Entregadas** del KDS (`view=delivered`). Prueba rehechura (`PATCH .../items/{itemId}/redo`) o solicitud de cuenta (`POST .../request-bill`). |
+| `#4` | **Mesa 8** | `CREATED` | Borrador en `OrderTicketWidget`. Edita platillos, confirma (`POST .../confirm`) o cancela (`PATCH .../cancel`). |
+| `#5` | **Para llevar** | `CREATED` | Borrador para llevar (`isTakeaway: true`) para probar confirmación y Saga en RabbitMQ. |
+| `#6` | **Mesa 15** | `RESERVED` | Ítems multi-estación (`parrilla` + `fria`) para probar el selector de estación del KDS. |
+| `#7` | **Mesa 9** | `REJECTED` | Muestra `rejectionDetails` en `OrderTicketWidget` para modificar ítems o cancelar. |
+| `#8` | **Mesa 11** | `RESERVED` | Reservada hace > 15 min; aparece en la pestaña **"Caducados"** del KDS con cuenta regresiva de 10 min de gracia. |
+
+Reiniciar los datos (generando nuevos UUIDv4) en cualquier momento desde la **Terminal 1** (`orders-backend`):
+```powershell
+python scripts/seed_demo.py --reset
+```
+
+Ejecutar suites automatizadas desde la **Terminal 3** (`orders-frontend`):
 ```powershell
 pnpm run build
-pnpm run preview
-# El archivo federado quedará expuesto en: http://localhost:4173/assets/remoteEntry.js
+pnpm run test:unit
+pnpm run test:e2e
+pnpm run test:a11y
 ```
-
-#### Paso 4 — Cómo realizar las pruebas manuales en el KDS (con los datos de `seed_demo.py`)
-Al abrir **`http://localhost:5173`**, el tablero KDS consultará `http://localhost:8000/kds/queue` y mostrará automáticamente las órdenes insertadas por `seed_demo.py`:
-
-| Orden de prueba (`seed_demo.py`) | Mesa | Estado Inicial | Dónde aparece en el KDS y qué probar |
-|---|---|---|---|
-| `11111111-1111-1111-1111-111111111111` | **Mesa 5** | `RESERVED` | Aparece en la pestaña **Activas**. Prueba hacer clic en el botón **"Iniciar preparación"** (o presionar `Enter` con el Bump Bar) para pasarla a `IN_PREPARATION`. |
-| `22222222-2222-2222-2222-222222222222` | **Mesa 12** | `IN_PREPARATION` | Aparece en la pestaña **Activas** con cronómetro en vivo y semáforo. Prueba marcar platillos pendientes como listos (clic táctil sobre el platillo o teclas numéricas `1`–`9`), o abrir los diálogos de **Anulación Admin / Anulación Chef** con teclado virtual en pantalla. |
-| `33333333-3333-3333-3333-333333333333` | **Mesa 3** | `DELIVERED` | Haz clic en la pestaña superior **Entregadas** del tablero KDS para visualizar las órdenes terminadas por cocina. |
-| `44444444-4444-4444-4444-444444444444` | **Mesa 8** | `CREATED` | Orden en borrador (aún no confirmada hacia cocina). Puedes confirmarla o editarla desde Swagger (`http://localhost:8000/docs`) o mediante el `OrderTicketWidget`. |
-
-- **Cómo reiniciar los datos de prueba en cualquier momento:**
-  Si durante la demostración ya marcaste como listas o anulaste las órdenes en pantalla y quieres volver a empezar, ve a la **Terminal 1** (`orders-backend`), ejecuta:
-  ```powershell
-  python scripts/seed_demo.py --reset
-  ```
-  y recarga `http://localhost:5173` en el navegador.
-- **Cómo mostrar evidencia de pruebas E2E automatizadas (Playwright) y pruebas unitarias (Vitest):**
-  En la **Terminal 2** (`orders-frontend`) puedes ejecutar:
-  ```powershell
-  # 1. Ejecutar todas las pruebas unitarias y de componentes
-  pnpm run test:unit
-
-  # 2. Ejecutar las pruebas End-to-End con Playwright y abrir el reporte visual en el navegador
-  pnpm run test:e2e
-  pnpm exec playwright show-report
-  ```
