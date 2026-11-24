@@ -317,7 +317,7 @@ function OrderCardItem({
                 }
               }}
               style={{ minHeight: isCompactDensity ? 36 : 40 }}
-              className="min-h-[36px] px-2.5 py-1 rounded-control text-xs font-bold bg-surface hover:bg-red-50 active:bg-red-100 text-red-700 hover:text-red-800 border border-red-300 hover:border-red-400 cursor-pointer shadow-sm transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="min-h-[36px] px-2.5 py-1 rounded-control text-xs font-bold bg-red-700 hover:bg-red-800 active:bg-red-900 text-white border border-red-800 hover:border-red-900 cursor-pointer shadow-sm transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               Sin insumos
             </button>
@@ -350,7 +350,7 @@ function OrderCardItem({
       {isRedoPending && (
         <output
           data-testid={`redo-pending-${itemId}`}
-          className="pl-8 text-xs font-black uppercase tracking-wide text-amber-800 block"
+          className="ml-8 inline-flex w-fit px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-xs font-black uppercase tracking-wide text-amber-950"
         >
           Rehacer pendiente
         </output>
@@ -464,7 +464,7 @@ function TableHeader({
       <span
         className={`${
           isCompact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'
-        } font-black text-amber-200 uppercase tracking-wider whitespace-nowrap shrink-0`}
+        } font-black text-white border border-white/60 px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0`}
         data-testid={`order-takeaway-${displayId}`}
       >
         Para llevar{' '}

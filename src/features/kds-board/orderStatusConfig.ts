@@ -16,7 +16,7 @@ export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
     label: 'Creada',
     englishLabel: 'Created',
     token: 'var(--color-warning)',
-    className: 'bg-warning text-white',
+    className: 'bg-warning text-gray-950',
   },
   RESERVED: {
     label: 'Por iniciar',

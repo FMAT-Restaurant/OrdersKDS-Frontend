@@ -63,7 +63,7 @@ function ShellNavbar({
           onClick={() => onViewChange('kds')}
           className={`px-3 py-1 rounded font-medium transition-colors cursor-pointer ${
             view === 'kds'
-              ? 'bg-amber-600 text-white shadow-xs'
+              ? 'bg-amber-700 text-white shadow-xs'
               : 'text-slate-300 hover:text-white'
           }`}
         >

@@ -196,7 +196,7 @@ function OrderDetailsItemRow({
                 }
               }}
               style={{ minHeight: 48 }}
-              className="min-h-[48px] px-3.5 py-2 rounded-control text-xs sm:text-sm font-bold bg-surface hover:bg-red-50 active:bg-red-100 text-red-700 hover:text-red-800 border border-red-300 hover:border-red-400 cursor-pointer shadow-sm transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="min-h-[48px] px-3.5 py-2 rounded-control text-xs sm:text-sm font-bold bg-red-700 hover:bg-red-800 active:bg-red-900 text-white border border-red-800 hover:border-red-900 cursor-pointer shadow-sm transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               Sin insumos
             </button>
@@ -267,7 +267,7 @@ function OrderDetailsItemRow({
       {isRedoPending && (
         <output
           data-testid={`order-details-redo-pending-${itemId}`}
-          className="pl-9 text-xs font-black uppercase tracking-wide text-amber-800 block"
+          className="ml-9 inline-flex w-fit px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-xs font-black uppercase tracking-wide text-amber-950"
         >
           Rehacer pendiente
         </output>

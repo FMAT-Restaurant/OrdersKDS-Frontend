@@ -93,7 +93,7 @@ function DevNavbar({
           onClick={() => onViewChange('kds')}
           className={`px-3 py-1.5 rounded-l-md font-medium border border-slate-700 transition-colors ${
             view === 'kds'
-              ? 'bg-amber-600 text-white border-amber-600'
+              ? 'bg-amber-700 text-white border-amber-700'
               : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
         >
@@ -422,7 +422,7 @@ function TicketQuickLifecycleControls({
       <button
         type="button"
         onClick={onGoToKds}
-        className="ml-auto px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+        className="ml-auto px-2.5 py-1 rounded bg-amber-700 hover:bg-amber-800 text-white font-semibold"
       >
         Ver en KDS Cocina →
       </button>

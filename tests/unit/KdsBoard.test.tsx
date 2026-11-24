@@ -274,11 +274,11 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       expect(redoTab).toHaveClass('min-h-[48px]');
       expect(deliveredTab).toHaveClass('min-h-[48px]');
 
-      // High-contrast alert on redo tab when redoCount > 0
+      // High-contrast alert on redo tab when redoCount > 0 (WCAG AA compliant)
       await waitFor(() => {
         expect(screen.getByTestId('redo-badge')).toHaveTextContent('1');
-        expect(redoTab).toHaveClass('bg-red-600');
-        expect(redoTab).toHaveClass('animate-pulse');
+        expect(redoTab).toHaveClass('bg-red-700');
+        expect(redoTab).not.toHaveClass('animate-pulse');
       });
 
       // Switch to Pendientes
@@ -302,7 +302,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       // Switch to Rehechuras (devueltas)
       fireEvent.click(redoTab);
       expect(redoTab).toHaveAttribute('aria-selected', 'true');
-      expect(redoTab).toHaveClass('bg-red-700');
+      expect(redoTab).toHaveClass('bg-red-800');
       await waitFor(() => {
         expect(screen.getByTestId('order-card-stub-ord-redo-1')).toBeInTheDocument();
         expect(screen.queryByTestId('order-card-stub-ord-in-prep-1')).not.toBeInTheDocument();

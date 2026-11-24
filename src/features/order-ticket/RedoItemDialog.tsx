@@ -152,7 +152,7 @@ export function RedoItemDialog({
             <button
               type="submit"
               disabled={!note.trim() || isPending}
-              className="order-ticket__redo-submit min-h-12 min-w-[7rem] rounded-md bg-amber-600 px-4 py-2 font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
+              className="order-ticket__redo-submit min-h-12 min-w-[7rem] rounded-md bg-amber-700 px-4 py-2 font-bold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
             >
               {isPending ? 'Enviando…' : 'Rehacer'}
             </button>

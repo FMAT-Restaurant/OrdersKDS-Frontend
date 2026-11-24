@@ -96,6 +96,7 @@ test.describe('RNF-11 — Auditoría WCAG 2.1 AA (claro y [data-theme="dark"])',
   test('OrderTicketWidget cumple WCAG 2.1 AA en CREATED (lectura/edición), RESERVED, EXPIRED y REJECTED en tema claro y [data-theme="dark"]', async ({
     page,
   }) => {
+    test.setTimeout(90_000);
     const createdOrd = makeOrder({ id: 'a11y-created', orderNumber: 11, status: 'CREATED' });
     const reservedOrd = makeOrder({ id: 'a11y-reserved', orderNumber: 12, status: 'RESERVED' });
     const expiredOrd = makeOrder({ id: 'a11y-expired', orderNumber: 13, status: 'EXPIRED' });
@@ -122,6 +123,7 @@ test.describe('RNF-11 — Auditoría WCAG 2.1 AA (claro y [data-theme="dark"])',
   test('KDS Board y modales cumplen WCAG 2.1 AA en tema claro y [data-theme="dark"]', async ({
     page,
   }) => {
+    test.setTimeout(90_000);
     const past26m = new Date(Date.now() - 26 * 60 * 1000).toISOString();
     const activeOrd = makeOrder({
       id: 'a11y-kds-prep',
@@ -156,5 +158,106 @@ test.describe('RNF-11 — Auditoría WCAG 2.1 AA (claro y [data-theme="dark"])',
     await page.getByTestId('order-id-a11y-kds-prep').click();
     await expect(page.getByTestId('order-details-dialog')).toBeVisible();
     await runAxeAudit(page, 'OrderDetailsDialog (dark)', '[data-testid="order-details-dialog"]');
+  });
+
+  test('KDS 1920x1080 cumple WCAG 2.1 AA en todas las variantes de tarjeta, semáforo y pestañas (claro y [data-theme="dark"])', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+
+    const nowMs = Date.now();
+    const reservedOnTime = makeOrder({
+      id: 'a11y-1080-reserved',
+      orderNumber: 301,
+      tableNumber: 7,
+      status: 'RESERVED',
+      stockReservedAt: new Date(nowMs - 2 * 60 * 1000).toISOString(),
+      items: [makeItem({ id: 'it-1080-1', name: 'Panuchos de Pavo', status: 'PENDING' })],
+    });
+    const prepWarningTakeaway = makeOrder({
+      id: 'a11y-1080-warning',
+      orderNumber: 302,
+      tableNumber: null,
+      isTakeaway: true,
+      status: 'IN_PREPARATION',
+      stockReservedAt: new Date(nowMs - 12 * 60 * 1000).toISOString(),
+      inPreparationAt: new Date(nowMs - 12 * 60 * 1000).toISOString(),
+      items: [makeItem({ id: 'it-1080-2', name: 'Sopa de Lima', status: 'PENDING' })],
+    });
+    const prepLateMixed = makeOrder({
+      id: 'a11y-1080-late',
+      orderNumber: 303,
+      tableNumber: 9,
+      status: 'IN_PREPARATION',
+      stockReservedAt: new Date(nowMs - 19 * 60 * 1000).toISOString(),
+      inPreparationAt: new Date(nowMs - 19 * 60 * 1000).toISOString(),
+      items: [
+        makeItem({ id: 'it-1080-3a', name: 'Salbutes', status: 'READY' }),
+        makeItem({ id: 'it-1080-3b', name: 'Agua de Jamaica', status: 'PENDING' }),
+      ],
+    });
+    const redoDelivered = makeOrder({
+      id: 'a11y-1080-redo',
+      orderNumber: 304,
+      tableNumber: 12,
+      status: 'DELIVERED',
+      stockReservedAt: new Date(nowMs - 8 * 60 * 1000).toISOString(),
+      inPreparationAt: new Date(nowMs - 7 * 60 * 1000).toISOString(),
+      items: [
+        makeItem({ id: 'it-1080-4a', name: 'Poc Chuc', status: 'DELIVERED' }),
+        makeItem({ id: 'it-1080-4b', name: 'Relleno Negro', status: 'PENDING', notes: 'Sin huevo' }),
+      ],
+    });
+    const deliveredHistory = makeOrder({
+      id: 'a11y-1080-delivered',
+      orderNumber: 305,
+      tableNumber: 15,
+      status: 'DELIVERED',
+      stockReservedAt: new Date(nowMs - 20 * 60 * 1000).toISOString(),
+      inPreparationAt: new Date(nowMs - 18 * 60 * 1000).toISOString(),
+      items: [makeItem({ id: 'it-1080-5', name: 'Queso Relleno', status: 'DELIVERED' })],
+    });
+    const expiredCard = makeOrder({
+      id: 'a11y-1080-expired',
+      orderNumber: 306,
+      tableNumber: 18,
+      status: 'RESERVED',
+      stockReservedAt: new Date(nowMs - 26 * 60 * 1000).toISOString(),
+      items: [makeItem({ id: 'it-1080-6', name: 'Tzic de Venado', status: 'PENDING' })],
+    });
+
+    await seedAuthSession(page, { role: 'admin', theme: 'light' });
+    await mockOrdersAndKdsRoutes(page, [
+      reservedOnTime,
+      prepWarningTakeaway,
+      prepLateMixed,
+      redoDelivered,
+      deliveredHistory,
+      expiredCard,
+    ]);
+    await page.goto('/');
+
+    await expect(page.getByTestId('order-card-a11y-1080-reserved')).toBeVisible();
+    await expect(page.getByTestId('order-card-a11y-1080-warning')).toBeVisible();
+    await expect(page.getByTestId('order-card-a11y-1080-late')).toBeVisible();
+    await expect(page.getByTestId('order-card-a11y-1080-redo')).toBeVisible();
+
+    for (const themeLabel of ['light', 'dark'] as const) {
+      if (themeLabel === 'dark') {
+        await setDocumentTheme(page, 'dark');
+      }
+      await page.getByTestId('tab-active-view').click();
+      await runAxeAudit(page, `KDS 1080p variantes (${themeLabel})`, '.orders-kds-root');
+
+      await page.getByTestId('tab-redo-view').click();
+      await runAxeAudit(page, `KDS 1080p Rehechuras (${themeLabel})`, '.orders-kds-root');
+
+      await page.getByTestId('tab-delivered').click();
+      await runAxeAudit(page, `KDS 1080p Entregadas (${themeLabel})`, '.orders-kds-root');
+
+      await page.getByTestId('tab-expired').click();
+      await runAxeAudit(page, `KDS 1080p Caducados (${themeLabel})`, '.orders-kds-root');
+    }
   });
 });

@@ -87,9 +87,9 @@ function getExpiredTabClass(isSelected: boolean, count: number): string {
 function getRedoTabClass(isSelected: boolean, count: number): string {
   if (count > 0) {
     if (isSelected) {
-      return `${BASE_TAB_CLASS} bg-red-700 text-white shadow-md border border-red-800 ring-2 ring-red-400 font-extrabold`;
+      return `${BASE_TAB_CLASS} bg-red-800 text-white shadow-md border border-red-900 ring-2 ring-red-400 font-extrabold`;
     }
-    return `${BASE_TAB_CLASS} bg-red-600 hover:bg-red-700 text-white border border-red-700 shadow-lg animate-pulse font-extrabold`;
+    return `${BASE_TAB_CLASS} bg-red-700 hover:bg-red-800 text-white border border-red-800 shadow-lg font-extrabold`;
   }
   return getStandardTabClass(isSelected);
 }

@@ -238,6 +238,8 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       const keys = Object.keys(STATUS_CONFIG);
       expect(keys).toHaveLength(10);
       expect(STATUS_CONFIG.CREATED.token).toBe('var(--color-warning)');
+      expect(STATUS_CONFIG.CREATED.className).toContain('text-gray-950');
+      expect(STATUS_CONFIG.CREATED.className).not.toContain('text-white');
       expect(STATUS_CONFIG.RESERVED.token).toBe('var(--color-info)');
       expect(STATUS_CONFIG.RESERVED.label).toBe('Por iniciar');
       expect(STATUS_CONFIG.IN_PREPARATION.token).toBe('var(--color-info)');
