@@ -189,17 +189,6 @@ function buildCreatedOrder(createdSeq: number, parsedBody: unknown): MockOrder {
   });
 }
 
-function resolveVoidStatus(subPath: string, parsedBody: unknown): MockOrderStatus {
-  if (subPath === 'void-charge') {
-    return 'WASTED';
-  }
-  if (subPath === 'void-kitchen-error') {
-    return 'VOIDED';
-  }
-  const body = (parsedBody ?? {}) as { chargeCustomer?: boolean };
-  return body.chargeCustomer ? 'WASTED' : 'VOIDED';
-}
-
 function applyItemsPatch(existing: MockOrder, orderId: string, parsedBody: unknown): void {
   const body = (parsedBody ?? {}) as { items?: Partial<MockOrderItem>[] };
   existing.items = (body.items ?? []).map((it, idx) =>
@@ -225,7 +214,6 @@ function applyStatusTransition(
   existing: MockOrder,
   method: string,
   subPath: string,
-  parsedBody: unknown,
 ): boolean {
   if (subPath === 'confirm' && method === 'POST') {
     const nowIso = new Date().toISOString();
@@ -255,7 +243,7 @@ function applyStatusTransition(
     case 'void':
     case 'void-charge':
     case 'void-kitchen-error':
-      existing.status = resolveVoidStatus(subPath, parsedBody);
+      existing.status = 'VOIDED';
       existing.version += 1;
       return true;
     default:
@@ -263,13 +251,8 @@ function applyStatusTransition(
   }
 }
 
-function mutateOrderAction(
-  existing: MockOrder,
-  method: string,
-  subPath: string,
-  parsedBody: unknown,
-): void {
-  if (applyStatusTransition(existing, method, subPath, parsedBody)) {
+function mutateOrderAction(existing: MockOrder, method: string, subPath: string): void {
+  if (applyStatusTransition(existing, method, subPath)) {
     return;
   }
   if (subPath === 'kitchen-reject' || /^items\/[^/]+\/kitchen-reject$/.test(subPath)) {
@@ -310,7 +293,7 @@ function handleSingleOrderRoute(
     return fulfillJson(route, existing);
   }
   if (method === 'PATCH' || method === 'POST') {
-    mutateOrderAction(existing, method, subPath, parsedBody);
+    mutateOrderAction(existing, method, subPath);
   }
   return fulfillJson(route, existing);
 }
