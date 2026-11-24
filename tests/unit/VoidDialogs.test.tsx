@@ -148,6 +148,13 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       });
       expect(screen.getByTestId('chef-void-note-input')).toHaveValue('Nota manual');
 
+      // Toggle floating keyboard closed via close button and reopen via toggle
+      expect(screen.getByTestId('virtual-keyboard')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('virtual-keyboard-close'));
+      expect(screen.queryByTestId('virtual-keyboard')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('chef-void-toggle-keyboard'));
+      expect(screen.getByTestId('virtual-keyboard')).toBeInTheDocument();
+
       fireEvent.click(screen.getByTestId('chef-void-cancel'));
       expect(onCancel).toHaveBeenCalledTimes(1);
     });
@@ -710,6 +717,58 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
           chargeCustomer: true,
         }),
       );
+    });
+
+    it('enforces maxLength and ignores clicks when VirtualKeyboard is disabled', () => {
+      const onChange = vi.fn();
+      const { rerender } = render(
+        <VirtualKeyboard value="AB" maxLength={2} onChange={onChange} />,
+      );
+
+      fireEvent.click(screen.getByTestId('virtual-key-C'));
+      fireEvent.click(screen.getByTestId('virtual-key-space'));
+      expect(onChange).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByTestId('virtual-key-backspace'));
+      expect(onChange).toHaveBeenCalledWith('A');
+
+      onChange.mockClear();
+      rerender(<VirtualKeyboard value="AB" disabled={true} onChange={onChange} />);
+      fireEvent.pointerUp(screen.getByTestId('virtual-key-D'), {
+        button: 0,
+        pointerType: 'mouse',
+      });
+      fireEvent.pointerUp(screen.getByTestId('virtual-key-backspace'), {
+        button: 0,
+        pointerType: 'mouse',
+      });
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('renders floating VirtualKeyboard opaque and docked without overlapping AdminVoidDialog switch', () => {
+      render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          isOpen={true}
+          userRole={UserRole.ADMIN}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('admin-void-toggle-custom-reason'));
+      fireEvent.click(screen.getByTestId('admin-void-toggle-keyboard'));
+
+      const keyboard = screen.getByTestId('virtual-keyboard');
+      expect(keyboard.className).toContain('bg-surface');
+      expect(keyboard.className).not.toContain('bg-surface/95');
+      expect(keyboard.className).toContain('shrink-0');
+      expect(keyboard.className).not.toContain('fixed');
+
+      const chargeSwitch = screen.getByTestId('admin-void-charge-toggle');
+      fireEvent.click(chargeSwitch);
+      expect(chargeSwitch.className).toContain('bg-muted');
+      expect(chargeSwitch.className).not.toContain('bg-muted/40');
     });
   });
 });

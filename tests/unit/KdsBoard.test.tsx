@@ -1,4 +1,4 @@
-import { fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -274,11 +274,11 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       expect(redoTab).toHaveClass('min-h-[48px]');
       expect(deliveredTab).toHaveClass('min-h-[48px]');
 
-      // High-contrast alert on redo tab when redoCount > 0
+      // High-contrast alert on redo tab when redoCount > 0 (WCAG AA compliant)
       await waitFor(() => {
         expect(screen.getByTestId('redo-badge')).toHaveTextContent('1');
-        expect(redoTab).toHaveClass('bg-red-600');
-        expect(redoTab).toHaveClass('animate-pulse');
+        expect(redoTab).toHaveClass('bg-red-700');
+        expect(redoTab).not.toHaveClass('animate-pulse');
       });
 
       // Switch to Pendientes
@@ -302,7 +302,7 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       // Switch to Rehechuras (devueltas)
       fireEvent.click(redoTab);
       expect(redoTab).toHaveAttribute('aria-selected', 'true');
-      expect(redoTab).toHaveClass('bg-red-700');
+      expect(redoTab).toHaveClass('bg-red-800');
       await waitFor(() => {
         expect(screen.getByTestId('order-card-stub-ord-redo-1')).toBeInTheDocument();
         expect(screen.queryByTestId('order-card-stub-ord-in-prep-1')).not.toBeInTheDocument();
@@ -1236,18 +1236,25 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       );
 
       await waitFor(() => {
+        expect(queryClient.isFetching()).toBe(0);
         expect(screen.getByTestId('order-action-admin-void-ord-101')).toBeInTheDocument();
       });
 
       // Test custom onAdminVoid delegation
       fireEvent.click(screen.getByTestId('order-action-admin-void-ord-101'));
       fireEvent.click(screen.getByTestId('admin-void-confirm'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('admin-void-dialog')).not.toBeInTheDocument();
+      });
       expect(onAdminVoid).toHaveBeenCalledWith(expect.objectContaining({ id: 'ord-101' }));
 
       // Test custom onChefVoid delegation
       fireEvent.click(screen.getByTestId('order-action-chef-void-ord-101'));
       fireEvent.click(screen.getByRole('button', { name: 'Quemado' }));
       fireEvent.click(screen.getByTestId('chef-void-confirm'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('chef-void-dialog')).not.toBeInTheDocument();
+      });
       expect(onChefVoid).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'ord-101' }),
         'Quemado',
@@ -1485,8 +1492,6 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
     });
 
     it('auto-dismisses action feedback after 5 seconds and action error after 15 seconds', async () => {
-      vi.useFakeTimers();
-
       const mockClient = {
         get: vi.fn().mockResolvedValue(mockKdsQueue),
         post: vi.fn(),
@@ -1498,26 +1503,30 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       const queryClient = createTestQueryClient();
       render(<KdsBoard client={mockClient} queryClient={queryClient} undoGracePeriodMs={0} />);
 
-      // Wait for items to render
-      await vi.waitFor(() => {
+      await waitFor(() => {
+        expect(queryClient.isFetching()).toBe(0);
         expect(screen.getByTestId('order-action-ready-ord-101')).toBeInTheDocument();
       });
 
-      // Trigger error
-      fireEvent.click(screen.getByTestId('order-action-ready-ord-101'));
+      vi.useFakeTimers();
+      try {
+        await act(async () => {
+          fireEvent.click(screen.getByTestId('order-action-ready-ord-101'));
+          await Promise.resolve();
+          await Promise.resolve();
+        });
 
-      await vi.waitFor(() => {
         expect(screen.getByTestId('kds-action-error')).toBeInTheDocument();
-      });
 
-      // Advance 15 seconds -> error auto-dismisses
-      vi.advanceTimersByTime(15000);
+        // Advance 15 seconds -> error auto-dismisses
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(15000);
+        });
 
-      await vi.waitFor(() => {
         expect(screen.queryByTestId('kds-action-error')).not.toBeInTheDocument();
-      });
-
-      vi.useRealTimers();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('opens OrderDetailsDialog when an order card header or footer is clicked', async () => {

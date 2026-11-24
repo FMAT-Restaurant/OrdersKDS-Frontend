@@ -201,5 +201,66 @@ describe('ConfirmRejectDialog', () => {
     fireEvent.click(screen.getByTestId('confirm-reject-submit-btn'));
     expect(onConfirm).toHaveBeenCalledWith({ availableQuantity: 2 });
   });
+
+  it('allows selecting multiple dishes with per-item available quantities on multi-item orders', () => {
+    const onConfirm = vi.fn();
+    const multiDishOrder: Order = {
+      ...mockOrder,
+      items: [
+        {
+          id: 'item-burger',
+          name: 'Hamburguesa clásica',
+          quantity: 2,
+          unitPrice: 165,
+          status: ItemStatus.PENDING,
+        },
+        {
+          id: 'item-quesadilla',
+          name: 'Quesadilla Oaxaca',
+          quantity: 3,
+          unitPrice: 115,
+          status: ItemStatus.PENDING,
+        },
+      ],
+    };
+
+    render(
+      <ConfirmRejectDialog
+        order={multiDishOrder}
+        isOpen={true}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('confirm-reject-items-list')).toBeInTheDocument();
+    const toggleBurger = screen.getByTestId('confirm-reject-item-toggle-item-burger');
+    const toggleQuesadilla = screen.getByTestId('confirm-reject-item-toggle-item-quesadilla');
+    expect(toggleBurger).toBeChecked();
+    expect(toggleQuesadilla).not.toBeChecked();
+
+    // Enable the second dish and set different partial availabilities for both
+    fireEvent.click(toggleQuesadilla);
+    expect(toggleQuesadilla).toBeChecked();
+
+    fireEvent.click(screen.getByTestId('confirm-reject-available-inc-item-burger'));
+    fireEvent.click(screen.getByTestId('confirm-reject-available-inc-item-quesadilla'));
+    fireEvent.click(screen.getByTestId('confirm-reject-available-inc-item-quesadilla'));
+
+    fireEvent.click(screen.getByTestId('confirm-reject-submit-btn'));
+    expect(onConfirm).toHaveBeenCalledWith({
+      availableQuantity: 1,
+      items: [
+        { itemId: 'item-burger', availableQuantity: 1 },
+        { itemId: 'item-quesadilla', availableQuantity: 2 },
+      ],
+    });
+
+    // Unchecking all dishes disables confirm and warns user
+    fireEvent.click(toggleBurger);
+    fireEvent.click(toggleQuesadilla);
+    expect(screen.getByRole('alert')).toHaveTextContent('Selecciona al menos un platillo afectado.');
+    expect(screen.getByTestId('confirm-reject-submit-btn')).toBeDisabled();
+  });
 });
 

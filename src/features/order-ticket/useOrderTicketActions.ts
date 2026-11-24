@@ -3,7 +3,7 @@
  * @satisfies RF-12, RF-13, RF-14, RF-17, RF-22, RF-23, RNF-03
  */
 
-import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useMutation, type QueryClient } from '@tanstack/react-query';
 import { type createApiClient } from '../../shared/api/client.ts';
 import { logDeveloperError } from '../../shared/api/devErrorLogger.ts';
@@ -25,6 +25,9 @@ export interface CreateOrderParams {
   readonly diningSessionId: string | undefined;
   readonly items: readonly EditableOrderItem[];
   readonly confirm: boolean;
+  readonly existingOrderId?: string;
+  readonly onOrderHeaderCreated?: (orderId: string) => void;
+  readonly onItemsAttached?: (order: Order, orderId: string) => void;
 }
 
 /** Input configuration for useOrderTicketActions. */
@@ -55,20 +58,26 @@ export async function executeCreateOrderSequence({
   diningSessionId,
   items,
   confirm,
+  existingOrderId,
+  onOrderHeaderCreated,
+  onItemsAttached,
 }: CreateOrderParams): Promise<{ order: Order; orderId: string }> {
-  const created = await api.post<Order>(
-    '/orders',
-    {
-      tableNumber,
-      isTakeaway,
-      diningSessionId,
-    },
-    OrderSchema,
-  );
-
-  const createdId = created.id ?? created.orderId ?? created.publicId;
+  let createdId = existingOrderId;
   if (!createdId) {
-    throw new Error('No se pudo obtener el identificador de la orden creada.');
+    const created = await api.post<Order>(
+      '/orders',
+      {
+        tableNumber,
+        isTakeaway,
+        diningSessionId,
+      },
+      OrderSchema,
+    );
+    createdId = created.id ?? created.orderId ?? created.publicId;
+    if (!createdId) {
+      throw new Error('No se pudo obtener el identificador de la orden creada.');
+    }
+    onOrderHeaderCreated?.(createdId);
   }
 
   const withItems = await api.patch<Order>(
@@ -76,6 +85,7 @@ export async function executeCreateOrderSequence({
     { items: items.map((item) => mapDraftItemToApiInput(item)) },
     OrderSchema,
   );
+  onItemsAttached?.(withItems, createdId);
 
   const finalOrder = confirm
     ? await api.post<Order>(
@@ -110,10 +120,15 @@ export function useOrderTicketActions({
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const actionLock = useRef(false);
+  const pendingDraftOrderIdRef = useRef<string | undefined>(undefined);
 
   const releaseLock = () => {
     actionLock.current = false;
   };
+
+  const clearPendingDraftOrder = useCallback(() => {
+    pendingDraftOrderIdRef.current = undefined;
+  }, []);
 
   const invalidateShiftOrders = () => {
     void client.invalidateQueries({ queryKey: [...ORDER_QUERY_PREFIX, 'shift-list'] });
@@ -164,6 +179,8 @@ export function useOrderTicketActions({
         `PATCH /orders/${activeOrderId ?? 'unknown'}/cancel`,
         err,
       );
+      void client.invalidateQueries({ queryKey });
+      invalidateShiftOrders();
     },
     onSettled: releaseLock,
   });
@@ -292,6 +309,18 @@ export function useOrderTicketActions({
         diningSessionId: effectiveDiningSessionId,
         items: draftItems,
         confirm,
+        existingOrderId: pendingDraftOrderIdRef.current,
+        onOrderHeaderCreated: (orderId) => {
+          pendingDraftOrderIdRef.current = orderId;
+        },
+        onItemsAttached: (attachedOrder, orderId) => {
+          pendingDraftOrderIdRef.current = undefined;
+          setActiveOrderId(orderId);
+          setIsEditing(false);
+          client.setQueryData([...ORDER_QUERY_PREFIX, orderId], attachedOrder);
+          invalidateShiftOrders();
+          onOrderCreated?.(attachedOrder);
+        },
       });
 
       setActiveOrderId(createdId);
@@ -300,9 +329,8 @@ export function useOrderTicketActions({
         ...finalOrder,
         awaitingStockConfirmation: confirm && finalOrder.status === OrderStatus.CREATED,
       });
-      invalidateShiftOrders();
-      onOrderCreated?.(finalOrder);
       if (confirm) {
+        invalidateShiftOrders();
         onOrderSubmitted?.(createdId);
       }
     } catch (err) {
@@ -327,5 +355,6 @@ export function useOrderTicketActions({
     submitEdits,
     submitRedo,
     handleCreateOrder,
+    clearPendingDraftOrder,
   };
 }

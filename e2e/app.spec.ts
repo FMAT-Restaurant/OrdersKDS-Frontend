@@ -1,18 +1,39 @@
 import { test, expect } from '@playwright/test';
+import { seedAuthSession } from './fixtures/authSession.ts';
+import { makeDefaultOpenShiftResponse } from './fixtures/orderFixtures.ts';
 
 test('verify page title', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle(/temp-app/);
 });
 
+test('blocks unauthenticated access in production build without DevSandbox', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('auth-required-screen')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sesión requerida' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'KDS App' })).toHaveCount(0);
+});
+
 test('KDS touch shell @touch', async ({ page }) => {
+  await seedAuthSession(page, { role: 'kitchen' });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'KDS App' })).toBeVisible();
   await expect(page.getByTestId('kds-board-container')).toBeVisible();
 });
 
 test('KDS actions use one touch and 64px targets @touch', async ({ page }) => {
+  await seedAuthSession(page, { role: 'kitchen' });
   const requests: string[] = [];
+  await page.route('**/orders/order-touch-1/**', async (route) => {
+    requests.push(new URL(route.request().url()).pathname);
+    await route.fulfill({ status: 204 });
+  });
+  await page.route('**/shifts/current*', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(makeDefaultOpenShiftResponse()),
+    }),
+  );
   await page.route('**/kds/queue*', (route) =>
     route.fulfill({
       contentType: 'application/json',
@@ -35,10 +56,6 @@ test('KDS actions use one touch and 64px targets @touch', async ({ page }) => {
       ]),
     }),
   );
-  await page.route('**/orders/**', async (route) => {
-    requests.push(new URL(route.request().url()).pathname);
-    await route.fulfill({ status: 204 });
-  });
 
   await page.goto('/');
   const start = page.getByTestId('order-action-start-order-touch-1');
@@ -49,6 +66,10 @@ test('KDS actions use one touch and 64px targets @touch', async ({ page }) => {
   expect((await item.boundingBox())?.height).toBeGreaterThanOrEqual(64);
 
   await start.tap();
-  await expect.poll(() => requests).toContain('/orders/order-touch-1/start-preparation');
+  await expect
+    .poll(() =>
+      requests.some((pathname) => pathname.endsWith('/orders/order-touch-1/start-preparation')),
+    )
+    .toBe(true);
   expect(requests).toHaveLength(1);
 });

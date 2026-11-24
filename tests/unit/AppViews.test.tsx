@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom/vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from '../../src/App.tsx';
@@ -63,11 +64,11 @@ vi.mock('../../src/ReadyOrdersAlert.tsx', () => ({
 }));
 
 describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
-  it('navigates between KDS, Ticket, and Alerts views and toggles KDS memory simulator', () => {
+  it('navigates between KDS, Ticket, and Alerts views and toggles KDS memory simulator', async () => {
     render(<App />);
 
     // Default view: KDS using backend client initially for E2E route compatibility
-    const kds = screen.getByTestId('mock-kds-app');
+    const kds = await screen.findByTestId('mock-kds-app');
     expect(kds).toBeInTheDocument();
     expect(kds).toHaveAttribute('data-has-mock-client', 'false');
 
@@ -97,8 +98,9 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
     expect(screen.getByTestId('mock-kds-app')).toBeInTheDocument();
   });
 
-  it('cycles through all lifecycle presets, blank draft mode, and quick controls', () => {
+  it('cycles through all lifecycle presets, blank draft mode, and quick controls', async () => {
     render(<App />);
+    await screen.findByTestId('mock-kds-app');
 
     fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
 
@@ -161,8 +163,9 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
     expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-has-mock-client', 'true');
   });
 
-  it('selects live seed orders including REJECTED and expired TTL and applies custom UUIDs', () => {
+  it('selects live seed orders including REJECTED and expired TTL and applies custom UUIDs', async () => {
     render(<App />);
+    await screen.findByTestId('mock-kds-app');
 
     fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
 
@@ -200,6 +203,7 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
   describe('Shared Waiter <-> KDS mockFetch and MockWebSocket lifecycle', () => {
     it('executes full end-to-end Waiter and KDS lifecycle transitions against shared state', async () => {
       render(<App />);
+      await screen.findByTestId('mock-kds-app');
 
       fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
       fireEvent.click(screen.getByText('Mesa 4 (Creada)'));
@@ -352,6 +356,7 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
 
     it('exercises MockWebSocket lifecycle', async () => {
       render(<App />);
+      await screen.findByTestId('mock-kds-app');
 
       fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
       fireEvent.click(screen.getByText('Mesa 4 (Creada)'));
@@ -378,10 +383,10 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
       expect(closeSpy).toHaveBeenCalled();
     });
 
-    it('switches between Admin, Chef, Cocinero, and Mesero roles in DevSandboxApp and toggles role-specific KDS void buttons', () => {
+    it('switches between Admin, Chef, Cocinero, and Mesero roles in DevSandboxApp and toggles role-specific KDS void buttons', async () => {
       render(<App />);
 
-      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'admin');
+      expect(await screen.findByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'admin');
 
       fireEvent.click(screen.getByTestId('dev-role-chef'));
       expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-user-role', 'chef');
@@ -429,6 +434,42 @@ describe('App Dev View Switcher and Shared Sandbox (AppViews)', () => {
       );
       expect(screen.queryByRole('button', { name: /anulación administrativa/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /anulación por error de cocina/i })).not.toBeInTheDocument();
+    });
+
+    it('supports creating new real backend orders with TEST_DATA dishes without reverting to mock mode', async () => {
+      render(<App />);
+      await screen.findByTestId('mock-kds-app');
+
+      fireEvent.click(screen.getByRole('button', { name: /orden mesero/i }));
+      fireEvent.click(screen.getByTestId('sandbox-backend-new-order-btn'));
+
+      expect(screen.getByText('Live Backend')).toBeInTheDocument();
+      expect(screen.getByText(/OrderTicketWidget Active Order: draft/)).toBeInTheDocument();
+      expect(capturedProps.fetchFn).toBeUndefined();
+      expect(capturedProps.WebSocketClass).toBeUndefined();
+
+      const eventListener = vi.fn();
+      window.addEventListener('fmat:orden:add-item', eventListener);
+      expect(screen.getByTestId('backend-quick-menu-bar')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /\+ Menú Real: Hamburguesa clásica/i }));
+      expect(eventListener).toHaveBeenCalledTimes(1);
+      const customEvent = eventListener.mock.calls[0]?.[0] as CustomEvent<Record<string, unknown>>;
+      expect(customEvent.detail).toEqual({
+        dishId: 'PLATE-BURGER-01',
+        sourceId: 'PLATE-BURGER-01',
+        offerId: 'OFFER-BURGER-01',
+        name: 'Hamburguesa clásica',
+        unitPrice: 165,
+        quantity: 1,
+      });
+      window.removeEventListener('fmat:orden:add-item', eventListener);
+
+      fireEvent.click(screen.getByTestId('mock-create-new-order-btn'));
+      expect(screen.getByText('Live Backend')).toBeInTheDocument();
+      expect(capturedProps.fetchFn).toBeUndefined();
+
+      fireEvent.click(screen.getByRole('button', { name: /ver en kds cocina/i }));
+      expect(screen.getByTestId('mock-kds-app')).toHaveAttribute('data-has-mock-client', 'false');
     });
   });
 });

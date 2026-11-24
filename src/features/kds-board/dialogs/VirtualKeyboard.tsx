@@ -4,6 +4,10 @@ export interface VirtualKeyboardProps {
   readonly value: string;
   readonly onChange: (nextValue: string) => void;
   readonly disabled?: boolean;
+  readonly floating?: boolean;
+  readonly maxLength?: number;
+  readonly title?: string;
+  readonly onClose?: () => void;
 }
 
 const KEYBOARD_ROWS: readonly (readonly string[])[] = [
@@ -15,30 +19,66 @@ const KEYBOARD_ROWS: readonly (readonly string[])[] = [
 /**
  * On-screen touch virtual keyboard for KDS dialogs (TASK-36, ADR-0012).
  * All keys enforce a minimum touch target of 64x64 pixels.
+ * Supports `floating` mode to dock elevated above dialog backdrops without blocking forms.
  */
 export function VirtualKeyboard({
   value,
   onChange,
   disabled = false,
+  floating = false,
+  maxLength,
+  title = 'Teclado en pantalla',
+  onClose,
 }: Readonly<VirtualKeyboardProps>) {
+  const appendText = (chunk: string) => {
+    if (disabled) return;
+    if (maxLength !== undefined && value.length >= maxLength) return;
+    const nextValue = `${value}${chunk}`;
+    onChange(maxLength !== undefined ? nextValue.slice(0, maxLength) : nextValue);
+  };
+
   const handleKeyPress = (char: string) => {
-    onChange(`${value}${char}`);
+    appendText(char);
   };
 
   const handleSpace = () => {
-    onChange(`${value} `);
+    appendText(' ');
   };
 
   const handleBackspace = () => {
+    if (disabled) return;
     onChange(value.slice(0, -1));
   };
+
+  const containerClass = floating
+    ? 'shrink-0 w-full z-[70] flex flex-col gap-1.5 bg-surface px-3 pt-2 pb-3 border-t-2 border-fmat-primary shadow-2xl select-none overflow-x-auto'
+    : 'flex flex-col gap-2 bg-canvas p-3 rounded-lg border border-border select-none overflow-x-auto w-full';
 
   return (
     <div
       data-testid="virtual-keyboard"
       aria-label="Teclado virtual en pantalla"
-      className="flex flex-col gap-2 bg-gray-50 p-3 rounded-lg border border-border select-none overflow-x-auto w-full"
+      className={containerClass}
     >
+      {floating && (
+        <div className="max-w-4xl mx-auto w-full flex items-center justify-between gap-3 px-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted">
+            {title}
+          </span>
+          {onClose && (
+            <button
+              type="button"
+              data-testid="virtual-keyboard-close"
+              disabled={disabled}
+              {...pointerAction(onClose)}
+              style={{ minHeight: 64, minWidth: 64 }}
+              className="min-h-[64px] min-w-[64px] px-4 py-2 rounded-control text-xs sm:text-sm font-bold text-fmat-primary hover:bg-canvas border border-border bg-surface cursor-pointer disabled:opacity-40"
+            >
+              Ocultar teclado
+            </button>
+          )}
+        </div>
+      )}
       <div className="flex flex-col gap-2 min-w-max mx-auto">
         {KEYBOARD_ROWS.map((row, rowIndex) => (
           <div
@@ -54,7 +94,7 @@ export function VirtualKeyboard({
                 aria-label={`Tecla ${letter}`}
                 {...pointerAction(() => handleKeyPress(letter))}
                 style={{ minHeight: 64, minWidth: 64 }}
-                className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-control bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center select-none"
+                className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-control bg-surface hover:bg-canvas active:bg-border text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center select-none"
               >
                 {letter}
               </button>
@@ -70,7 +110,7 @@ export function VirtualKeyboard({
             aria-label="Espacio"
             {...pointerAction(handleSpace)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] flex-1 max-w-sm px-6 py-2 rounded-control bg-surface hover:bg-gray-100 active:bg-gray-200 text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+            className="min-h-[64px] min-w-[64px] flex-1 max-w-sm px-6 py-2 rounded-control bg-surface hover:bg-canvas active:bg-border text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Espacio
           </button>

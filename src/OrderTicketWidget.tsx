@@ -22,6 +22,7 @@ import {
   OrderTicketDraftActions,
   OrderTicketErrorList,
   OrderTicketExistingActions,
+  RedoRejectionBanner,
   RejectionBreakdown,
   WaiterActiveOrdersByTable,
   type TicketErrorItem,
@@ -42,6 +43,7 @@ import {
   getOrderAlert,
   groupActiveOrdersByTable,
   hasInvalidDraftItemQuantity,
+  parseRedoRejection,
   parseRejectionDetails,
   resolveEffectiveUserId,
 } from './features/order-ticket/orderTicketUtils.ts';
@@ -494,6 +496,7 @@ function OrderTicket({
   };
 
   const resetToBlankDraft = () => {
+    actions.clearPendingDraftOrder();
     setActiveOrderId(undefined);
     setDraftItems([]);
     setIsEditing(true);
@@ -575,6 +578,7 @@ function OrderTicket({
 
   const permissions = computeOrderActionPermissions(order);
   const rejectionDetailsParsed = order ? parseRejectionDetails(order.rejectionDetails) : null;
+  const redoRejectionParsed = order ? parseRedoRejection(order.rejectionDetails) : null;
   const alertMessage = order ? getOrderAlert(order.status, entityNounLower) : '';
   const connectionMessage = getRealtimeStatusMessage(
     WEBSOCKET_STATUS_TRANSLATIONS[connectionStatus],
@@ -634,6 +638,10 @@ function OrderTicket({
         <RejectionBreakdown details={rejectionDetailsParsed} orderItems={order.items} />
       )}
 
+      {order?.status === OrderStatus.DELIVERED && redoRejectionParsed && (
+        <RedoRejectionBanner rejection={redoRejectionParsed} orderItems={order.items} />
+      )}
+
       <OrderItemsList
         items={order?.items ?? []}
         isEditing={isEditing}
@@ -664,6 +672,7 @@ function OrderTicket({
           onConfirmCreate={() => actions.handleCreateOrder(true, getDisplayError)}
           onSaveDraft={() => actions.handleCreateOrder(false, getDisplayError)}
           onDiscard={() => {
+            actions.clearPendingDraftOrder();
             setIsDraftTableLocked(false);
             setDraftItems([]);
             onCreateNewOrder?.();

@@ -4,7 +4,7 @@ import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
 import { pointerAction } from '../pointerAction.ts';
-import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
+import { formatOrderTableLabel, getOrderKey, getOrderNumberDisplay } from '../orderNumberDisplay.ts';
 import { VirtualKeyboard } from './VirtualKeyboard.tsx';
 
 const InPreparationOrderSchema = OrderSchema.extend({
@@ -37,6 +37,77 @@ export interface ChefVoidDialogProps {
   readonly onCancel: () => void;
 }
 
+function isAuthorizedChefRole(userRole?: UserRole): boolean {
+  return !userRole || userRole === UserRole.CHEF || userRole === UserRole.ADMIN;
+}
+
+function toggleChefReason(prev: string[], reason: string): string[] {
+  return prev.includes(reason) ? prev.filter((item) => item !== reason) : [...prev, reason];
+}
+
+function buildChefVoidNote(selectedReasons: readonly string[], customNote: string): string {
+  const trimmedNote = customNote.trim();
+  const parts = [...selectedReasons];
+  if (trimmedNote.length > 0) {
+    parts.push(trimmedNote);
+  }
+  return parts.join(' - ');
+}
+
+function ChefQuickReasonsGrid({
+  selectedReasons,
+  isDisabled,
+  onToggleReason,
+}: Readonly<{
+  selectedReasons: readonly string[];
+  isDisabled: boolean;
+  onToggleReason: (reason: string) => void;
+}>) {
+  return (
+    <section aria-label="Motivos rápidos de error de cocina" className="flex flex-col gap-2">
+      <span className="text-sm font-semibold uppercase tracking-wider text-body">
+        Seleccione uno o más motivos rápidos:
+      </span>
+      <div
+        data-testid="chef-quick-reasons-grid"
+        className="grid grid-cols-2 gap-3"
+      >
+        {QUICK_REASONS.map((item, idx) => {
+          const isSelected = selectedReasons.includes(item.label);
+          return (
+            <button
+              key={item.label}
+              type="button"
+              disabled={isDisabled}
+              aria-pressed={isSelected}
+              aria-label={item.label}
+              data-testid={`chef-reason-${idx}`}
+              {...pointerAction(() => onToggleReason(item.label))}
+              style={{ minHeight: 64, minWidth: 64 }}
+              className={`min-h-[64px] min-w-[64px] px-4 py-2.5 rounded-control font-bold text-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed text-left ${
+                isSelected
+                  ? 'bg-fmat-primary text-white border-fmat-primary shadow-sm'
+                  : 'bg-surface text-ink border border-border hover:bg-fmat-soft hover:border-fmat-primary'
+              }`}
+            >
+              <div className="flex flex-col items-start">
+                <span className="font-bold text-base sm:text-lg leading-tight">{item.label}</span>
+                <span
+                  className={`text-xs font-normal mt-0.5 leading-snug ${
+                    isSelected ? 'text-white/90' : 'text-muted'
+                  }`}
+                >
+                  {item.description}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 /**
  * Kitchen-error void dialog for Chef / Admin on orders in IN_PREPARATION (TASK-36, RF-28..RF-31, ADR-0012).
  * Warns that the customer will not be charged and enforces mandatory justification (RF-29).
@@ -52,18 +123,20 @@ export function ChefVoidDialog({
 }: Readonly<ChefVoidDialogProps>) {
   const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
   const [customNote, setCustomNote] = useState<string>('');
+  const [showKeyboard, setShowKeyboard] = useState<boolean>(true);
 
   if (!isOpen) {
     return null;
   }
 
   // UT-FE-22, RF-28, RF-29: Kitchen-error void is visible only to chef and admin roles
-  if (userRole && userRole !== UserRole.CHEF && userRole !== UserRole.ADMIN) {
+  if (!isAuthorizedChefRole(userRole)) {
     return null;
   }
 
   const orderValidation = InPreparationOrderSchema.safeParse(order);
   const isOperable = orderValidation.success && order.status === OrderStatus.IN_PREPARATION;
+  const isDisabled = !isOperable || isSubmitting;
 
   const justificationValidation = ChefVoidJustificationSchema.safeParse({
     selectedReasons,
@@ -71,29 +144,16 @@ export function ChefVoidDialog({
   });
   const isConfirmEnabled = isOperable && justificationValidation.success && !isSubmitting;
 
-  const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
+  const displayId = getOrderKey(order) || 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
-  let tableDisplay: string | null = null;
-  if (order.tableNumber != null) {
-    tableDisplay = `Mesa ${order.tableNumber}`;
-  } else if (order.isTakeaway) {
-    tableDisplay = 'Para llevar';
-  }
+  const tableDisplay = formatOrderTableLabel(order);
 
   const toggleReason = (reason: string) => {
-    setSelectedReasons((prev) =>
-      prev.includes(reason) ? prev.filter((item) => item !== reason) : [...prev, reason],
-    );
+    setSelectedReasons((prev) => toggleChefReason(prev, reason));
   };
 
   const handleConfirm = () => {
-    const trimmedNote = customNote.trim();
-    const parts = [...selectedReasons];
-    if (trimmedNote.length > 0) {
-      parts.push(trimmedNote);
-    }
-    const finalNote = parts.join(' - ');
-    onConfirm(order, finalNote);
+    onConfirm(order, buildChefVoidNote(selectedReasons, customNote));
   };
 
   return (
@@ -102,9 +162,14 @@ export function ChefVoidDialog({
       aria-modal="true"
       aria-labelledby="chef-void-dialog-title"
       data-testid="chef-void-dialog"
-      className="orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto"
+      className="orders-kds-root fixed inset-0 z-[60] m-0 p-0 w-full h-full max-w-none max-h-none flex flex-col bg-black/60 backdrop-blur-sm border-none select-none overflow-hidden"
     >
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
+      <div
+        className={`flex-1 min-h-0 w-full flex justify-center overflow-y-auto p-3 sm:p-4 ${
+          showKeyboard ? 'items-start' : 'items-center'
+        }`}
+      >
+        <div className="w-full max-w-4xl max-h-full overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
         <header className="flex items-center justify-between border-b border-border pb-3">
           <h2 id="chef-void-dialog-title" className="text-2xl font-black text-ink">
             Anulación por Error de Cocina {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
@@ -131,70 +196,40 @@ export function ChefVoidDialog({
           </div>
         )}
 
-        <section aria-label="Motivos rápidos de error de cocina" className="flex flex-col gap-2">
-          <span className="text-sm font-semibold uppercase tracking-wider text-body">
-            Seleccione uno o más motivos rápidos:
-          </span>
-          <div
-            data-testid="chef-quick-reasons-grid"
-            className="grid grid-cols-2 gap-3"
-          >
-            {QUICK_REASONS.map((item, idx) => {
-              const isSelected = selectedReasons.includes(item.label);
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  disabled={!isOperable || isSubmitting}
-                  aria-pressed={isSelected}
-                  aria-label={item.label}
-                  data-testid={`chef-reason-${idx}`}
-                  {...pointerAction(() => toggleReason(item.label))}
-                  style={{ minHeight: 64, minWidth: 64 }}
-                  className={`min-h-[64px] min-w-[64px] px-4 py-2.5 rounded-control font-bold text-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed text-left ${
-                    isSelected
-                      ? 'bg-fmat-primary text-white border-fmat-primary shadow-sm'
-                      : 'bg-surface text-ink border border-border hover:bg-fmat-soft hover:border-fmat-primary'
-                  }`}
-                >
-                  <div className="flex flex-col items-start">
-                    <span className="font-bold text-base sm:text-lg leading-tight">{item.label}</span>
-                    <span
-                      className={`text-xs font-normal mt-0.5 leading-snug ${
-                        isSelected ? 'text-white/90' : 'text-muted'
-                      }`}
-                    >
-                      {item.description}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        <ChefQuickReasonsGrid
+          selectedReasons={selectedReasons}
+          isDisabled={isDisabled}
+          onToggleReason={toggleReason}
+        />
 
         <section aria-label="Detalle adicional del motivo" className="flex flex-col gap-3">
-          <label
-            htmlFor="chef-void-note-input"
-            className="text-sm font-semibold uppercase tracking-wider text-body"
-          >
-            Nota adicional (opcional si eligió motivo rápido):
-          </label>
+          <div className="flex items-center justify-between gap-2">
+            <label
+              htmlFor="chef-void-note-input"
+              className="text-sm font-semibold uppercase tracking-wider text-body"
+            >
+              Nota adicional (opcional si eligió motivo rápido):
+            </label>
+            <button
+              type="button"
+              data-testid="chef-void-toggle-keyboard"
+              disabled={isDisabled}
+              {...pointerAction(() => setShowKeyboard((prev) => !prev))}
+              className="text-xs font-bold text-fmat-primary hover:underline px-2 py-1 cursor-pointer disabled:opacity-40 shrink-0"
+            >
+              {showKeyboard ? 'Ocultar teclado' : 'Teclado en pantalla'}
+            </button>
+          </div>
           <input
             id="chef-void-note-input"
             type="text"
             value={customNote}
-            disabled={!isOperable || isSubmitting}
+            maxLength={500}
+            disabled={isDisabled}
             onChange={(event) => setCustomNote(event.target.value)}
-            placeholder="Escriba con el teclado en pantalla..."
+            placeholder="Escriba con el teclado o en pantalla..."
             data-testid="chef-void-note-input"
             className="w-full min-h-[48px] px-4 py-2 rounded-md bg-surface border border-border text-ink placeholder:text-muted text-lg font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
-          />
-
-          <VirtualKeyboard
-            value={customNote}
-            onChange={setCustomNote}
-            disabled={!isOperable || isSubmitting}
           />
         </section>
 
@@ -205,7 +240,7 @@ export function ChefVoidDialog({
             disabled={isSubmitting}
             {...pointerAction(onCancel)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-gray-100 text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-canvas text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
           >
             Cancelar
           </button>
@@ -220,7 +255,20 @@ export function ChefVoidDialog({
             Confirmar
           </button>
         </footer>
+        </div>
       </div>
+
+      {showKeyboard && (
+        <VirtualKeyboard
+          floating
+          title="Teclado en pantalla · Anulación de cocina"
+          value={customNote}
+          onChange={setCustomNote}
+          maxLength={500}
+          disabled={isDisabled}
+          onClose={() => setShowKeyboard(false)}
+        />
+      )}
     </dialog>
   );
 }

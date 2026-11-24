@@ -18,6 +18,7 @@ import type { EditableOrderItem } from './draftItemsHelper.ts';
 export interface RejectedItemDetail {
   readonly offerId?: string;
   readonly dishId?: string;
+  readonly sourceId?: string;
   readonly itemId?: string;
   readonly name?: string;
   readonly itemName?: string;
@@ -31,6 +32,7 @@ export interface RejectedItemDetail {
 export interface ReservedItemDetail {
   readonly offerId?: string;
   readonly dishId?: string;
+  readonly sourceId?: string;
   readonly name?: string;
   readonly quantity?: number;
   readonly reservedQuantity?: number;
@@ -43,6 +45,15 @@ export interface ParsedRejectionDetails {
   readonly missingIngredients?: string[];
   readonly rejectedItems: readonly RejectedItemDetail[];
   readonly reservedItems: readonly ReservedItemDetail[];
+}
+
+/** Normalized structure for an asynchronous dish redo rejection returned by Inventory. */
+export interface ParsedRedoRejection {
+  readonly itemId?: string;
+  readonly itemName?: string;
+  readonly redoId?: string;
+  readonly reason?: string;
+  readonly missingIngredients: readonly string[];
 }
 
 /** Outbound item shape serialized for `PATCH /orders/{id}/items`. */
@@ -91,6 +102,9 @@ export interface TableOrderGroup {
   readonly isTakeaway: boolean;
   readonly orders: readonly Order[];
 }
+
+/** Max catalog identifier length aligned with Inventory-Backend (`@MaxLength(100)`). */
+export const MAX_CATALOG_ID_LENGTH = 100;
 
 /** React Query key prefix for individual order ticket queries. */
 export const ORDER_QUERY_PREFIX = ['order'] as const;
@@ -182,7 +196,16 @@ export function applyRealtimeStatusChange(
   currentOrder: Order | undefined,
   event: OrderStatusChangedEvent,
 ): Order | undefined {
-  if (!currentOrder || event.version <= currentOrder.version) {
+  if (!currentOrder || event.version < currentOrder.version) {
+    return currentOrder;
+  }
+  if (event.version === currentOrder.version) {
+    if (event.status === currentOrder.status && event.rejectionDetails !== undefined) {
+      return {
+        ...currentOrder,
+        rejectionDetails: event.rejectionDetails,
+      };
+    }
     return currentOrder;
   }
   return {
@@ -223,13 +246,21 @@ export function formatSessionDisplay(sessionId: string): string {
 function parseItemIdentifier(itemObj: Record<string, unknown>): {
   offerId?: string;
   dishId?: string;
+  sourceId?: string;
   itemId?: string;
 } {
   const itemId = typeof itemObj.itemId === 'string' ? itemObj.itemId : undefined;
   const plateId = typeof itemObj.plateId === 'string' ? itemObj.plateId : undefined;
+  const sourceId = typeof itemObj.sourceId === 'string' ? itemObj.sourceId : undefined;
   const offerId = typeof itemObj.offerId === 'string' ? itemObj.offerId : itemId;
-  const dishId = typeof itemObj.dishId === 'string' ? itemObj.dishId : (plateId ?? itemId);
-  return { offerId, dishId, itemId };
+  const dishId =
+    typeof itemObj.dishId === 'string' ? itemObj.dishId : (plateId ?? sourceId ?? itemId);
+  return {
+    offerId,
+    dishId,
+    itemId,
+    ...(sourceId !== undefined ? { sourceId } : {}),
+  };
 }
 
 function readNumericField(
@@ -312,7 +343,41 @@ export function parseRejectionDetails(details: unknown): ParsedRejectionDetails 
   };
 }
 
-/** Look up a human-readable dish name inside order items by dishId, id, or itemId. */
+/** Parse optional nested redoRejection notice from order rejectionDetails metadata. */
+export function parseRedoRejection(details: unknown): ParsedRedoRejection | null {
+  if (!details || typeof details !== 'object') {
+    return null;
+  }
+  const rawRedo = (details as Record<string, unknown>).redoRejection;
+  if (!rawRedo || typeof rawRedo !== 'object') {
+    return null;
+  }
+  const redoObj = rawRedo as Record<string, unknown>;
+  const itemId = typeof redoObj.itemId === 'string' ? redoObj.itemId : undefined;
+  const itemName = typeof redoObj.itemName === 'string' ? redoObj.itemName : undefined;
+  const redoId = typeof redoObj.redoId === 'string' ? redoObj.redoId : undefined;
+  const reason =
+    typeof redoObj.reason === 'string' && redoObj.reason.trim() ? redoObj.reason.trim() : undefined;
+  const missingIngredients = Array.isArray(redoObj.missingIngredients)
+    ? redoObj.missingIngredients
+        .map((item) => (typeof item === 'string' || typeof item === 'number' ? String(item) : ''))
+        .filter((entry) => entry.length > 0)
+    : [];
+
+  if (!itemId && !itemName && !reason && missingIngredients.length === 0) {
+    return null;
+  }
+
+  return {
+    itemId,
+    itemName,
+    redoId,
+    reason,
+    missingIngredients,
+  };
+}
+
+/** Look up a human-readable dish name inside order items by sourceId, dishId, offerId, id, or itemId. */
 export function resolveDishName(
   dishIdOrOfferId: string | undefined,
   orderItems: readonly OrderItem[],
@@ -322,7 +387,9 @@ export function resolveDishName(
   }
   const found = orderItems.find(
     (item) =>
+      item.sourceId === dishIdOrOfferId ||
       item.dishId === dishIdOrOfferId ||
+      item.offerId === dishIdOrOfferId ||
       item.id === dishIdOrOfferId ||
       item.itemId === dishIdOrOfferId,
   );

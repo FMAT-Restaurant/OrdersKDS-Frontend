@@ -1,5 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import type { Order } from '../../../shared/api/schemas.ts';
+import { formatOrderTableLabel, getOrderKey, getOrderNumberDisplay } from '../orderNumberDisplay.ts';
+import { pointerAction } from '../pointerAction.ts';
 
 export interface ConfirmReadyDialogProps {
   readonly order: Order;
@@ -18,25 +20,19 @@ export function ConfirmReadyDialog({
   onConfirm,
   onKeepInPrep,
 }: Readonly<ConfirmReadyDialogProps>) {
-  const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  const keepPrepBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      confirmBtnRef.current?.focus();
+      keepPrepBtnRef.current?.focus();
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const displayId = order.id ?? order.orderId ?? order.publicId ?? 'unknown';
-  const orderNumberDisplay =
-    order.orderNumber != null ? String(order.orderNumber) : displayId.slice(-4).toUpperCase();
-  let tableDisplay = '';
-  if (order.tableNumber !== null && order.tableNumber !== undefined) {
-    tableDisplay = `Mesa ${order.tableNumber}`;
-  } else if (order.isTakeaway) {
-    tableDisplay = 'Para llevar';
-  }
+  const displayId = getOrderKey(order) || 'unknown';
+  const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
+  const tableDisplay = formatOrderTableLabel(order) ?? '';
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
@@ -97,19 +93,23 @@ export function ConfirmReadyDialog({
 
         <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2 border-t border-border">
           <button
+            ref={keepPrepBtnRef}
             type="button"
             data-testid="confirm-ready-keep-prep-btn"
-            onClick={onKeepInPrep}
+            {...pointerAction(() => {
+              if (!isSubmitting) onKeepInPrep();
+            })}
             disabled={isSubmitting}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-control font-bold text-sm bg-surface text-ink border border-border hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer disabled:opacity-50"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-control font-bold text-sm bg-surface text-ink border border-border hover:bg-canvas focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer disabled:opacity-50"
           >
             Mantener en preparación
           </button>
           <button
-            ref={confirmBtnRef}
             type="button"
             data-testid="confirm-ready-submit-btn"
-            onClick={onConfirm}
+            {...pointerAction(() => {
+              if (!isSubmitting) onConfirm();
+            })}
             disabled={isSubmitting}
             className="w-full sm:w-auto px-5 py-2.5 rounded-control font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary cursor-pointer shadow-sm disabled:opacity-50 border-0"
           >

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import { ApiError } from '../../shared/api/client.ts';
+import { getDisplayError } from './orderTicketUtils.ts';
 
 export interface RedoItemDialogProps {
   readonly itemName: string;
@@ -86,11 +88,15 @@ export function RedoItemDialog({
     try {
       await onSubmit(trimmedNote);
     } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : 'No se pudo solicitar la rehechura del platillo.',
-      );
+      if (submitError instanceof ApiError) {
+        setError(getDisplayError(submitError));
+      } else {
+        setError(
+          submitError instanceof Error
+            ? submitError.message
+            : 'No se pudo solicitar la rehechura del platillo.',
+        );
+      }
     }
   };
 
@@ -105,17 +111,17 @@ export function RedoItemDialog({
       data-testid="redo-item-dialog-backdrop"
       className="fixed inset-0 z-50 m-0 p-4 w-full h-full max-w-none max-h-none flex items-center justify-center bg-black/60 border-none backdrop:bg-transparent"
     >
-      <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl">
-        <h2 id="redo-item-title" className="text-xl font-bold text-gray-900">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 text-ink shadow-2xl">
+        <h2 id="redo-item-title" className="text-xl font-bold text-ink">
           Rehacer platillo
         </h2>
-        <p id="redo-item-description" className="mt-2 text-gray-600 text-sm sm:text-base">
-          Indica por qué se devuelve <span className="font-semibold text-gray-900">{itemName}</span> a cocina.
+        <p id="redo-item-description" className="mt-2 text-body text-sm sm:text-base">
+          Indica por qué se devuelve <span className="font-semibold text-ink">{itemName}</span> a cocina.
         </p>
 
         <form className="mt-5" onSubmit={(event) => void handleSubmit(event)}>
-          <label htmlFor="redo-item-note" className="mb-2 block text-sm font-semibold text-gray-800">
-            Motivo <span aria-hidden="true" className="text-red-600">*</span>
+          <label htmlFor="redo-item-note" className="mb-2 block text-sm font-semibold text-ink">
+            Motivo <span aria-hidden="true" className="text-error">*</span>
           </label>
           <textarea
             ref={noteInput}
@@ -126,10 +132,10 @@ export function RedoItemDialog({
             value={note}
             onChange={(event) => setNote(event.currentTarget.value)}
             disabled={isPending}
-            className="w-full resize-y rounded-md border border-gray-400 bg-white p-3 text-gray-900 placeholder:text-gray-400 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+            className="w-full resize-y rounded-md border border-border bg-canvas p-3 text-ink placeholder:text-muted focus:border-fmat-primary focus:outline-none focus:ring-2 focus:ring-fmat-primary/30"
           />
           {error && (
-            <p role="alert" className="mt-2 text-sm text-red-600 font-semibold">
+            <p role="alert" className="mt-2 text-sm text-error font-semibold">
               {error}
             </p>
           )}
@@ -139,14 +145,14 @@ export function RedoItemDialog({
               type="button"
               onClick={onClose}
               disabled={isPending}
-              className="order-ticket__redo-cancel min-h-12 min-w-[7rem] rounded-md border border-gray-400 bg-white px-4 py-2 font-semibold text-gray-800 hover:bg-gray-100 disabled:opacity-50 cursor-pointer"
+              className="order-ticket__redo-cancel min-h-12 min-w-[7rem] rounded-md border border-border bg-surface px-4 py-2 font-semibold text-ink hover:bg-canvas disabled:opacity-50 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={!note.trim() || isPending}
-              className="order-ticket__redo-submit min-h-12 min-w-[7rem] rounded-md bg-amber-600 px-4 py-2 font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
+              className="order-ticket__redo-submit min-h-12 min-w-[7rem] rounded-md bg-amber-700 px-4 py-2 font-bold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
             >
               {isPending ? 'Enviando…' : 'Rehacer'}
             </button>

@@ -1,5 +1,6 @@
 import { ApiClient } from '../../shared/api/client.ts';
 import type { Order, OrderItem } from '../../shared/api/schemas.ts';
+import { ShiftStatus, type Shift } from '../../shared/api/shiftSchemas.ts';
 import type { TokenProvider } from '../../shared/types/auth.ts';
 import { ItemStatus, OrderStatus, type OrderStatus as OrderStatusValue } from '../../shared/types/order.ts';
 
@@ -11,8 +12,15 @@ export interface PresetItemConfig {
   readonly activeBg?: string;
 }
 
+export interface SandboxShiftState {
+  currentShift: Shift | null;
+  lastClosedShift: Shift | null;
+  nextShiftNumber: number;
+}
+
 export interface SandboxStore {
   orders: Record<string, Order>;
+  shift?: SandboxShiftState;
 }
 
 const ORDER_ID_REGEX = /\/orders\/([^/?]+)/;
@@ -542,34 +550,82 @@ export function handleMarkOrderReady(order: Order): Order {
   };
 }
 
-function buildSandboxReservedItems(
+interface ParsedKitchenRejectEntry {
+  readonly itemId: string;
+  readonly availableQuantity: number;
+  readonly reason?: string;
+}
+
+function clampSandboxAvailableQuantity(item: OrderItem, rawAvailable: number): number {
+  const maxPartial = Math.max(0, item.quantity - 1);
+  return Math.max(0, Math.min(rawAvailable, maxPartial));
+}
+
+interface RejectedTargetEntry {
+  readonly item: OrderItem;
+  readonly availableQuantity: number;
+  readonly reason: string;
+}
+
+function parseSingleRejectTarget(
+  rawEntry: unknown,
   order: Order,
-  targetItem: OrderItem | undefined,
-  effectiveAvailable: number,
-) {
-  const reserved: Array<Record<string, unknown>> = [];
-  if (targetItem && effectiveAvailable > 0) {
-    reserved.push({
-      itemId: targetItem.id ?? targetItem.itemId,
-      dishId: targetItem.dishId,
-      name: targetItem.name,
-      reservedQuantity: effectiveAvailable,
-    });
-  }
-  const targetKey = targetItem ? (targetItem.id ?? targetItem.itemId) : undefined;
-  for (const item of order.items) {
-    const itemKey = item.id ?? item.itemId;
-    if (itemKey === targetKey || item.status === ItemStatus.CANCELLED) {
-      continue;
+  seen: Set<string>,
+  defaultReason: string,
+): RejectedTargetEntry | null {
+  if (!rawEntry || typeof rawEntry !== 'object') return null;
+  const entryObj = rawEntry as Partial<ParsedKitchenRejectEntry>;
+  const matched = order.items.find((it) => (it.id ?? it.itemId) === entryObj.itemId);
+  if (!matched) return null;
+
+  const matchedKey = matched.id ?? matched.itemId ?? matched.name;
+  if (seen.has(matchedKey)) return null;
+  seen.add(matchedKey);
+
+  const rawQty =
+    typeof entryObj.availableQuantity === 'number' ? entryObj.availableQuantity : 0;
+  const itemReason =
+    typeof entryObj.reason === 'string' && entryObj.reason.trim()
+      ? entryObj.reason.trim()
+      : defaultReason;
+
+  return {
+    item: matched,
+    availableQuantity: clampSandboxAvailableQuantity(matched, rawQty),
+    reason: itemReason,
+  };
+}
+
+function resolveSandboxRejectTargets(
+  order: Order,
+  targetItemId: string | undefined,
+  parsed: Record<string, unknown> | null,
+  defaultReason: string,
+): RejectedTargetEntry[] {
+  const rawItems = Array.isArray(parsed?.items) ? parsed.items : null;
+  if (rawItems && rawItems.length > 0) {
+    const entries: RejectedTargetEntry[] = [];
+    const seen = new Set<string>();
+    for (const rawEntry of rawItems) {
+      const target = parseSingleRejectTarget(rawEntry, order, seen, defaultReason);
+      if (target) entries.push(target);
     }
-    reserved.push({
-      itemId: itemKey,
-      dishId: item.dishId,
-      name: item.name,
-      reservedQuantity: item.quantity,
-    });
+    if (entries.length > 0) {
+      return entries;
+    }
   }
-  return reserved;
+
+  const fallbackTarget =
+    order.items.find((it) => (it.id ?? it.itemId) === targetItemId) ?? order.items[0];
+  if (!fallbackTarget) return [];
+  const rawAvailable = typeof parsed?.availableQuantity === 'number' ? parsed.availableQuantity : 0;
+  return [
+    {
+      item: fallbackTarget,
+      availableQuantity: clampSandboxAvailableQuantity(fallbackTarget, rawAvailable),
+      reason: defaultReason,
+    },
+  ];
 }
 
 export function handleKitchenReject(
@@ -578,34 +634,57 @@ export function handleKitchenReject(
   body?: string | null,
 ): Order {
   const parsed = parseJsonRecord(body);
-  const reason =
+  const defaultReason =
     typeof parsed?.reason === 'string' && parsed.reason.trim()
       ? parsed.reason.trim()
       : 'Insumo físico insuficiente en cocina';
-  const targetItem = order.items.find((it) => (it.id ?? it.itemId) === targetItemId) ?? order.items[0];
-  const rawAvailable = typeof parsed?.availableQuantity === 'number' ? parsed.availableQuantity : 0;
-  const maxPartial = targetItem ? Math.max(0, targetItem.quantity - 1) : 0;
-  const effectiveAvailable = Math.max(0, Math.min(rawAvailable, maxPartial));
+  const targets = resolveSandboxRejectTargets(order, targetItemId, parsed, defaultReason);
+  const rejectedMap = new Map(
+    targets.map((entry) => [entry.item.id ?? entry.item.itemId ?? entry.item.name, entry]),
+  );
+
+  const rejectedItems: Array<Record<string, unknown>> = [];
+  const reservedItems: Array<Record<string, unknown>> = [];
+
+  for (const item of order.items) {
+    if (item.status === ItemStatus.CANCELLED) continue;
+    const itemKey = item.id ?? item.itemId ?? item.name;
+    const rejected = rejectedMap.get(itemKey);
+    if (!rejected) {
+      reservedItems.push({
+        itemId: itemKey,
+        dishId: item.dishId,
+        name: item.name,
+        reservedQuantity: item.quantity,
+      });
+      continue;
+    }
+    rejectedItems.push({
+      itemId: itemKey,
+      dishId: item.dishId,
+      name: item.name,
+      requestedQuantity: item.quantity,
+      availableQuantity: rejected.availableQuantity,
+      reason: rejected.reason,
+    });
+    if (rejected.availableQuantity > 0) {
+      reservedItems.push({
+        itemId: itemKey,
+        dishId: item.dishId,
+        name: item.name,
+        reservedQuantity: rejected.availableQuantity,
+      });
+    }
+  }
 
   return {
     ...order,
     status: OrderStatus.REJECTED,
     rejectionDetails: {
       source: 'kitchen',
-      reason,
-      rejectedItems: targetItem
-        ? [
-            {
-              itemId: targetItem.id ?? targetItem.itemId,
-              dishId: targetItem.dishId,
-              name: targetItem.name,
-              requestedQuantity: targetItem.quantity,
-              availableQuantity: effectiveAvailable,
-              reason,
-            },
-          ]
-        : [],
-      reservedItems: buildSandboxReservedItems(order, targetItem, effectiveAvailable),
+      reason: defaultReason,
+      rejectedItems,
+      reservedItems,
     },
     version: order.version + 1,
     updatedAt: new Date().toISOString(),
@@ -638,17 +717,120 @@ function buildKdsQueueOrders(orders: Order[], url: string): Order[] {
   });
 }
 
-function createNewSandboxOrder(store: SandboxStore, body: string | null): Order {
+function ensureSandboxShiftState(store: SandboxStore): SandboxShiftState {
+  store.shift ??= {
+    currentShift: {
+      id: 'shift-sim-1',
+      shiftId: 'shift-sim-1',
+      shiftNumber: 1,
+      status: ShiftStatus.OPEN,
+      lastOrderFolio: 0,
+      openedAt: new Date().toISOString(),
+      version: 1,
+    },
+    lastClosedShift: null,
+    nextShiftNumber: 2,
+  };
+  return store.shift;
+}
+
+function handleSandboxShiftRoute(
+  url: string,
+  method: string,
+  store: SandboxStore,
+  body: string | null,
+): Response | null {
+  const shiftState = ensureSandboxShiftState(store);
+  if (method === 'GET' && url.includes('/shifts/current')) {
+    return jsonResponse(
+      {
+        isOpen: shiftState.currentShift !== null,
+        canAcceptOrders: shiftState.currentShift !== null,
+        currentShift: shiftState.currentShift,
+        lastClosedShift: shiftState.lastClosedShift,
+        nextShiftNumber: shiftState.nextShiftNumber,
+      },
+      200,
+    );
+  }
+  if (method === 'POST' && url.includes('/shifts/open')) {
+    if (shiftState.currentShift !== null) {
+      return jsonResponse(
+        { error: { code: 'INVALID_STATE_TRANSITION', message: 'A shift is already open.' } },
+        409,
+      );
+    }
+    const parsed = parseJsonRecord(body);
+    const num = shiftState.nextShiftNumber;
+    const opened: Shift = {
+      id: `shift-sim-${num}`,
+      shiftId: `shift-sim-${num}`,
+      shiftNumber: num,
+      status: ShiftStatus.OPEN,
+      lastOrderFolio: 0,
+      openedAt: new Date().toISOString(),
+      notes: typeof parsed?.notes === 'string' ? parsed.notes : null,
+      version: 1,
+    };
+    shiftState.currentShift = opened;
+    shiftState.nextShiftNumber = num + 1;
+    return jsonResponse(opened, 201);
+  }
+  if (method === 'POST' && url.includes('/shifts/current/close')) {
+    if (shiftState.currentShift === null) {
+      return jsonResponse(
+        { error: { code: 'INVALID_STATE_TRANSITION', message: 'No active shift is currently open.' } },
+        409,
+      );
+    }
+    const parsed = parseJsonRecord(body);
+    const closed: Shift = {
+      ...shiftState.currentShift,
+      status: ShiftStatus.CLOSED,
+      closedAt: new Date().toISOString(),
+      notes: typeof parsed?.notes === 'string' ? parsed.notes : shiftState.currentShift.notes,
+      version: (shiftState.currentShift.version ?? 1) + 1,
+    };
+    shiftState.lastClosedShift = closed;
+    shiftState.currentShift = null;
+    return jsonResponse(closed, 200);
+  }
+  return null;
+}
+
+function shiftClosedConflictResponse(): Response {
+  return jsonResponse(
+    {
+      error: {
+        code: 'INVALID_STATE_TRANSITION',
+        message: 'The current kitchen shift is closed.',
+      },
+    },
+    409,
+  );
+}
+
+function createNewSandboxOrder(store: SandboxStore, body: string | null): Order | null {
+  const shiftState = ensureSandboxShiftState(store);
+  if (!shiftState.currentShift) {
+    return null;
+  }
   const parsed = parseJsonRecord(body);
-  const nextNumber = Object.keys(store.orders).length + 101;
-  const newId = `ord-sim-${nextNumber}`;
+  const nextFolio = shiftState.currentShift.lastOrderFolio + 1;
+  shiftState.currentShift = {
+    ...shiftState.currentShift,
+    lastOrderFolio: nextFolio,
+  };
+  const seq = Object.keys(store.orders).length + 101;
+  const newId = `ord-sim-${seq}`;
   const isTakeaway = Boolean(parsed?.isTakeaway);
   const tableNumber = typeof parsed?.tableNumber === 'number' ? parsed.tableNumber : 1;
   const newOrder: Order = {
     id: newId,
     orderId: newId,
     publicId: newId,
-    orderNumber: nextNumber,
+    orderNumber: nextFolio,
+    shiftFolio: nextFolio,
     tableNumber: isTakeaway ? null : tableNumber,
     isTakeaway,
     status: OrderStatus.CREATED,
@@ -734,6 +916,48 @@ function applyOrderMutation(
   return applyReadyOrRejectMutation(url, currentOrder, body);
 }
 
+function handleCollectionRoute(
+  url: string,
+  method: string,
+  init: RequestInit | undefined,
+  store: SandboxStore,
+): Response | null {
+  if (url.includes('/shifts/')) {
+    const shiftResponse = handleSandboxShiftRoute(url, method, store, getRequestBodyString(init));
+    if (shiftResponse) return shiftResponse;
+  }
+
+  if (method === 'GET' && url.includes('/kds/queue')) {
+    return jsonResponse(buildKdsQueueOrders(Object.values(store.orders), url), 200);
+  }
+
+  if (method === 'GET' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?(?:\?.*)?$/.test(url)) {
+    return jsonResponse(Object.values(store.orders), 200);
+  }
+
+  if (method === 'POST' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?$/.test(url)) {
+    const created = createNewSandboxOrder(store, getRequestBodyString(init));
+    return created ? jsonResponse(created, 201) : shiftClosedConflictResponse();
+  }
+
+  return null;
+}
+
+function isBlockedClosedShiftConfirm(
+  url: string,
+  method: string,
+  currentOrder: Order,
+  store: SandboxStore,
+): boolean {
+  return (
+    method === 'POST' &&
+    url.includes('/confirm') &&
+    currentOrder.status === OrderStatus.CREATED &&
+    !currentOrder.confirmedAt &&
+    ensureSandboxShiftState(store).currentShift === null
+  );
+}
+
 /**
  * In-memory fetch handler backing both OrderTicketWidget and KdsApp in sandbox simulation mode.
  */
@@ -746,18 +970,8 @@ export function executeMockFetch(
   const url = extractRawUrl(input).replace(/^https?:\/\/[^/]+/, '');
   const method = (init?.method ?? 'GET').toUpperCase();
 
-  if (method === 'GET' && url.includes('/kds/queue')) {
-    return jsonResponse(buildKdsQueueOrders(Object.values(store.orders), url), 200);
-  }
-
-  if (method === 'GET' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?(?:\?.*)?$/.test(url)) {
-    return jsonResponse(Object.values(store.orders), 200);
-  }
-
-  if (method === 'POST' && /^\/(?:api\/v1\/(?:orders|kitchen)\/)?orders\/?$/.test(url)) {
-    const created = createNewSandboxOrder(store, getRequestBodyString(init));
-    return jsonResponse(created, 201);
-  }
+  const collectionResponse = handleCollectionRoute(url, method, init, store);
+  if (collectionResponse) return collectionResponse;
 
   const targetOrderId = extractOrderIdFromUrl(url, selectedOrderId);
   const currentOrder = store.orders[targetOrderId];
@@ -768,6 +982,10 @@ export function executeMockFetch(
 
   if (method === 'GET') {
     return jsonResponse(currentOrder, 200);
+  }
+
+  if (isBlockedClosedShiftConfirm(url, method, currentOrder, store)) {
+    return shiftClosedConflictResponse();
   }
 
   const updated = applyOrderMutation(url, method, currentOrder, getRequestBodyString(init));

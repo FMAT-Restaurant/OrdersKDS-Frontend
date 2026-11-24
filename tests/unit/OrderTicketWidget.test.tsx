@@ -600,7 +600,9 @@ describe('OrderTicketWidget', () => {
     const confirmButton = await screen.findByRole('button', { name: 'Confirmar' });
     fireEvent.click(confirmButton);
     expect(
-      await screen.findByText('La comanda no puede cambiar al estado solicitado en este momento.'),
+      await screen.findByText(
+        'No hay un turno de trabajo abierto en cocina. No se pudo mandar la orden.',
+      ),
     ).toBeInTheDocument();
 
     const cancelButton = screen.getByRole('button', { name: 'Cancelar' });
@@ -1365,5 +1367,32 @@ describe('OrderTicketWidget', () => {
     expect(await screen.findByRole('heading', { name: 'Nueva Orden' })).toBeInTheDocument();
     expect(screen.getByTestId('draft-table-input')).not.toBeDisabled();
     expect(screen.getByTestId('draft-takeaway-checkbox')).not.toBeDisabled();
+  });
+
+  it('displays asynchronous redo rejection banner when a delivered order has redoRejection metadata', async () => {
+    const deliveredWithRedoRejection: Order = {
+      ...order,
+      status: OrderStatus.DELIVERED,
+      items: order.items.map((item) => ({ ...item, status: 'DELIVERED' as const })),
+      rejectionDetails: {
+        redoRejection: {
+          source: 'inventory_redo',
+          itemId: order.items[0].id,
+          itemName: 'Ensalada César',
+          reason: 'Stock insuficiente para rehechura',
+          missingIngredients: ['lechuga_romana'],
+        },
+      },
+    };
+    server.use(
+      http.get('*/orders/:orderId', () => HttpResponse.json(deliveredWithRedoRejection)),
+    );
+
+    renderTicket();
+
+    const banner = await screen.findByTestId('redo-rejection-banner');
+    expect(banner).toHaveTextContent('No se pudo rehacer Ensalada César: inventario insuficiente.');
+    expect(banner).toHaveTextContent('Stock insuficiente para rehechura');
+    expect(banner).toHaveTextContent('lechuga romana');
   });
 });

@@ -12,6 +12,7 @@ import {
   formatSessionDisplay,
   getTableOrTakeawayLabel,
   resolveDishName,
+  type ParsedRedoRejection,
   type ParsedRejectionDetails,
   type TableOrderGroup,
 } from './orderTicketUtils.ts';
@@ -114,6 +115,44 @@ export function RejectionBreakdown({ details, orderItems }: Readonly<RejectionBr
             })}
           </ul>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Props for RedoRejectionBanner. */
+export interface RedoRejectionBannerProps {
+  readonly rejection: ParsedRedoRejection;
+  readonly orderItems: readonly OrderItem[];
+}
+
+/** Displays asynchronous inventory rejection notice when a dish redo could not be fulfilled. */
+export function RedoRejectionBanner({
+  rejection,
+  orderItems,
+}: Readonly<RedoRejectionBannerProps>) {
+  const dishName = rejection.itemName ?? resolveDishName(rejection.itemId, orderItems);
+  return (
+    <div
+      className="order-ticket__alert order-ticket__redo-rejection"
+      role="alert"
+      data-testid="redo-rejection-banner"
+    >
+      <p>
+        No se pudo rehacer <strong>{dishName}</strong>: inventario insuficiente.
+      </p>
+      {rejection.reason && (
+        <p className="order-ticket__rejection-reason">
+          <strong>Motivo:</strong> {rejection.reason}
+        </p>
+      )}
+      {rejection.missingIngredients.length > 0 && (
+        <p className="order-ticket__missing-ingredients">
+          <strong>Ingredientes faltantes:</strong>{' '}
+          {rejection.missingIngredients
+            .map((ingredient) => formatIngredientName(ingredient))
+            .join(', ')}
+        </p>
       )}
     </div>
   );

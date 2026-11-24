@@ -58,8 +58,9 @@ describe('Federated Auth Contract and Orchestration', () => {
     it('resolves primary UserRole by priority (ADMIN > CHEF > KITCHEN > WAITER)', () => {
       expect(resolveUserRole(null)).toBeUndefined();
 
-      // ADMIN userType overrides everything
+      // ADMIN / ADMINISTRADOR userType overrides everything
       expect(resolveUserRole({ userType: 'ADMIN', permissions: [] })).toBe(UserRole.ADMIN);
+      expect(resolveUserRole({ userType: 'ADMINISTRADOR', permissions: [] })).toBe(UserRole.ADMIN);
       expect(resolveUserRole({ permissions: ['*'] })).toBe(UserRole.ADMIN);
 
       // Multiple roles: ADMIN > CHEF
@@ -126,6 +127,10 @@ describe('Federated Auth Contract and Orchestration', () => {
       expect(hasPermission({ userType: 'ADMIN', permissions: [] }, 'kitchen:queues:view')).toBe(
         true,
       );
+      expect(
+        hasPermission({ userType: 'ADMINISTRADOR', permissions: [] }, 'orders:orders:void_admin'),
+      ).toBe(true);
+      expect(isAdminUser({ userType: 'ADMINISTRADOR', permissions: [] })).toBe(true);
       expect(hasPermission({ roles: ['ADMINISTRADOR'], permissions: [] }, 'orders:orders:create')).toBe(
         true,
       );
@@ -273,6 +278,26 @@ describe('Federated Auth Contract and Orchestration', () => {
     it('applies theme attribute to document element when provided in props', () => {
       render(<App theme="dark" />);
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    });
+
+    it('updates document theme on valid window theme-change events and removes listener on unmount', () => {
+      const { unmount } = render(<App theme="light" />);
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: 'dark' }));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: { theme: 'light' } }));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: 'invalid-theme' }));
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: { theme: 123 } }));
+      window.dispatchEvent(new Event('theme-change'));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+      unmount();
+      window.dispatchEvent(new CustomEvent('theme-change', { detail: 'dark' }));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     });
 
     it('reads session from localStorage if currentUser prop is not passed', () => {

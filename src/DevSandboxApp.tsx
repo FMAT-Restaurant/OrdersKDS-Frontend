@@ -93,7 +93,7 @@ function DevNavbar({
           onClick={() => onViewChange('kds')}
           className={`px-3 py-1.5 rounded-l-md font-medium border border-slate-700 transition-colors ${
             view === 'kds'
-              ? 'bg-amber-600 text-white border-amber-600'
+              ? 'bg-amber-700 text-white border-amber-700'
               : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
         >
@@ -191,6 +191,7 @@ function TicketSimulationBar({
   onCustomOrderIdChange,
   onApplyCustomOrder,
   onStartBlankDraft,
+  onStartBackendBlankDraft,
 }: Readonly<{
   isBackendMode: boolean;
   selectedOrderId: string;
@@ -200,6 +201,7 @@ function TicketSimulationBar({
   onCustomOrderIdChange: (val: string) => void;
   onApplyCustomOrder: () => void;
   onStartBlankDraft: () => void;
+  onStartBackendBlankDraft: () => void;
 }>) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -225,6 +227,18 @@ function TicketSimulationBar({
       ))}
 
       <span className="text-slate-500 ml-2">| Backend Real:</span>
+      <button
+        type="button"
+        data-testid="sandbox-backend-new-order-btn"
+        onClick={onStartBackendBlankDraft}
+        className={`px-2 py-1 rounded text-xs border ${
+          isBackendMode && !selectedOrderId
+            ? 'bg-teal-600 text-white border-teal-500'
+            : 'bg-slate-800 text-slate-300 border-slate-700'
+        }`}
+      >
+        🆕 Nueva Orden (Real)
+      </button>
       {SEED_ORDER_ITEMS.map((item) => (
         <SimulationButton
           key={item.id}
@@ -255,6 +269,94 @@ function TicketSimulationBar({
   );
 }
 
+interface SandboxMenuDish {
+  readonly label: string;
+  readonly dishId: string;
+  readonly sourceId?: string;
+  readonly offerId?: string;
+  readonly name: string;
+  readonly unitPrice: number;
+}
+
+const BACKEND_QUICK_MENU_DISHES: readonly SandboxMenuDish[] = [
+  {
+    label: '+ Menú Real: Hamburguesa clásica',
+    dishId: 'PLATE-BURGER-01',
+    sourceId: 'PLATE-BURGER-01',
+    offerId: 'OFFER-BURGER-01',
+    name: 'Hamburguesa clásica',
+    unitPrice: 165,
+  },
+  {
+    label: '+ Menú Real: Quesadilla Oaxaca',
+    dishId: 'PLATE-QUES-01',
+    sourceId: 'PLATE-QUES-01',
+    offerId: 'OFFER-QUES-01',
+    name: 'Quesadilla de Oaxaca con jamón',
+    unitPrice: 115,
+  },
+  {
+    label: '+ Menú Real: Ensalada César',
+    dishId: 'PLATE-CESAR-01',
+    sourceId: 'PLATE-CESAR-01',
+    offerId: 'OFFER-CESAR-01',
+    name: 'Ensalada César con pollo',
+    unitPrice: 135,
+  },
+  {
+    label: '+ Menú Real: Platillo Simulador',
+    dishId: 'PLATE-SIM-0001',
+    sourceId: 'PLATE-SIM-0001',
+    offerId: 'OFFER-SIM-0001',
+    name: 'Platillo del Simulador',
+    unitPrice: 120,
+  },
+];
+
+function dispatchMenuAddDish(dish: Omit<SandboxMenuDish, 'label'>): void {
+  window.dispatchEvent(
+    new CustomEvent('fmat:orden:add-item', {
+      detail: { ...dish, quantity: 1 },
+    }),
+  );
+}
+
+function BackendQuickMenuBar({ onGoToKds }: Readonly<{ onGoToKds: () => void }>) {
+  return (
+    <div
+      data-testid="backend-quick-menu-bar"
+      className="w-full max-w-3xl mb-3 bg-white p-2.5 rounded-lg border border-teal-200 shadow-xs text-xs flex flex-wrap items-center gap-1.5"
+    >
+      <span className="font-semibold text-teal-800 mr-1">Platillos reales (TEST_DATA):</span>
+      {BACKEND_QUICK_MENU_DISHES.map((dish) => (
+        <button
+          key={dish.dishId}
+          type="button"
+          onClick={() =>
+            dispatchMenuAddDish({
+              dishId: dish.dishId,
+              sourceId: dish.sourceId,
+              offerId: dish.offerId,
+              name: dish.name,
+              unitPrice: dish.unitPrice,
+            })
+          }
+          className="px-2 py-1 rounded bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300"
+        >
+          {dish.label}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={onGoToKds}
+        className="ml-auto px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+      >
+        Ver en KDS Cocina →
+      </button>
+    </div>
+  );
+}
+
 function TicketQuickLifecycleControls({
   selectedOrderId,
   onSimulateEvent,
@@ -264,14 +366,6 @@ function TicketQuickLifecycleControls({
   onSimulateEvent: (action: QuickSimAction) => void;
   onGoToKds: () => void;
 }>) {
-  const dispatchMenuAddDish = (dish: { dishId: string; name: string; unitPrice: number }) => {
-    window.dispatchEvent(
-      new CustomEvent('fmat:orden:add-item', {
-        detail: { ...dish, quantity: 1 },
-      }),
-    );
-  };
-
   return (
     <div className="w-full max-w-3xl mb-3 bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs text-xs flex flex-wrap items-center gap-1.5">
       <span className="font-semibold text-slate-700 mr-1">Eventos rápidos (Menú / Cocina):</span>
@@ -328,7 +422,7 @@ function TicketQuickLifecycleControls({
       <button
         type="button"
         onClick={onGoToKds}
-        className="ml-auto px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+        className="ml-auto px-2.5 py-1 rounded bg-amber-700 hover:bg-amber-800 text-white font-semibold"
       >
         Ver en KDS Cocina →
       </button>
@@ -384,6 +478,8 @@ function TicketViewContent({
           onGoToKds={onGoToKds}
         />
       )}
+
+      {isBackendMode && <BackendQuickMenuBar onGoToKds={onGoToKds} />}
 
       <div className="orders-kds-root w-full max-w-3xl">
         <OrderTicketWidget
@@ -499,38 +595,45 @@ export function DevSandboxApp({
     [sandbox],
   );
 
-  const handleStartBlankDraft = useCallback(() => {
-    setIsBackendMode(false);
-    setIsMockKds(true);
-    setSelectedOrderId('');
+  const applyTicketSelection = useCallback((useBackend: boolean, orderId: string) => {
+    setIsBackendMode(useBackend);
+    setIsMockKds(!useBackend);
+    setSelectedOrderId(orderId);
     setWidgetInstanceKey((prev) => prev + 1);
   }, []);
 
-  const handleSelectSeedOrder = useCallback((orderUuid: string) => {
-    setIsBackendMode(true);
-    setIsMockKds(false);
-    setSelectedOrderId(orderUuid);
-    setWidgetInstanceKey((prev) => prev + 1);
-    void queryClient.invalidateQueries({ queryKey: ['order', orderUuid] });
+  const handleStartBlankDraft = useCallback(() => {
+    applyTicketSelection(false, '');
+  }, [applyTicketSelection]);
+
+  const handleStartBackendBlankDraft = useCallback(() => {
+    applyTicketSelection(true, '');
     void queryClient.invalidateQueries({ queryKey: ['kds'] });
-  }, []);
+  }, [applyTicketSelection]);
+
+  const handleSelectSeedOrder = useCallback(
+    (orderUuid: string) => {
+      applyTicketSelection(true, orderUuid);
+      void queryClient.invalidateQueries({ queryKey: ['order', orderUuid] });
+      void queryClient.invalidateQueries({ queryKey: ['kds'] });
+    },
+    [applyTicketSelection],
+  );
 
   const handleApplyCustomOrder = useCallback(() => {
     const trimmed = customOrderId.trim();
     if (trimmed) {
-      setIsBackendMode(true);
-      setIsMockKds(false);
-      setSelectedOrderId(trimmed);
-      setWidgetInstanceKey((prev) => prev + 1);
+      applyTicketSelection(true, trimmed);
       void queryClient.invalidateQueries({ queryKey: ['order', trimmed] });
     }
-  }, [customOrderId]);
+  }, [applyTicketSelection, customOrderId]);
 
   const handleWidgetCreateNewOrder = useCallback(() => {
-    setIsBackendMode(false);
-    setIsMockKds(true);
     setSelectedOrderId('');
-  }, []);
+    if (!isBackendMode) {
+      setIsMockKds(true);
+    }
+  }, [isBackendMode]);
 
   const handleWidgetSelectOrder = useCallback((orderId: string) => {
     setSelectedOrderId(orderId);
@@ -600,6 +703,7 @@ export function DevSandboxApp({
             onCustomOrderIdChange={setCustomOrderId}
             onApplyCustomOrder={handleApplyCustomOrder}
             onStartBlankDraft={handleStartBlankDraft}
+            onStartBackendBlankDraft={handleStartBackendBlankDraft}
           />
         )}
       </header>
