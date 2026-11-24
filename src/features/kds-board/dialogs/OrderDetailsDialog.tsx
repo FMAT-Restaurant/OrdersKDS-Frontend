@@ -52,13 +52,13 @@ function getItemRowStyle(
   isFinished: boolean,
 ): string {
   if (isRedoPending) {
-    return 'bg-amber-50/80 border-amber-400';
+    return 'bg-amber-500/15 border-amber-400';
   }
   if (isPendingUndo) {
-    return 'bg-amber-50/70 border-amber-300';
+    return 'bg-amber-500/15 border-amber-300';
   }
   if (isFinished) {
-    return 'bg-emerald-50/40 border-emerald-200';
+    return 'bg-emerald-500/10 border-emerald-500/40';
   }
   return 'bg-surface border-border shadow-xs';
 }
@@ -152,7 +152,7 @@ function OrderDetailsItemRow({
               className={`min-h-[48px] px-3.5 py-2 rounded-control text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
                 isFinished
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 cursor-default opacity-85'
-                  : 'bg-surface hover:bg-emerald-50 active:bg-emerald-100 text-body hover:text-emerald-700 border border-border hover:border-emerald-400 cursor-pointer shadow-sm'
+                  : 'bg-surface hover:bg-emerald-500/15 active:bg-emerald-500/25 text-body hover:text-emerald-600 border border-border hover:border-emerald-400 cursor-pointer shadow-sm'
               }`}
             >
               {isFinished ? (
@@ -175,7 +175,7 @@ function OrderDetailsItemRow({
                 </>
               ) : (
                 <>
-                  <span className="w-4 h-4 rounded-full border-2 border-gray-400 inline-block shrink-0" />
+                  <span className="w-4 h-4 rounded-full border-2 border-muted inline-block shrink-0" />
                   <span>Marcar listo</span>
                 </>
               )}
@@ -196,7 +196,7 @@ function OrderDetailsItemRow({
                 }
               }}
               style={{ minHeight: 48 }}
-              className="min-h-[48px] px-3.5 py-2 rounded-control text-xs sm:text-sm font-bold bg-surface hover:bg-red-50 active:bg-red-100 text-red-700 hover:text-red-800 border border-red-300 hover:border-red-400 cursor-pointer shadow-sm transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="min-h-[48px] px-3.5 py-2 rounded-control text-xs sm:text-sm font-bold bg-red-700 hover:bg-red-800 active:bg-red-900 text-white border border-red-800 hover:border-red-900 cursor-pointer shadow-sm transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               Sin insumos
             </button>
@@ -267,7 +267,7 @@ function OrderDetailsItemRow({
       {isRedoPending && (
         <output
           data-testid={`order-details-redo-pending-${itemId}`}
-          className="pl-9 text-xs font-black uppercase tracking-wide text-amber-800 block"
+          className="ml-9 inline-flex w-fit px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-xs font-black uppercase tracking-wide text-amber-950"
         >
           Rehacer pendiente
         </output>
@@ -860,7 +860,7 @@ export function OrderDetailsDialog({
             data-testid="order-details-bottom-close-btn"
             onClick={onClose}
             style={{ minHeight: 48 }}
-            className="min-h-[48px] px-6 py-2.5 rounded-control font-bold text-sm bg-surface text-ink hover:bg-gray-100 active:bg-gray-200 border border-border shadow-xs transition-colors flex items-center justify-center cursor-pointer select-none shrink-0"
+            className="min-h-[48px] px-6 py-2.5 rounded-control font-bold text-sm bg-surface text-ink hover:bg-canvas active:bg-border border border-border shadow-xs transition-colors flex items-center justify-center cursor-pointer select-none shrink-0"
           >
             Cerrar
           </button>

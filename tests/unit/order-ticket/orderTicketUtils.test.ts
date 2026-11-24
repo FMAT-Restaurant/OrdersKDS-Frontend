@@ -21,6 +21,7 @@ import {
   hasInvalidDraftItemQuantity,
   isOrderActiveInShift,
   mapDraftItemToApiInput,
+  parseRedoRejection,
   parseRejectionDetails,
   parseTableNumber,
   resolveDishName,
@@ -358,6 +359,52 @@ describe('orderTicketUtils', () => {
     expect(updated?.status).toBe(OrderStatus.REJECTED);
     expect(updated?.awaitingStockConfirmation).toBe(false);
     expect(updated?.rejectionDetails).toEqual({ reason: 'Sin stock' });
+
+    const sameVersionEnriched = applyRealtimeStatusChange(updated, {
+      type: 'order.status_changed',
+      orderId: 'ord-1',
+      status: OrderStatus.REJECTED,
+      version: 3,
+      timestamp: new Date().toISOString(),
+      rejectionDetails: { reason: 'Sin stock', missingIngredients: ['Pan', 'Carne'] },
+    });
+    expect(sameVersionEnriched?.rejectionDetails).toEqual({
+      reason: 'Sin stock',
+      missingIngredients: ['Pan', 'Carne'],
+    });
+
+    expect(
+      applyRealtimeStatusChange(updated, {
+        type: 'order.status_changed',
+        orderId: 'ord-1',
+        status: OrderStatus.RESERVED,
+        version: 2,
+        timestamp: new Date().toISOString(),
+      }),
+    ).toBe(updated);
+  });
+
+  it('parses asynchronous redo rejection details safely', () => {
+    expect(parseRedoRejection(null)).toBeNull();
+    expect(parseRedoRejection({})).toBeNull();
+    expect(parseRedoRejection({ redoRejection: {} })).toBeNull();
+    expect(
+      parseRedoRejection({
+        redoRejection: {
+          itemId: 'item-1',
+          itemName: 'Hamburguesa',
+          redoId: 'redo-1',
+          reason: '  Sin pan brioche  ',
+          missingIngredients: ['pan_brioche', 42],
+        },
+      }),
+    ).toEqual({
+      itemId: 'item-1',
+      itemName: 'Hamburguesa',
+      redoId: 'redo-1',
+      reason: 'Sin pan brioche',
+      missingIngredients: ['pan_brioche', '42'],
+    });
   });
 
   it('filters active shift orders and groups them by table number ascending with takeaway last', () => {

@@ -4,7 +4,7 @@ import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
 import { pointerAction } from '../pointerAction.ts';
-import { getOrderNumberDisplay } from '../orderNumberDisplay.ts';
+import { formatOrderTableLabel, getOrderKey, getOrderNumberDisplay } from '../orderNumberDisplay.ts';
 import { VirtualKeyboard } from './VirtualKeyboard.tsx';
 
 const InPreparationOrderSchema = OrderSchema.extend({
@@ -37,22 +37,8 @@ export interface ChefVoidDialogProps {
   readonly onCancel: () => void;
 }
 
-function getChefTableDisplay(order: Order): string | null {
-  if (order.tableNumber != null) {
-    return `Mesa ${order.tableNumber}`;
-  }
-  if (order.isTakeaway) {
-    return 'Para llevar';
-  }
-  return null;
-}
-
 function isAuthorizedChefRole(userRole?: UserRole): boolean {
   return !userRole || userRole === UserRole.CHEF || userRole === UserRole.ADMIN;
-}
-
-function resolveChefDisplayId(order: Order): string {
-  return order.id ?? order.orderId ?? order.publicId ?? 'unknown';
 }
 
 function toggleChefReason(prev: string[], reason: string): string[] {
@@ -158,9 +144,9 @@ export function ChefVoidDialog({
   });
   const isConfirmEnabled = isOperable && justificationValidation.success && !isSubmitting;
 
-  const displayId = resolveChefDisplayId(order);
+  const displayId = getOrderKey(order) || 'unknown';
   const orderNumberDisplay = getOrderNumberDisplay(order.orderNumber, displayId);
-  const tableDisplay = getChefTableDisplay(order);
+  const tableDisplay = formatOrderTableLabel(order);
 
   const toggleReason = (reason: string) => {
     setSelectedReasons((prev) => toggleChefReason(prev, reason));
@@ -176,11 +162,14 @@ export function ChefVoidDialog({
       aria-modal="true"
       aria-labelledby="chef-void-dialog-title"
       data-testid="chef-void-dialog"
-      className={`orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto ${
-        showKeyboard ? 'items-start pt-3 sm:pt-6 pb-[310px]' : 'items-center'
-      }`}
+      className="orders-kds-root fixed inset-0 z-[60] m-0 p-0 w-full h-full max-w-none max-h-none flex flex-col bg-black/60 backdrop-blur-sm border-none select-none overflow-hidden"
     >
-      <div className="w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
+      <div
+        className={`flex-1 min-h-0 w-full flex justify-center overflow-y-auto p-3 sm:p-4 ${
+          showKeyboard ? 'items-start' : 'items-center'
+        }`}
+      >
+        <div className="w-full max-w-4xl max-h-full overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
         <header className="flex items-center justify-between border-b border-border pb-3">
           <h2 id="chef-void-dialog-title" className="text-2xl font-black text-ink">
             Anulación por Error de Cocina {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
@@ -251,7 +240,7 @@ export function ChefVoidDialog({
             disabled={isSubmitting}
             {...pointerAction(onCancel)}
             style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-gray-100 text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-canvas text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
           >
             Cancelar
           </button>
@@ -266,6 +255,7 @@ export function ChefVoidDialog({
             Confirmar
           </button>
         </footer>
+        </div>
       </div>
 
       {showKeyboard && (

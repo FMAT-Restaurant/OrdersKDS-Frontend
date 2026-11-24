@@ -40,3 +40,14 @@
   outline: 3px solid #c2410c;
   outline-offset: 2px;
 }
+
+[data-theme="dark"] .ready-orders-alert {
+  border-color: #fb923c;
+  background: #2b1810;
+  color: #ffedd5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .ready-orders-alert button:focus-visible {
+  outline-color: #fb923c;
+}

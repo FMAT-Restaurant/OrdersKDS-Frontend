@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
 export async function setTicketContainerWidth(page: Page, widthPx: number): Promise<void> {
-  const root = page.locator('.orders-kds-root').first();
+  const root = page.locator('.orders-kds-root:has(> section.order-ticket)').first();
   await root.waitFor({ state: 'visible' });
   await root.evaluate((el, width) => {
     const htmlEl = el as HTMLElement;

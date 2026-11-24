@@ -253,6 +253,9 @@ function toBase64Url(obj: unknown): string {
 }
 
 export function generateLocalDevToken(role = 'admin'): string {
+  if (!import.meta.env.DEV) {
+    return '';
+  }
   const header = toBase64Url({ alg: 'HS256', typ: 'JWT' });
   const exp = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
   const claims = toBase64Url({
@@ -313,7 +316,7 @@ export interface ResolveApiClientOptions {
 }
 
 const localApiBaseUrl = resolveDefaultApiBaseUrl();
-const localDevToken = import.meta.env.VITE_API_TOKEN || generateLocalDevToken('admin');
+const localDevToken = import.meta.env.DEV ? import.meta.env.VITE_API_TOKEN || null : null;
 
 export const apiClient = createApiClient({
   baseUrl: localApiBaseUrl,

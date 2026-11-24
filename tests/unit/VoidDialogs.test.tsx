@@ -744,6 +744,32 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       });
       expect(onChange).not.toHaveBeenCalled();
     });
+
+    it('renders floating VirtualKeyboard opaque and docked without overlapping AdminVoidDialog switch', () => {
+      render(
+        <AdminVoidDialog
+          order={inPreparationOrder}
+          isOpen={true}
+          userRole={UserRole.ADMIN}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('admin-void-toggle-custom-reason'));
+      fireEvent.click(screen.getByTestId('admin-void-toggle-keyboard'));
+
+      const keyboard = screen.getByTestId('virtual-keyboard');
+      expect(keyboard.className).toContain('bg-surface');
+      expect(keyboard.className).not.toContain('bg-surface/95');
+      expect(keyboard.className).toContain('shrink-0');
+      expect(keyboard.className).not.toContain('fixed');
+
+      const chargeSwitch = screen.getByTestId('admin-void-charge-toggle');
+      fireEvent.click(chargeSwitch);
+      expect(chargeSwitch.className).toContain('bg-muted');
+      expect(chargeSwitch.className).not.toContain('bg-muted/40');
+    });
   });
 });
 

@@ -68,11 +68,12 @@ export function makeItem(overrides: Partial<MockOrderItem> = {}): MockOrderItem 
 
 export function makeOrder(overrides: Partial<MockOrder> = {}): MockOrder {
   const id = overrides.id ?? 'ord-e2e-1';
+  const { tableNumber = 4 } = overrides;
   return {
     id,
     publicId: overrides.publicId ?? id,
     orderNumber: overrides.orderNumber ?? 101,
-    tableNumber: overrides.tableNumber === undefined ? 4 : overrides.tableNumber,
+    tableNumber,
     isTakeaway: overrides.isTakeaway ?? false,
     status: overrides.status ?? 'CREATED',
     version: overrides.version ?? 1,
@@ -162,6 +163,141 @@ function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
   });
 }
 
+function parseRouteBody(route: Route): unknown {
+  const req = route.request();
+  try {
+    return req.postDataJSON();
+  } catch {
+    return req.postData();
+  }
+}
+
+function buildCreatedOrder(createdSeq: number, parsedBody: unknown): MockOrder {
+  const body = (parsedBody ?? {}) as {
+    tableNumber?: number | null;
+    isTakeaway?: boolean;
+    diningSessionId?: string;
+  };
+  return makeOrder({
+    id: `ord-created-${createdSeq}`,
+    orderNumber: createdSeq,
+    tableNumber: body.isTakeaway ? null : (body.tableNumber ?? 1),
+    isTakeaway: Boolean(body.isTakeaway),
+    diningSessionId: body.diningSessionId ?? null,
+    status: 'CREATED',
+    items: [],
+  });
+}
+
+function applyItemsPatch(existing: MockOrder, orderId: string, parsedBody: unknown): void {
+  const body = (parsedBody ?? {}) as { items?: Partial<MockOrderItem>[] };
+  existing.items = (body.items ?? []).map((it, idx) =>
+    makeItem({
+      ...it,
+      id: it.id ?? `item-${orderId}-${idx + 1}`,
+      itemId: it.itemId ?? it.id ?? `item-${orderId}-${idx + 1}`,
+      unitPrice: typeof it.unitPrice === 'number' ? it.unitPrice : 100,
+      status: 'PENDING',
+    }),
+  );
+  existing.version += 1;
+}
+
+function applyItemReady(existing: MockOrder, targetItemId: string): void {
+  existing.items = existing.items.map((it) =>
+    it.id === targetItemId || it.itemId === targetItemId ? { ...it, status: 'READY' } : it,
+  );
+  existing.version += 1;
+}
+
+function applyStatusTransition(
+  existing: MockOrder,
+  method: string,
+  subPath: string,
+): boolean {
+  if (subPath === 'confirm' && method === 'POST') {
+    const nowIso = new Date().toISOString();
+    existing.status = 'RESERVED';
+    existing.confirmedAt = nowIso;
+    existing.stockReservedAt = nowIso;
+    existing.stock_reserved_at = nowIso;
+    existing.version += 1;
+    return true;
+  }
+
+  switch (subPath) {
+    case 'cancel':
+      existing.status = 'CANCELLED';
+      existing.version += 1;
+      return true;
+    case 'start-preparation':
+      existing.status = 'IN_PREPARATION';
+      existing.inPreparationAt = new Date().toISOString();
+      existing.version += 1;
+      return true;
+    case 'ready':
+      existing.status = 'DELIVERED';
+      existing.items = existing.items.map((it) => ({ ...it, status: 'DELIVERED' }));
+      existing.version += 1;
+      return true;
+    case 'void':
+    case 'void-charge':
+    case 'void-kitchen-error':
+      existing.status = 'VOIDED';
+      existing.version += 1;
+      return true;
+    default:
+      return false;
+  }
+}
+
+function mutateOrderAction(existing: MockOrder, method: string, subPath: string): void {
+  if (applyStatusTransition(existing, method, subPath)) {
+    return;
+  }
+  if (subPath === 'kitchen-reject' || /^items\/[^/]+\/kitchen-reject$/.test(subPath)) {
+    existing.status = 'REJECTED';
+    existing.version += 1;
+    return;
+  }
+  const itemReadyMatch = /^items\/([^/]+)\/ready$/.exec(subPath);
+  if (itemReadyMatch) {
+    applyItemReady(existing, decodeURIComponent(itemReadyMatch[1]));
+  }
+}
+
+function handleSingleOrderRoute(
+  route: Route,
+  orders: Map<string, MockOrder>,
+  method: string,
+  normalizedPath: string,
+  parsedBody: unknown,
+): Promise<void> {
+  const match = /^\/orders\/([^/]+)(?:\/(.+))?$/.exec(normalizedPath);
+  if (!match) {
+    return fulfillJson(route, { error: { code: 'NOT_FOUND', message: 'Route not mocked' } }, 404);
+  }
+
+  const orderId = decodeURIComponent(match[1]);
+  const subPath = match[2] ?? '';
+  const existing = orders.get(orderId);
+  if (!existing) {
+    return fulfillJson(route, { error: { code: 'ORDER_NOT_FOUND', message: 'Not found' } }, 404);
+  }
+
+  if (method === 'GET' && !subPath) {
+    return fulfillJson(route, existing);
+  }
+  if (method === 'PATCH' && subPath === 'items') {
+    applyItemsPatch(existing, orderId, parsedBody);
+    return fulfillJson(route, existing);
+  }
+  if (method === 'PATCH' || method === 'POST') {
+    mutateOrderAction(existing, method, subPath);
+  }
+  return fulfillJson(route, existing);
+}
+
 /**
  * Installs deterministic REST + WebSocket mocks matching `orders-frontend` Zod schemas.
  * Stores mutated orders in memory across GET/POST/PATCH requests so tests stay stateful without flakiness.
@@ -189,137 +325,27 @@ export async function mockOrdersAndKdsRoutes(
   await page.route('**/orders**', async (route) => {
     const req = route.request();
     const method = req.method();
-    const url = new URL(req.url());
-    const normalizedPath = normalizeApiPath(url.pathname);
+    const normalizedPath = normalizeApiPath(new URL(req.url()).pathname);
 
     if (!normalizedPath.startsWith('/orders')) {
       return route.fallback();
     }
 
-    let parsedBody: unknown;
-    try {
-      parsedBody = req.postDataJSON();
-    } catch {
-      parsedBody = req.postData();
-    }
+    const parsedBody = parseRouteBody(route);
     calls.push({ method, pathname: normalizedPath, body: parsedBody });
 
-    // GET /orders (shift list or filtered by diningSessionId)
     if (method === 'GET' && /^\/orders\/?$/.test(normalizedPath)) {
       return fulfillJson(route, Array.from(orders.values()));
     }
 
-    // POST /orders (create blank order)
     if (method === 'POST' && /^\/orders\/?$/.test(normalizedPath)) {
       createdSeq += 1;
-      const body = (parsedBody ?? {}) as {
-        tableNumber?: number | null;
-        isTakeaway?: boolean;
-        diningSessionId?: string;
-      };
-      const newOrd = makeOrder({
-        id: `ord-created-${createdSeq}`,
-        orderNumber: createdSeq,
-        tableNumber: body.isTakeaway ? null : (body.tableNumber ?? 1),
-        isTakeaway: Boolean(body.isTakeaway),
-        diningSessionId: body.diningSessionId ?? null,
-        status: 'CREATED',
-        items: [],
-      });
+      const newOrd = buildCreatedOrder(createdSeq, parsedBody);
       orders.set(newOrd.id, newOrd);
       return fulfillJson(route, newOrd, 201);
     }
 
-    // Extract orderId from /orders/:id[/action]
-    const match = /^\/orders\/([^/]+)(?:\/(.+))?$/.exec(normalizedPath);
-    if (!match) {
-      return fulfillJson(route, { error: { code: 'NOT_FOUND', message: 'Route not mocked' } }, 404);
-    }
-    const orderId = decodeURIComponent(match[1]);
-    const subPath = match[2] ?? '';
-    const existing = orders.get(orderId);
-
-    if (!existing) {
-      return fulfillJson(route, { error: { code: 'ORDER_NOT_FOUND', message: 'Not found' } }, 404);
-    }
-
-    if (method === 'GET' && !subPath) {
-      return fulfillJson(route, existing);
-    }
-
-    if (method === 'PATCH' && subPath === 'items') {
-      const body = (parsedBody ?? {}) as { items?: Partial<MockOrderItem>[] };
-      existing.items = (body.items ?? []).map((it, idx) =>
-        makeItem({
-          ...it,
-          id: it.id ?? `item-${orderId}-${idx + 1}`,
-          itemId: it.itemId ?? it.id ?? `item-${orderId}-${idx + 1}`,
-          unitPrice: typeof it.unitPrice === 'number' ? it.unitPrice : 100,
-          status: 'PENDING',
-        }),
-      );
-      existing.version += 1;
-      return fulfillJson(route, existing);
-    }
-
-    if (method === 'POST' && subPath === 'confirm') {
-      existing.status = 'RESERVED';
-      existing.confirmedAt = new Date().toISOString();
-      existing.stockReservedAt = existing.confirmedAt;
-      existing.stock_reserved_at = existing.confirmedAt;
-      existing.version += 1;
-      return fulfillJson(route, existing);
-    }
-
-    if ((method === 'PATCH' || method === 'POST') && subPath === 'cancel') {
-      existing.status = 'CANCELLED';
-      existing.version += 1;
-      return fulfillJson(route, existing);
-    }
-
-    if ((method === 'PATCH' || method === 'POST') && subPath === 'start-preparation') {
-      existing.status = 'IN_PREPARATION';
-      existing.inPreparationAt = new Date().toISOString();
-      existing.version += 1;
-      return fulfillJson(route, existing);
-    }
-
-    if ((method === 'PATCH' || method === 'POST') && subPath === 'ready') {
-      existing.status = 'DELIVERED';
-      existing.items = existing.items.map((it) => ({ ...it, status: 'DELIVERED' }));
-      existing.version += 1;
-      return fulfillJson(route, existing);
-    }
-
-    if (
-      (method === 'PATCH' || method === 'POST') &&
-      (subPath === 'void' || subPath === 'void-charge' || subPath === 'void-kitchen-error')
-    ) {
-      existing.status = 'VOIDED';
-      existing.version += 1;
-      return fulfillJson(route, existing);
-    }
-
-    if (
-      (method === 'PATCH' || method === 'POST') &&
-      (subPath === 'kitchen-reject' || /^items\/[^/]+\/kitchen-reject$/.test(subPath))
-    ) {
-      existing.status = 'REJECTED';
-      existing.version += 1;
-      return fulfillJson(route, existing);
-    }
-
-    const itemReadyMatch = /^items\/([^/]+)\/ready$/.exec(subPath);
-    if ((method === 'PATCH' || method === 'POST') && itemReadyMatch) {
-      const targetItemId = decodeURIComponent(itemReadyMatch[1]);
-      existing.items = existing.items.map((it) =>
-        it.id === targetItemId || it.itemId === targetItemId ? { ...it, status: 'READY' } : it,
-      );
-      existing.version += 1;
-      return fulfillJson(route, existing);
-    }
-
-    return fulfillJson(route, existing);
+    return handleSingleOrderRoute(route, orders, method, normalizedPath, parsedBody);
   });
 
   await page.route('**/shifts/current*', async (route) => {

@@ -16,5 +16,8 @@
     "src/setupTests.ts",
     "tests/unit/**/*.test.ts",
     "tests/unit/**/*.test.tsx"
+  ],
+  "exclude": [
+    "e2e"
   ]
 }

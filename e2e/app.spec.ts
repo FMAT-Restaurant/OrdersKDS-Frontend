@@ -1,17 +1,28 @@
 import { test, expect } from '@playwright/test';
+import { seedAuthSession } from './fixtures/authSession.ts';
+import { makeDefaultOpenShiftResponse } from './fixtures/orderFixtures.ts';
 
 test('verify page title', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle(/temp-app/);
 });
 
+test('blocks unauthenticated access in production build without DevSandbox', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('auth-required-screen')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sesión requerida' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'KDS App' })).toHaveCount(0);
+});
+
 test('KDS touch shell @touch', async ({ page }) => {
+  await seedAuthSession(page, { role: 'kitchen' });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'KDS App' })).toBeVisible();
   await expect(page.getByTestId('kds-board-container')).toBeVisible();
 });
 
 test('KDS actions use one touch and 64px targets @touch', async ({ page }) => {
+  await seedAuthSession(page, { role: 'kitchen' });
   const requests: string[] = [];
   await page.route('**/orders/order-touch-1/**', async (route) => {
     requests.push(new URL(route.request().url()).pathname);
@@ -20,21 +31,7 @@ test('KDS actions use one touch and 64px targets @touch', async ({ page }) => {
   await page.route('**/shifts/current*', (route) =>
     route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({
-        isOpen: true,
-        canAcceptOrders: true,
-        currentShift: {
-          id: 'shift-e2e-1',
-          shiftId: 'shift-e2e-1',
-          shiftNumber: 1,
-          status: 'OPEN',
-          lastOrderFolio: 1,
-          openedAt: '2026-11-19T08:00:00Z',
-          version: 1,
-        },
-        lastClosedShift: null,
-        nextShiftNumber: 2,
-      }),
+      body: JSON.stringify(makeDefaultOpenShiftResponse()),
     }),
   );
   await page.route('**/kds/queue*', (route) =>

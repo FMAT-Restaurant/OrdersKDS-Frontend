@@ -47,6 +47,15 @@ export interface ParsedRejectionDetails {
   readonly reservedItems: readonly ReservedItemDetail[];
 }
 
+/** Normalized structure for an asynchronous dish redo rejection returned by Inventory. */
+export interface ParsedRedoRejection {
+  readonly itemId?: string;
+  readonly itemName?: string;
+  readonly redoId?: string;
+  readonly reason?: string;
+  readonly missingIngredients: readonly string[];
+}
+
 /** Outbound item shape serialized for `PATCH /orders/{id}/items`. */
 export interface OrderItemApiInput {
   readonly id?: string;
@@ -187,7 +196,16 @@ export function applyRealtimeStatusChange(
   currentOrder: Order | undefined,
   event: OrderStatusChangedEvent,
 ): Order | undefined {
-  if (!currentOrder || event.version <= currentOrder.version) {
+  if (!currentOrder || event.version < currentOrder.version) {
+    return currentOrder;
+  }
+  if (event.version === currentOrder.version) {
+    if (event.status === currentOrder.status && event.rejectionDetails !== undefined) {
+      return {
+        ...currentOrder,
+        rejectionDetails: event.rejectionDetails,
+      };
+    }
     return currentOrder;
   }
   return {
@@ -322,6 +340,40 @@ export function parseRejectionDetails(details: unknown): ParsedRejectionDetails 
     ),
     rejectedItems: rejected,
     reservedItems: reserved,
+  };
+}
+
+/** Parse optional nested redoRejection notice from order rejectionDetails metadata. */
+export function parseRedoRejection(details: unknown): ParsedRedoRejection | null {
+  if (!details || typeof details !== 'object') {
+    return null;
+  }
+  const rawRedo = (details as Record<string, unknown>).redoRejection;
+  if (!rawRedo || typeof rawRedo !== 'object') {
+    return null;
+  }
+  const redoObj = rawRedo as Record<string, unknown>;
+  const itemId = typeof redoObj.itemId === 'string' ? redoObj.itemId : undefined;
+  const itemName = typeof redoObj.itemName === 'string' ? redoObj.itemName : undefined;
+  const redoId = typeof redoObj.redoId === 'string' ? redoObj.redoId : undefined;
+  const reason =
+    typeof redoObj.reason === 'string' && redoObj.reason.trim() ? redoObj.reason.trim() : undefined;
+  const missingIngredients = Array.isArray(redoObj.missingIngredients)
+    ? redoObj.missingIngredients
+        .map((item) => (typeof item === 'string' || typeof item === 'number' ? String(item) : ''))
+        .filter((entry) => entry.length > 0)
+    : [];
+
+  if (!itemId && !itemName && !reason && missingIngredients.length === 0) {
+    return null;
+  }
+
+  return {
+    itemId,
+    itemName,
+    redoId,
+    reason,
+    missingIngredients,
   };
 }
 

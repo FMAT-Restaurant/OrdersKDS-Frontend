@@ -1,7 +1,7 @@
 import { fireEvent, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BUMP_BAR_KEY_MAP } from '../constants/bumpBarKeyMap';
-import { useBumpBar } from './useBumpBar';
+import { BUMP_BAR_KEY_MAP } from '../../../src/constants/bumpBarKeyMap.ts';
+import { useBumpBar } from '../../../src/hooks/useBumpBar.ts';
 
 describe('useBumpBar', () => {
   beforeEach(() => {

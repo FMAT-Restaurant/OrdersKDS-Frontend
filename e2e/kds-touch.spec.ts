@@ -46,6 +46,12 @@ test.describe('ST-18(a) — KDS Táctil, TTL/Caducados, Debounce 400ms, Undo 15s
       await mockOrdersAndKdsRoutes(page, [pendingOrder, inPrepOrder, ...extraOrders]);
       await page.goto('/');
 
+      // Validar altura táctil responsiva del selector de estación (48px base, 52px sm+, 56px xl+ máx.)
+      const expectedStationMinHeight = viewport.width >= 1280 ? 56 : 52;
+      await assertMinTouchBox(page.getByTestId('station-tab-general'), expectedStationMinHeight, 48);
+      await assertMinTouchBox(page.getByTestId('station-tab-plancha'), expectedStationMinHeight, 48);
+      await assertMinTouchBox(page.getByTestId('station-tab-caliente'), expectedStationMinHeight, 48);
+
       // En tab 'active' (default), pageSize=8 -> si hay > 4 cards visibles, KdsBoard activa isCompactLayout (48px).
       // Filtramos a estación 'plancha' (1 tarjeta) para validar tarjetas no compactas >= 64px:
       await page.getByTestId('station-tab-plancha').tap();

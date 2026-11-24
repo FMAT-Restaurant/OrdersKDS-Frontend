@@ -114,14 +114,19 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host ""
-Write-Host "  1. Edit .env.local and set the API and WebSocket URLs:" -ForegroundColor White
-Write-Host "       VITE_API_BASE_URL=http://localhost:8080" -ForegroundColor DarkYellow
-Write-Host "       VITE_WS_URL=ws://localhost:8080/ws" -ForegroundColor DarkYellow
+Write-Host "  1. Review .env.local (defaults to 'auto' against Kong Gateway on :8000):" -ForegroundColor White
+Write-Host "       VITE_API_BASE_URL=auto" -ForegroundColor DarkYellow
+Write-Host "       VITE_WS_URL=auto" -ForegroundColor DarkYellow
+Write-Host "       FEDERATION_REMOTE_URL=http://localhost:5177" -ForegroundColor DarkYellow
 Write-Host ""
-Write-Host "  2. Start the development server:" -ForegroundColor White
+Write-Host "  2. Start the development server (ordenesApp):" -ForegroundColor White
 Write-Host "       pnpm dev" -ForegroundColor DarkYellow
 Write-Host ""
-Write-Host "  Dev server : http://localhost:5173" -ForegroundColor DarkCyan
+Write-Host "  3. (Optional) Start both Module Federation remotes:" -ForegroundColor White
+Write-Host "       pnpm run dev:federation         # ordenesApp -> http://localhost:5177" -ForegroundColor DarkYellow
+Write-Host "       pnpm run dev:federation:cocina  # cocinaApp  -> http://localhost:5179" -ForegroundColor DarkYellow
 Write-Host ""
-Write-Host "  For the full daily workflow see QUICKSTART.md section 6." -ForegroundColor White
+Write-Host "  Dev server : http://localhost:5177" -ForegroundColor DarkCyan
+Write-Host ""
+Write-Host "  For the full daily workflow see QUICKSTART.md section 6 and 7." -ForegroundColor White
 Write-Host ""

@@ -28,6 +28,10 @@
     "src/**/*.test.tsx",
     "src/**/*.spec.ts",
     "src/setupTests.ts",
+    "tests/unit/**/*.test.ts",
+    "tests/unit/**/*.test.tsx",
+    "tests/**/*.spec.ts",
+    "tests/**/*.spec.tsx",
     "e2e"
   ]
 }
