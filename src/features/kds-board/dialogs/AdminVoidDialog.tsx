@@ -359,11 +359,14 @@ export function AdminVoidDialog({
       aria-modal="true"
       aria-labelledby="admin-void-dialog-title"
       data-testid="admin-void-dialog"
-      className={`orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto ${
-        isKeyboardVisible ? 'items-start pt-3 sm:pt-6 pb-[310px]' : 'items-center'
-      }`}
+      className="orders-kds-root fixed inset-0 z-[60] m-0 p-0 w-full h-full max-w-none max-h-none flex flex-col bg-black/60 backdrop-blur-sm border-none select-none overflow-hidden"
     >
-      <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
+      <div
+        className={`flex-1 min-h-0 w-full flex justify-center overflow-y-auto p-3 sm:p-4 ${
+          isKeyboardVisible ? 'items-start' : 'items-center'
+        }`}
+      >
+        <div className="w-full max-w-lg max-h-full overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
         <header className="flex items-center justify-between border-b border-border pb-3">
           <h2 id="admin-void-dialog-title" className="text-2xl font-black text-ink">
             Anulación Administrativa {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
@@ -394,7 +397,7 @@ export function AdminVoidDialog({
               {...pointerAction(handleToggleCharge)}
               className={`admin-void-switch relative inline-flex h-8 w-14 shrink-0 rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-fmat-primary focus:ring-offset-2 items-center p-0.5 ${
                 isChargeToggleDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-              } ${chargeCustomer ? 'bg-[#c87a55]' : 'bg-muted/40'}`}
+              } ${chargeCustomer ? 'bg-[#c87a55]' : 'bg-muted'}`}
             >
               <span
                 aria-hidden="true"
@@ -470,6 +473,7 @@ export function AdminVoidDialog({
             Confirmar
           </button>
         </footer>
+        </div>
       </div>
 
       {isKeyboardVisible && (

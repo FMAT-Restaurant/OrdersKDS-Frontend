@@ -162,11 +162,14 @@ export function ChefVoidDialog({
       aria-modal="true"
       aria-labelledby="chef-void-dialog-title"
       data-testid="chef-void-dialog"
-      className={`orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex justify-center bg-black/60 backdrop-blur-sm border-none select-none overflow-y-auto ${
-        showKeyboard ? 'items-start pt-3 sm:pt-6 pb-[310px]' : 'items-center'
-      }`}
+      className="orders-kds-root fixed inset-0 z-[60] m-0 p-0 w-full h-full max-w-none max-h-none flex flex-col bg-black/60 backdrop-blur-sm border-none select-none overflow-hidden"
     >
-      <div className="w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
+      <div
+        className={`flex-1 min-h-0 w-full flex justify-center overflow-y-auto p-3 sm:p-4 ${
+          showKeyboard ? 'items-start' : 'items-center'
+        }`}
+      >
+        <div className="w-full max-w-4xl max-h-full overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
         <header className="flex items-center justify-between border-b border-border pb-3">
           <h2 id="chef-void-dialog-title" className="text-2xl font-black text-ink">
             Anulación por Error de Cocina {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
@@ -252,6 +255,7 @@ export function ChefVoidDialog({
             Confirmar
           </button>
         </footer>
+        </div>
       </div>
 
       {showKeyboard && (

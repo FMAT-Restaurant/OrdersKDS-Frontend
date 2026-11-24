@@ -51,7 +51,7 @@ export function VirtualKeyboard({
   };
 
   const containerClass = floating
-    ? 'fixed inset-x-0 bottom-0 z-[70] flex flex-col gap-2 bg-surface/95 backdrop-blur-md px-3 pt-2 pb-3 border-t-2 border-fmat-primary shadow-2xl select-none overflow-x-auto w-full'
+    ? 'shrink-0 w-full z-[70] flex flex-col gap-1.5 bg-surface px-3 pt-2 pb-3 border-t-2 border-fmat-primary shadow-2xl select-none overflow-x-auto'
     : 'flex flex-col gap-2 bg-canvas p-3 rounded-lg border border-border select-none overflow-x-auto w-full';
 
   return (

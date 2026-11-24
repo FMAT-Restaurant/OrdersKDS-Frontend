@@ -75,11 +75,14 @@ export function ShiftControlDialog({
       aria-modal="true"
       aria-labelledby="shift-control-dialog-title"
       data-testid="shift-control-dialog"
-      className={`orders-kds-root fixed inset-0 z-[60] m-0 p-4 w-full h-full max-w-none max-h-none flex justify-center bg-black/60 border-none overflow-y-auto ${
-        showKeyboard ? 'items-start pt-4 sm:pt-8 pb-[310px]' : 'items-center'
-      }`}
+      className="orders-kds-root fixed inset-0 z-[60] m-0 p-0 w-full h-full max-w-none max-h-none flex flex-col bg-black/60 border-none overflow-hidden"
     >
-      <div className="w-full max-w-md rounded-card bg-surface text-ink border border-border shadow-2xl p-6 space-y-4">
+      <div
+        className={`flex-1 min-h-0 w-full flex justify-center overflow-y-auto p-3 sm:p-4 ${
+          showKeyboard ? 'items-start' : 'items-center'
+        }`}
+      >
+        <div className="w-full max-w-md max-h-full overflow-y-auto rounded-card bg-surface text-ink border border-border shadow-2xl p-6 space-y-4">
         <h2 id="shift-control-dialog-title" className="text-lg font-extrabold">
           {copy.title}
         </h2>
@@ -131,6 +134,7 @@ export function ShiftControlDialog({
           >
             {isSubmitting ? 'Procesando…' : copy.confirmLabel}
           </button>
+        </div>
         </div>
       </div>
 
