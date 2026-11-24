@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { seedAuthSession } from './fixtures/authSession.ts';
 import { makeDefaultOpenShiftResponse } from './fixtures/orderFixtures.ts';
 
 test('verify page title', async ({ page }) => {
@@ -6,13 +7,22 @@ test('verify page title', async ({ page }) => {
   await expect(page).toHaveTitle(/temp-app/);
 });
 
+test('blocks unauthenticated access in production build without DevSandbox', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('auth-required-screen')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sesión requerida' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'KDS App' })).toHaveCount(0);
+});
+
 test('KDS touch shell @touch', async ({ page }) => {
+  await seedAuthSession(page, { role: 'kitchen' });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'KDS App' })).toBeVisible();
   await expect(page.getByTestId('kds-board-container')).toBeVisible();
 });
 
 test('KDS actions use one touch and 64px targets @touch', async ({ page }) => {
+  await seedAuthSession(page, { role: 'kitchen' });
   const requests: string[] = [];
   await page.route('**/orders/order-touch-1/**', async (route) => {
     requests.push(new URL(route.request().url()).pathname);

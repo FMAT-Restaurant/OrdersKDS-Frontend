@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
-import DevSandboxApp from './DevSandboxApp.tsx';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import KdsApp from './KdsApp.tsx';
 import OrderTicketWidget from './OrderTicketWidget.tsx';
+import UnauthenticatedSessionView from './features/auth/UnauthenticatedSessionView.tsx';
 import {
-  generateLocalDevToken,
   getStoredSessionToken,
   resolveDefaultApiBaseUrl,
   resolveDefaultWsBaseUrl,
@@ -19,6 +18,8 @@ import {
   type ShellUser,
   type TokenProvider,
 } from './shared/types/auth.ts';
+
+const LazyDevSandboxApp = import.meta.env.DEV ? lazy(() => import('./DevSandboxApp.tsx')) : null;
 
 type ShellViewMode = 'kds' | 'ticket';
 
@@ -86,7 +87,7 @@ function ShellNavbar({
 
 /**
  * Production Module Federation root entrypoint for Auth-Frontend Shell.
- * Delegates to DevSandboxApp when running standalone without an authenticated Shell session.
+ * Requires an active Shell session in production (dev harness loads only in DEV).
  */
 function App({
   token,
@@ -119,17 +120,21 @@ function App({
   const effectiveTokenProvider: TokenProvider = useCallback(() => {
     if (token) return Promise.resolve(token);
     if (tokenProvider) return tokenProvider();
-    const stored = getStoredSessionToken();
-    return Promise.resolve(stored || generateLocalDevToken('admin'));
+    return Promise.resolve(getStoredSessionToken());
   }, [token, tokenProvider]);
 
   if (!activeUser) {
-    return (
-      <DevSandboxApp
-        effectiveRole={UserRole.ADMIN}
-        tokenProvider={token || tokenProvider ? effectiveTokenProvider : undefined}
-      />
-    );
+    if (import.meta.env.DEV && LazyDevSandboxApp) {
+      return (
+        <Suspense fallback={null}>
+          <LazyDevSandboxApp
+            effectiveRole={UserRole.ADMIN}
+            tokenProvider={token || tokenProvider ? effectiveTokenProvider : undefined}
+          />
+        </Suspense>
+      );
+    }
+    return <UnauthenticatedSessionView />;
   }
 
   const effectiveRole = resolveUserRole(activeUser) ?? UserRole.ADMIN;
