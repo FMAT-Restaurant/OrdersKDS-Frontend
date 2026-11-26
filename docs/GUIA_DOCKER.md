@@ -13,8 +13,8 @@ Documentación oficial para el equipo de desarrollo. Explica el empaquetamiento,
 
 A diferencia del backend (que orquesta bases de datos PostgreSQL, Redis y RabbitMQ), en el frontend el flujo estándar usa **una sola imagen** (`orders-frontend:latest`):
 
-1. **Durante el desarrollo diario:** No necesitas Docker para el frontend. Ejecutas directamente `pnpm dev` en tu máquina (puerto `5177`) para aprovechar Vite con Hot Module Replacement (HMR) instantáneo.
-2. **Para pruebas en contenedor y distribución (imagen única estándar):** `docker build -t orders-frontend:latest .` empaqueta la compilación estándar (`dist/`) dentro de un servidor web ligero y sin privilegios `root` (**`nginxinc/nginx-unprivileged:alpine`** en puerto `8080`). Esa única imagen ya contiene los 5 módulos expuestos (Mesero y KDS de Cocina).
+1. **Durante el desarrollo diario:** No necesitas Docker para el frontend. Ejecutas directamente `pnpm dev` en tu máquina (puerto `5177`) para aprovechar Vite con Hot Module Replacement (HMR) instantáneo y pruebas locales con JWT en `localStorage` (`import.meta.env.DEV === true`) apuntando a `orders-backend` en Docker (tanto RabbitMQ simulado como real).
+2. **Para pruebas en contenedor y distribución (imagen única estándar):** `docker build -t orders-frontend:latest .` empaqueta la compilación estándar (`dist/`) dentro de un servidor web ligero y sin privilegios `root` (**`nginxinc/nginx-unprivileged:alpine`** en puerto `8080`). Esa única imagen ya contiene los 5 módulos expuestos (Mesero y KDS de Cocina), es el paquete final que consumen los demás equipos / **Auth-Frontend Shell**, y **debe reconstruirse y validarse obligatoriamente antes de cerrar cada sprint**.
 3. **Opcional — Integración dual-remoto con Shell + Kong (`INT-06`/`INT-07`):** El mismo `Dockerfile` acepta `ARG BUILD_MODE=cocina` únicamente si el Auth Shell o Kong necesitan cargar dos remotos federados separados (`ordenesApp` en `:5177` apuntando a `/api/v1/orders`, y `cocinaApp` en `:5179` apuntando a `/api/v1/kitchen`).
 4. **CI/CD automatizado:** En cada merge a la rama `main`, GitHub Actions compila la imagen Docker optimizada con multi-stage build y la publica en **GitHub Container Registry (GHCR)**.
 
@@ -66,16 +66,22 @@ Construye e inicia **un único contenedor** que expone toda la aplicación (vist
 
 ```powershell
 # 1. Construir la imagen única estándar
-docker build -t orders-frontend:latest .
+docker build --no-cache -t orders-frontend:latest .
 
-# 2. Iniciar contenedor mapeando 5177 (host) -> 8080 (Nginx sin root)
+# 2. Iniciar contenedor mapeando 5177 (host) -> 8080 (Nginx sin root; o -p 3000:8080 si usas 3000)
 docker rm -f orders-frontend 2>$null
 docker run -d --name orders-frontend -p 5177:8080 orders-frontend:latest
 
-# 3. Verificar que la app y remoteEntry.js respondan 200 OK
-curl -I http://localhost:5177/
-curl -I http://localhost:5177/assets/remoteEntry.js
+# 3. Verificar que la app y remoteEntry.js respondan 200 OK con cabeceras CSP/CORS
+curl.exe -I http://localhost:5177/
+curl.exe -I -H "Origin: http://localhost:3000" http://localhost:5177/assets/remoteEntry.js
 ```
+
+> [!IMPORTANT]
+> **Seguridad en producción (`Sesión requerida`) y Gate de cierre de sprint:**
+> - Abrir el contenedor Docker directamente sin **Auth-Frontend Shell** mostrará **`Sesión requerida`**, ya que los builds de producción (`!import.meta.env.DEV`) bloquean intencionalmente la lectura de `localStorage`.
+> - Para probar sesiones autenticadas sobre la imagen Docker final, cárgala federada desde **Auth-Frontend Shell** (recibe `token`, `tokenProvider` y `currentUser` en memoria vía props); para pruebas aisladas rápidas contra `orders-backend` (Docker con RabbitMQ simulado o real), usa `pnpm dev` (`:5177`) siguiendo [QUICKSTART.md §7](../QUICKSTART.md).
+> - **Gate obligatorio antes de cerrar sprint:** ejecuta `docker build --no-cache -t orders-frontend:latest .` y comprueba que `/` y `/assets/remoteEntry.js` respondan `200 OK`, con CSP/CORS correctos y el bloqueo `Sesión requerida` activo.
 
 ### 3.2 Opcional (Integración dual-remoto con Shell de Auth y Kong): `cocinaApp` en puerto `5179`
 
@@ -139,6 +145,10 @@ Al tratarse de una SPA/MFE compilada en cliente, las variables con prefijo `VITE
 ### ¿Por qué existe un build opcional `BUILD_MODE=cocina` si normalmente usamos una sola imagen?
 - En uso normal (standalone o contenedor único), `docker build -t orders-frontend:latest .` (`dist/`) ya incluye los **5 módulos federados** (Mesero y Cocina) en un solo contenedor.
 - `vite.config.ts` define en tiempo de build el nombre del remoto de Module Federation y el prefijo de API por defecto (`ordenesApp` + `/api/v1/orders` en `dist/`, frente a `cocinaApp` + `/api/v1/kitchen` en `dist-cocina/`). Solo en integración dual-remoto con el Auth Shell + Kong (`INT-06`/`INT-07`) se despliegan dos remotos separados.
+
+### ¿Por qué aparece "Sesión requerida" en el contenedor Docker aunque guarde el token en `localStorage`?
+- Por requisito de seguridad, `getStoredSessionUser()` (`src/shared/types/auth.ts`) y `getStoredSessionToken()` (`src/shared/api/client.ts`) retornan `null` cuando `!import.meta.env.DEV`. En producción dentro de Docker el microfrontend acepta **únicamente** `token`, `tokenProvider` y `currentUser` inyectados en memoria por props desde **Auth-Frontend Shell**.
+- Para pruebas locales independientes sin levantar Auth, ejecuta `pnpm dev` (`http://localhost:5177`) e inyecta un JWT firmado generado con `python scripts/dev_token.py --role admin --user-id 00000000-0000-0000-0000-000000000001` en `orders-backend`.
 
 ### El contenedor arranca pero no se conecta al backend local
 Si tu backend (`orders-backend`) corre en `localhost:8000`, el navegador del usuario accede directamente a `http://localhost:8000`. Verifica que el backend esté arriba (`http://localhost:8000/health`) y permita el origen del puerto desde el que abriste el frontend (`http://localhost:5177` o `http://localhost:5179`).
