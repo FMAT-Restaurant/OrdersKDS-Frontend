@@ -146,7 +146,7 @@ Every team member needs the tools below **before** running the setup steps.
 | **Git** | 2.40+ | Clone, branches, commits | https://git-scm.com/downloads |
 | **Docker Desktop** (includes Compose v2) | Docker 24+ | Backend services (`orders-backend`) and optional Nginx container build | https://www.docker.com/products/docker-desktop |
 | **Node.js** | 24 LTS | JavaScript runtime for pnpm, Vite, Vitest, Playwright | https://nodejs.org |
-| **pnpm** | 9+ (pinned `12.18.0` via Corepack/CI) | Package manager | `corepack enable` or `npm install -g pnpm` |
+| **pnpm** | 9+ (pinned `9.15.9` via Corepack/`packageManager`) | Package manager | `corepack enable` or `npm install -g pnpm@9.15.9` |
 | **VS Code** (recommended) | — | Editor with TypeScript and ESLint integration | https://code.visualstudio.com |
 
 > You do **not** need Python or PostgreSQL to run unit/E2E tests against MSW/Playwright mocks. To test real end-to-end flows, run `orders-backend` locally or in Docker (see §7).
@@ -177,7 +177,7 @@ Every team member needs the tools below **before** running the setup steps.
 ```powershell
 git --version           # 2.40 or newer
 node --version          # v24.x
-pnpm --version          # 9.x or 12.x
+pnpm --version          # 9.x (pinned 9.15.9)
 docker --version        # Docker version 24 or newer (needed for backend/container testing)
 ```
 
@@ -185,10 +185,11 @@ docker --version        # Docker version 24 or newer (needed for backend/contain
 
 | Port | Service |
 |---|---|
-| `5177` | `ordenesApp` Vite dev / preview server (`http://localhost:5177`) |
-| `5179` | `cocinaApp` Vite dev / preview server (`http://localhost:5179`) |
+| `3000` | `Auth-Frontend` Shell host (or optional `-p 3000:8080` standalone Docker port mapping) |
+| `5177` | `ordenesApp` Vite dev / preview / default Docker container port (`http://localhost:5177`) |
+| `5179` | `cocinaApp` Vite dev / preview / Docker container port (`http://localhost:5179`) |
 | `8000` | `orders-backend` / Kong API Gateway (`REST` + `WebSocket`) |
-| `4173` | Optional CI `zap-baseline` preview port |
+| `4173` | Optional CI `zap-baseline` and Playwright production bundle preview port |
 
 ---
 
@@ -288,19 +289,19 @@ To test real end-to-end flows (real PostgreSQL persistence, Redis catalog, Rabbi
 
 #### Step 0 — Optional: Build and Run the Frontend Docker Container
 
-In normal local or standalone Docker usage, you only need **1 single Docker image** (`orders-frontend:latest`). The [`Dockerfile`](Dockerfile) uses `node:20-alpine` (with Corepack + `pnpm@12.18.0`) and `nginxinc/nginx-unprivileged:alpine` listening on unprivileged port `8080`, and that single image already bundles all **5 modules** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) so both Waiter and Kitchen views work from one container.
+In normal local or standalone Docker usage, you only need **1 single Docker image** (`orders-frontend:latest`). The [`Dockerfile`](Dockerfile) builds with `node:24-alpine` (Corepack + `pnpm@9.15.9`) and serves via `nginxinc/nginx-unprivileged:alpine` on unprivileged port `8080` using [`nginx.conf`](nginx.conf) (strict production CSP without `'unsafe-inline'`/`'unsafe-eval'` and an explicit CORS origin allowlist covering `localhost`/`127.0.0.1` ports `3000`, `4173`, `5173`–`5179`, and `8000` — no wildcard `*`). That single image already bundles all **5 modules** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) so both Waiter and Kitchen views work from one container without conflicting with `orders-backend` containers (`postgres:16-alpine`, `redis:7-alpine`, `rabbitmq:3-management-alpine`).
 
 ```powershell
 cd C:\path\to\orders-frontend
 
-# 1. Build and run the single frontend image on http://localhost:5177
+# 1. Build and run the single frontend image on http://localhost:5177 (or use -p 3000:8080 if mapping to 3000)
 docker build -t orders-frontend:latest .
 docker rm -f orders-frontend 2>$null
 docker run -d --name orders-frontend -p 5177:8080 orders-frontend:latest
 
-# 2. Verify app and Module Federation manifest respond 200 OK
+# 2. Verify app, strict CSP, explicit CORS, and Module Federation manifest respond 200 OK
 curl -I http://localhost:5177/
-curl -I http://localhost:5177/assets/remoteEntry.js
+curl -I -H "Origin: http://localhost:3000" http://localhost:5177/assets/remoteEntry.js
 ```
 
 > **Optional / Advanced — Separate `cocinaApp` image (`:5179`, only for 6-module Auth Shell + Kong dual-remote integration `INT-06`/`INT-07`):**
@@ -516,7 +517,7 @@ Fallos comunes y soluciones:
 | **Git** | 2.40+ | Clonar, ramas, commits | https://git-scm.com/downloads |
 | **Docker Desktop** (incluye Compose v2) | Docker 24+ | Servicios de `orders-backend` y empaquetamiento Docker opcional | https://www.docker.com/products/docker-desktop |
 | **Node.js** | 24 LTS | Runtime de JavaScript para pnpm, Vite, Vitest, Playwright | https://nodejs.org |
-| **pnpm** | 9+ (fijado `12.18.0` vía Corepack/CI) | Manejador de paquetes | `corepack enable` o `npm install -g pnpm` |
+| **pnpm** | 9+ (fijado `9.15.9` vía Corepack/`packageManager`) | Manejador de paquetes | `corepack enable` o `npm install -g pnpm@9.15.9` |
 | **VS Code** (recomendado) | — | Editor con integración de TypeScript y ESLint | https://code.visualstudio.com |
 
 > **No necesitas** instalar Python ni PostgreSQL para correr pruebas unitarias o E2E con mocks MSW/Playwright. Para probar flujos reales de punta a punta, levanta `orders-backend` (ver §7).
@@ -537,7 +538,7 @@ Fallos comunes y soluciones:
 ```powershell
 git --version           # 2.40 o superior
 node --version          # v24.x
-pnpm --version          # 9.x o 12.x
+pnpm --version          # 9.x (fijado 9.15.9)
 docker --version        # Docker version 24 o superior (para backend / contenedores)
 ```
 
@@ -545,10 +546,11 @@ docker --version        # Docker version 24 o superior (para backend / contenedo
 
 | Puerto | Servicio |
 |---|---|
-| `5177` | Servidor Vite dev / preview de `ordenesApp` (`http://localhost:5177`) |
-| `5179` | Servidor Vite dev / preview de `cocinaApp` (`http://localhost:5179`) |
+| `3000` | Shell `Auth-Frontend` (o mapeo opcional `-p 3000:8080` del contenedor frontend) |
+| `5177` | Servidor Vite dev / preview / contenedor Docker estándar de `ordenesApp` (`http://localhost:5177`) |
+| `5179` | Servidor Vite dev / preview / contenedor Docker de `cocinaApp` (`http://localhost:5179`) |
 | `8000` | `orders-backend` / API Gateway Kong (`REST` + `WebSocket`) |
-| `4173` | Puerto temporal usado por `zap-baseline` en CI |
+| `4173` | Puerto temporal usado por `zap-baseline` y pruebas de producción en CI |
 
 ---
 
@@ -648,19 +650,19 @@ Para probar flujos reales de punta a punta (PostgreSQL real, catálogo en Redis,
 
 #### Paso 0 — Opcional: Empaquetar y Levantar el Contenedor Docker del Frontend (1 sola imagen)
 
-Para uso local o en contenedor independiente solo necesitas **1 única imagen Docker** (`orders-frontend:latest`). El [`Dockerfile`](Dockerfile) multi-etapa compila con `node:20-alpine` (Corepack + `pnpm@12.18.0`) y sirve con `nginxinc/nginx-unprivileged:alpine` en el puerto `8080`, incluyendo en el mismo contenedor los **5 módulos federados** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) para operar tanto vista de Mesero como KDS de Cocina.
+Para uso local o en contenedor independiente solo necesitas **1 única imagen Docker** (`orders-frontend:latest`). El [`Dockerfile`](Dockerfile) multi-etapa compila con `node:24-alpine` (Corepack + `pnpm@9.15.9`) y sirve con `nginxinc/nginx-unprivileged:alpine` en el puerto `8080` usando [`nginx.conf`](nginx.conf) (CSP estricto sin `'unsafe-inline'`/`'unsafe-eval'` y lista explícita CORS para `localhost`/`127.0.0.1` en los puertos `3000`, `4173`, `5173`–`5179` y `8000`, sin comodín `*`). El mismo contenedor incluye los **5 módulos federados** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) y no entra en conflicto con los contenedores de `orders-backend` (`postgres:16-alpine`, `redis:7-alpine`, `rabbitmq:3-management-alpine`).
 
 ```powershell
 cd C:\ruta\a\orders-frontend
 
-# 1. Construir y levantar la imagen única en http://localhost:5177
+# 1. Construir y levantar la imagen única en http://localhost:5177 (o -p 3000:8080 si usas puerto 3000)
 docker build -t orders-frontend:latest .
 docker rm -f orders-frontend 2>$null
 docker run -d --name orders-frontend -p 5177:8080 orders-frontend:latest
 
-# 2. Verificar que la app y el manifiesto de Module Federation respondan 200 OK
+# 2. Verificar app, CSP estricto, CORS explícito y manifiesto de Module Federation (200 OK)
 curl -I http://localhost:5177/
-curl -I http://localhost:5177/assets/remoteEntry.js
+curl -I -H "Origin: http://localhost:3000" http://localhost:5177/assets/remoteEntry.js
 ```
 
 > **Opcional / Avanzado — Segunda imagen separada `cocinaApp` (`:5179`, solo para integración dual con Shell de Auth + Kong `INT-06`/`INT-07`):**

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { z } from 'zod';
+import { z } from '../../../shared/api/zodCsp.ts';
 import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';

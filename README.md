@@ -199,9 +199,8 @@ pnpm exec playwright install --with-deps chromium webkit
 pnpm dev
 ```
 
-For the Vite dev/preview servers, configure federated host origins with
-`VITE_CORS_ALLOWED_ORIGINS` (comma-separated; defaults to `http://localhost:5173`
-and `http://127.0.0.1:5173`). Add deployment-specific API/WebSocket origins to
+For the Vite dev/preview servers (and mirrored in production [`nginx.conf`](nginx.conf)),
+configure federated host origins with `VITE_CORS_ALLOWED_ORIGINS` (comma-separated; defaults to `http://localhost` and `http://127.0.0.1` on ports `3000`, `4173`, `5173`, `5174`, `5175`, `5176`, `5177`, `5178`, `5179`, and `8000` — wildcards like `*` are rejected). Add deployment-specific API/WebSocket origins to
 `VITE_CSP_CONNECT_SRC` and additional remote script/style origins to
 `VITE_CSP_FEDERATION_SRC` when needed. Production responses do not allow inline
 styles; KDS components use the bundled stylesheet. Development retains Vite's
@@ -253,7 +252,7 @@ orders-frontend/
 │   ├── e2e/host-stub/                 # CSS isolation stub used by Playwright
 │   └── mocks/                         # MSW handlers and fixtures
 │
-├── e2e/                               # Playwright specs (app, css-isolation, a11y, kds-touch, order-ticket-container)
+├── e2e/                               # Playwright specs (app, css-isolation, a11y, kds-touch, order-ticket-container, prod-csp-bundle)
 ├── docs/                              # Project documentation
 ├── scripts/                           # bootstrap.ps1, bootstrap.sh
 ├── QUICKSTART.md
@@ -262,6 +261,7 @@ orders-frontend/
 ├── tailwind.config.ts                 # Design tokens; Preflight disabled
 ├── sonar-project.properties
 ├── Dockerfile
+├── nginx.conf                         # Production Nginx CSP & explicit CORS allowlist
 ├── .dockerignore
 └── .env.example
 ```
@@ -483,9 +483,9 @@ pnpm exec playwright install --with-deps chromium webkit
 pnpm dev
 ```
 
-Para los servidores Vite de desarrollo/preview, configura los orígenes del Shell
-con `VITE_CORS_ALLOWED_ORIGINS` (separados por comas; por defecto
-`http://localhost:5173` y `http://127.0.0.1:5173`). Agrega los orígenes API/WebSocket
+Para los servidores Vite de desarrollo/preview (con paridad en producción vía [`nginx.conf`](nginx.conf)),
+configura los orígenes del Shell con `VITE_CORS_ALLOWED_ORIGINS` (separados por comas; por defecto
+`http://localhost` y `http://127.0.0.1` en los puertos `3000`, `4173`, `5173`, `5174`, `5175`, `5176`, `5177`, `5178`, `5179` y `8000`, rechazando comodines `*`). Agrega los orígenes API/WebSocket
 de despliegue en `VITE_CSP_CONNECT_SRC` y los orígenes adicionales de scripts/estilos
 remotos en `VITE_CSP_FEDERATION_SRC` cuando sea necesario. Las respuestas de producción
 no permiten estilos inline; los componentes KDS usan la hoja de estilos del bundle.
@@ -537,7 +537,7 @@ orders-frontend/
 │   ├── e2e/host-stub/                 # Host stub de aislamiento CSS para Playwright
 │   └── mocks/                         # Handlers y fixtures MSW
 │
-├── e2e/                               # Specs Playwright (app, css-isolation, a11y, kds-touch, order-ticket-container)
+├── e2e/                               # Specs Playwright (app, css-isolation, a11y, kds-touch, order-ticket-container, prod-csp-bundle)
 ├── docs/                              # Documentación completa del proyecto
 ├── scripts/                           # bootstrap.ps1, bootstrap.sh
 ├── QUICKSTART.md
@@ -546,6 +546,7 @@ orders-frontend/
 ├── tailwind.config.ts                 # Tokens de diseño; Preflight desactivado
 ├── sonar-project.properties
 ├── Dockerfile
+├── nginx.conf                         # CSP de producción y allowlist CORS en Nginx
 ├── .dockerignore
 └── .env.example
 ```

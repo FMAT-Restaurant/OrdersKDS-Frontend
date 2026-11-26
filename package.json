@@ -18,7 +18,7 @@
     "dev:federation:cocina": "vite build --mode cocina && vite preview --mode cocina --port 5179 --host 0.0.0.0",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test e2e/app.spec.ts e2e/css-isolation.spec.ts e2e/order-ticket-container.spec.ts e2e/kds-touch.spec.ts",
+    "test:e2e": "playwright test e2e/app.spec.ts e2e/css-isolation.spec.ts e2e/order-ticket-container.spec.ts e2e/kds-touch.spec.ts e2e/prod-csp-bundle.spec.ts",
     "test:a11y": "playwright test e2e/a11y.spec.ts"
   },
   "dependencies": {
@@ -54,7 +54,8 @@
   "pnpm": {
     "overrides": {
       "undici": "8.13.1",
-      "postcss-selector-parser": "6.1.6"
+      "postcss-selector-parser": "6.1.6",
+      "minimatch": ">=11.0.1"
     }
   }
 }

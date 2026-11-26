@@ -10,13 +10,18 @@ const federation = require('@originjs/vite-plugin-federation') as typeof import(
 
 
 
-const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-const LOCAL_FEDERATION_ORIGINS = [
-  'http://localhost:5177',
-  'http://127.0.0.1:5177',
-  'http://localhost:5179',
-  'http://127.0.0.1:5179',
-];
+const DEFAULT_ALLOWED_PORTS = [
+  3000, 4173, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 8000,
+] as const;
+
+const LOCAL_FEDERATION_PORTS = [3000, 4173, 5173, 5174, 5175, 5177, 5179] as const;
+
+function buildLocalhostOrigins(ports: readonly number[]): string[] {
+  return ports.flatMap((port) => [`http://localhost:${port}`, `http://127.0.0.1:${port}`]);
+}
+
+const DEFAULT_ALLOWED_ORIGINS = buildLocalhostOrigins(DEFAULT_ALLOWED_PORTS);
+const LOCAL_FEDERATION_ORIGINS = buildLocalhostOrigins(LOCAL_FEDERATION_PORTS);
 
 function parseList(value: string | undefined, fallback: readonly string[]): string[] {
   const parsed = value?.split(/[,\s]+/).map((entry) => entry.trim()).filter(Boolean) ?? [];

@@ -26,8 +26,8 @@ El proyecto utiliza una estrategia de compilación multi-etapa (**Multi-Stage Bu
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Stage 1: builder (node:20-alpine)                                      │
-│  - Activa Corepack y pnpm@12.18.0                                       │
+│  Stage 1: builder (node:24-alpine)                                      │
+│  - Activa Corepack y pnpm@9.15.9                                        │
 │  - Copia package.json y pnpm-lock.yaml                                  │
 │  - pnpm install --frozen-lockfile --ignore-scripts                      │
 │  - Acepta build-args: BUILD_MODE (production|cocina),                   │
@@ -40,16 +40,19 @@ El proyecto utiliza una estrategia de compilación multi-etapa (**Multi-Stage Bu
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  Stage 2: producción (nginxinc/nginx-unprivileged:alpine)               │
 │  - Copia /app/out a /usr/share/nginx/html                               │
-│  - Inyecta configuración Nginx sin root + SPA routing                   │
-│  - Inyecta cabeceras CORS para Module Federation                        │
+│  - Copia nginx.conf a /etc/nginx/conf.d/default.conf (sin root + SPA)   │
+│  - Aplica CSP estricto (sin unsafe-inline) y allowlist CORS (sin *)     │
 │  - Expone el puerto no privilegiado 8080 (USER nginx)                   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Configuración de Nginx y Cabeceras CORS
-La etapa de producción escribe `/etc/nginx/conf.d/default.conf` con:
+### Configuración de Nginx, CSP estricto y Allowlist CORS
+La etapa de producción copia [`nginx.conf`](../nginx.conf) hacia `/etc/nginx/conf.d/default.conf` con:
 - **Enrutamiento SPA:** `try_files $uri $uri/ /index.html;` para resolver rutas de cliente sin 404 al recargar.
-- **Acceso Remoto CORS:** cabeceras `Access-Control-Allow-Origin *`, `Access-Control-Allow-Methods` y `Access-Control-Allow-Headers` (incluyendo `Authorization`), además de respuesta `204` inmediata a preflights `OPTIONS`.
+- **Allowlist CORS explícito (sin comodín `*`):** directiva `map $http_origin $cors_origin` que refleja `Access-Control-Allow-Origin` únicamente para orígenes locales autorizados (`localhost` y `127.0.0.1` en los puertos `3000`, `4173`, `5173`–`5179` y `8000`) junto con `Vary: Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers` (incluyendo `Authorization`) y respuesta `204` con las mismas cabeceras ante preflights `OPTIONS`.
+- **Cabeceras de seguridad y CSP estricto:** `Content-Security-Policy` equivalente a producción (sin `'unsafe-inline'` ni `'unsafe-eval'`), `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: cross-origin`, `Permissions-Policy`, `Referrer-Policy`, `Strict-Transport-Security`, `X-Content-Type-Options: nosniff` y `X-Frame-Options: DENY`.
+
+> **Compatibilidad con `orders-backend` y puerto `3000`:** El servicio Docker de frontend usa `node:24-alpine` solo en compilación y `nginxinc/nginx-unprivileged:alpine` (`8080`) en ejecución, por lo que no entra en conflicto con los servicios de `orders-backend/docker-compose.yml` (`postgres:16-alpine`, `redis:7-alpine`, `rabbitmq:3-management-alpine`). Tanto el acceso directo del Shell en `:3000` como un mapeo opcional `-p 3000:8080` funcionan con el allowlist CORS de Nginx y Vite.
 
 ---
 
