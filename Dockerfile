@@ -6,7 +6,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Enable Corepack and activate pinned pnpm version (bundled in Node 20)
-RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Install dependencies with frozen lockfile and scripts disabled
 COPY package.json pnpm-lock.yaml ./
