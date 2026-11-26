@@ -7,11 +7,47 @@ test('verify page title', async ({ page }) => {
   await expect(page).toHaveTitle(/temp-app/);
 });
 
-test('blocks unauthenticated access in production build without DevSandbox', async ({ page }) => {
-  await page.goto('/');
+test('production remote ignores a localStorage session without Shell props', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'fmat_restaurant_auth_session',
+      JSON.stringify({
+        accessToken: 'e2e-stored-token',
+        user: { id: 'e2e-stored-user', roles: ['kitchen'], permissions: ['kitchen:queues:view'] },
+      }),
+    );
+  });
+  await page.goto('http://127.0.0.1:4173/');
   await expect(page.getByTestId('auth-required-screen')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sesión requerida' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'KDS App' })).toHaveCount(0);
+});
+
+test('Vite preview returns restrictive CSP and non-wildcard CORS headers', async ({ request }) => {
+  const response = await request.get('http://127.0.0.1:4173/', {
+    headers: { Origin: 'http://127.0.0.1:5173' },
+  });
+
+  expect(response.ok()).toBe(true);
+  const headers = response.headers();
+  const csp = headers['content-security-policy'];
+  expect(csp).toContain("default-src 'self'");
+  expect(csp).toContain("object-src 'none'");
+  expect(csp).toContain('connect-src');
+  expect(csp).toContain('ws://127.0.0.1:8000');
+  expect(csp).not.toContain('unsafe-eval');
+  expect(csp.split(';').find((directive) => directive.trim().startsWith('script-src'))).not.toContain(
+    "'unsafe-inline'",
+  );
+  expect(headers['access-control-allow-origin']).toBe('http://127.0.0.1:5173');
+  expect(headers['access-control-allow-origin']).not.toBe('*');
+
+  const blockedOriginResponse = await request.get('http://127.0.0.1:4173/', {
+    headers: { Origin: 'https://unauthorized.example' },
+  });
+  expect(blockedOriginResponse.headers()['access-control-allow-origin']).not.toBe(
+    'https://unauthorized.example',
+  );
 });
 
 test('KDS touch shell @touch', async ({ page }) => {

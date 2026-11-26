@@ -108,6 +108,8 @@ describe('devErrorLogger', () => {
     );
     expect(apiDiag.category).toBe('AUTH_TOKEN');
     expect(apiDiag.prefix).toBe('[OrderTicket] Error de autenticación JWT (401):');
+    expect(apiDiag.hint).toContain('tokenProvider provisto por el Shell');
+    expect(apiDiag.hint).not.toContain('localStorage');
     expect(apiDiag.detailMessage).toContain('/orders/ord-123 (status 401, code UNAUTHENTICATED)');
 
     const primitiveDiag = buildDevErrorDiagnostic('KDS', '/kds/queue?view=active', 'timeout');

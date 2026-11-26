@@ -592,18 +592,38 @@ function KdsActionToasts({
 interface KdsFooterProps {
   readonly currentPage: number;
   readonly totalPages: number;
+  readonly activeOrderCount: number | null;
+  readonly hasAdditionalPages: boolean;
   readonly onPageChange: (newPage: number) => void;
 }
 
 function KdsFooter({
   currentPage,
   totalPages,
+  activeOrderCount,
+  hasAdditionalPages,
   onPageChange,
 }: Readonly<KdsFooterProps>) {
   return (
     <footer className="min-h-[4rem] sm:min-h-[5rem] px-4 sm:px-8 py-2.5 sm:py-3 bg-surface border-t border-border flex flex-wrap items-center justify-between gap-3 shadow-sm">
-      <div data-testid="kds-page-info" className="text-base sm:text-xl font-bold font-mono text-ink">
-        Página {currentPage} de {totalPages}
+      <div className="flex flex-col gap-1">
+        {activeOrderCount !== null && (
+          <div
+            data-testid="kds-active-order-count"
+            aria-live="polite"
+            className="text-base sm:text-lg font-bold text-ink"
+          >
+            Comandas activas: {activeOrderCount}
+          </div>
+        )}
+        <div data-testid="kds-page-info" className="text-base sm:text-xl font-bold font-mono text-ink">
+          Página {currentPage} de {totalPages}
+        </div>
+        {hasAdditionalPages && (
+          <div data-testid="kds-additional-pages" className="text-sm sm:text-base font-semibold text-ink">
+            Hay comandas adicionales en otras páginas
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
         <button
@@ -1513,6 +1533,8 @@ function KdsBoardContent({
       <KdsFooter
         currentPage={currentPage}
         totalPages={totalPages}
+        activeOrderCount={tab === 'active' ? tabOrders.length : null}
+        hasAdditionalPages={totalPages > 1}
         onPageChange={handlePageChange}
       />
 

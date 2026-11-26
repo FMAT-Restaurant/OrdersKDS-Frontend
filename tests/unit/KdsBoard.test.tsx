@@ -219,6 +219,30 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       });
     });
 
+    it('shows active order total and an additional-pages notice when more than 8 orders are active', async () => {
+      const nineOrders = generateOrders(9);
+      const mockClient = {
+        get: vi.fn().mockResolvedValue(nineOrders),
+        post: vi.fn(),
+        patch: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ApiClient;
+
+      render(<KdsBoard client={mockClient} queryClient={createTestQueryClient()} pageSize={8} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('kds-page-info')).toHaveTextContent('Página 1 de 2');
+      });
+
+      expect(screen.getByTestId('kds-active-order-count')).toHaveTextContent(
+        'Comandas activas: 9',
+      );
+      expect(screen.getByTestId('kds-additional-pages')).toHaveTextContent(
+        'Hay comandas adicionales en otras páginas',
+      );
+    });
+
     it('renders and switches between all 4 KDS tabs (Pendientes, En Preparación, Rehechuras, Entregadas) with priority contrast', async () => {
       const mixedOrders: Order[] = [
         {

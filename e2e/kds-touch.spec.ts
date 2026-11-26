@@ -65,6 +65,8 @@ test.describe('ST-18(a) — KDS Táctil, TTL/Caducados, Debounce 400ms, Undo 15s
 
       // Volver a 'Todas' y comprobar paginación >= 64x64 px y ausencia de scroll horizontal de página
       await page.getByTestId('station-tab-general').tap();
+      await expect(page.getByTestId('kds-active-order-count')).toHaveText('Comandas activas: 9');
+      await expect(page.getByTestId('kds-additional-pages')).toBeVisible();
       await assertMinTouchBox(page.getByTestId('pagination-next'), 64, 64);
       await assertMinTouchBox(page.getByTestId('pagination-prev'), 64, 64);
 

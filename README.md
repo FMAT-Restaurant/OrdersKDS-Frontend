@@ -68,7 +68,7 @@ This repository exposes **five** federated modules through `@originjs/vite-plugi
 | ![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black) | `^18.3.1` | Component-based UI; shared singleton across Module Federation |
 | ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white) | `~6.0.2` (`strict`) | Strict typing aligned with the backend API and event contracts |
 | ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white) | `^3.4.19` | Utility-first styling scoped to `.orders-kds-root` (Preflight disabled) + light/dark themes |
-| ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white) | `^8.3.0` | Dev server, preview server and build tool |
+| ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white) | `^8.3.3` | Dev server, preview server and build tool |
 | **@originjs/vite-plugin-federation** | `^1.4.1` | Dual Module Federation builds (`ordenesApp` `:5177`, `cocinaApp` `:5179`) |
 | **TanStack Query** | `^5.104.4` | Server-state fetching, caching and mutation handling |
 | **Zod** | `^4.6.7` | Runtime validation of API responses and WebSocket messages |
@@ -198,6 +198,12 @@ pnpm exec playwright install --with-deps chromium webkit
 # 5. Start the development server (http://localhost:5177)
 pnpm dev
 ```
+
+For the Vite dev/preview servers, configure federated host origins with
+`VITE_CORS_ALLOWED_ORIGINS` (comma-separated; defaults to `http://localhost:5173`
+and `http://127.0.0.1:5173`). Add deployment-specific API/WebSocket origins to
+`VITE_CSP_CONNECT_SRC` and additional remote script/style origins to
+`VITE_CSP_FEDERATION_SRC` when needed.
 
 To build and preview both Module Federation remotes locally:
 
@@ -377,7 +383,7 @@ Este repositorio expone **cinco** módulos federados mediante `@originjs/vite-pl
 | ![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black) | `^18.3.1` | Interfaz basada en componentes; singleton compartido en Module Federation |
 | ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white) | `~6.0.2` (`strict`) | Tipado estricto alineado con la API del backend |
 | ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white) | `^3.4.19` | Estilos acotados a `.orders-kds-root` (Preflight desactivado) + tema claro/oscuro |
-| ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white) | `^8.3.0` | Servidor de desarrollo, preview y build |
+| ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white) | `^8.3.3` | Servidor de desarrollo, preview y build |
 | **@originjs/vite-plugin-federation** | `^1.4.1` | Compilación dual Module Federation (`ordenesApp` `:5177`, `cocinaApp` `:5179`) |
 | **TanStack Query** | `^5.104.4` | Consulta, caché y mutaciones del estado del servidor |
 | **Zod** | `^4.6.7` | Validación en runtime de respuestas REST y mensajes WebSocket |
@@ -474,6 +480,12 @@ pnpm exec playwright install --with-deps chromium webkit
 # 5. Levantar el servidor de desarrollo (http://localhost:5177)
 pnpm dev
 ```
+
+Para los servidores Vite de desarrollo/preview, configura los orígenes del Shell
+con `VITE_CORS_ALLOWED_ORIGINS` (separados por comas; por defecto
+`http://localhost:5173` y `http://127.0.0.1:5173`). Agrega los orígenes API/WebSocket
+de despliegue en `VITE_CSP_CONNECT_SRC` y los orígenes adicionales de scripts/estilos
+remotos en `VITE_CSP_FEDERATION_SRC` cuando sea necesario.
 
 Para compilar y previsualizar ambos remotos de Module Federation localmente:
 
