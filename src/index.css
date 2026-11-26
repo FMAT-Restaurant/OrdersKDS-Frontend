@@ -15,6 +15,11 @@
   --tw-scale-y: 1;
 }
 
+html.orders-kds-scroll-locked,
+body.orders-kds-scroll-locked {
+  overflow: hidden !important;
+}
+
 .orders-kds-root {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   --color-primary: #C2410C;
@@ -107,6 +112,18 @@
 
 .orders-kds-root button.admin-void-switch:not(:disabled):active .admin-void-switch__thumb {
   transform: translateX(0.15rem) scale(0.94);
+}
+
+.orders-kds-root [data-delay-status='on_time'] {
+  background-color: var(--color-success);
+}
+
+.orders-kds-root [data-delay-status='warning'] {
+  background-color: var(--color-warning);
+}
+
+.orders-kds-root [data-delay-status='late'] {
+  background-color: var(--color-error);
 }
 
 .orders-kds-root button.admin-void-switch[aria-checked='true']:not(:disabled):active .admin-void-switch__thumb {

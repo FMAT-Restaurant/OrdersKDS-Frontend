@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { loadEnv } from 'vite';
 import { createRequire } from 'node:module';
 
 // @originjs/vite-plugin-federation ships CJS only. createRequire bridges the
@@ -9,16 +10,86 @@ const federation = require('@originjs/vite-plugin-federation') as typeof import(
 
 
 
-const sharedHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Cross-Origin-Opener-Policy': 'same-origin',
-  'Cross-Origin-Resource-Policy': 'cross-origin',
-  'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
-  'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
-};
+const DEFAULT_ALLOWED_PORTS = [
+  3000, 4173, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 8000,
+] as const;
+
+const LOCAL_FEDERATION_PORTS = [3000, 4173, 5173, 5174, 5175, 5177, 5179] as const;
+
+function buildLocalhostOrigins(ports: readonly number[]): string[] {
+  return ports.flatMap((port) => [`http://localhost:${port}`, `http://127.0.0.1:${port}`]);
+}
+
+const DEFAULT_ALLOWED_ORIGINS = buildLocalhostOrigins(DEFAULT_ALLOWED_PORTS);
+const LOCAL_FEDERATION_ORIGINS = buildLocalhostOrigins(LOCAL_FEDERATION_PORTS);
+
+function parseList(value: string | undefined, fallback: readonly string[]): string[] {
+  const parsed = value?.split(/[,\s]+/).map((entry) => entry.trim()).filter(Boolean) ?? [];
+  return parsed.length > 0 ? parsed : [...fallback];
+}
+
+function addUrlOrigin(sources: Set<string>, value: string | undefined): void {
+  if (!value || value.toLowerCase() === 'auto') return;
+  try {
+    const url = new URL(value);
+    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) {
+      sources.add(`${url.protocol}//${url.host}`);
+      if (url.protocol === 'http:') sources.add(`ws://${url.host}`);
+      if (url.protocol === 'https:') sources.add(`wss://${url.host}`);
+    }
+  } catch {
+    return;
+  }
+}
+
+function buildContentSecurityPolicy(
+  env: Record<string, string>,
+  defaultPort: number,
+  isDevelopment: boolean,
+): string {
+  const connectSources = new Set([
+    "'self'",
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    'ws://localhost:8000',
+    'ws://127.0.0.1:8000',
+    `ws://localhost:${defaultPort}`,
+    `ws://127.0.0.1:${defaultPort}`,
+    ...parseList(env.VITE_CSP_CONNECT_SRC, []),
+  ]);
+  addUrlOrigin(connectSources, env.VITE_API_URL);
+  addUrlOrigin(connectSources, env.VITE_API_BASE_URL);
+  addUrlOrigin(connectSources, env.VITE_WS_URL);
+
+  const federationSources = [
+    ...LOCAL_FEDERATION_ORIGINS,
+    ...parseList(env.VITE_CSP_FEDERATION_SRC, []),
+  ].join(' ');
+  const scriptSources = [
+    "'self'",
+    ...(isDevelopment ? ["'unsafe-inline'"] : []),
+    federationSources,
+  ].join(' ');
+  const styleSources = [
+    "'self'",
+    ...(isDevelopment ? ["'unsafe-inline'"] : []),
+    federationSources,
+  ].join(' ');
+
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    `script-src ${scriptSources}`,
+    `style-src ${styleSources}`,
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    `connect-src ${[...connectSources].join(' ')}`,
+    "worker-src 'self' blob:",
+  ].join('; ');
+}
 
 const sharedProxy = {
   '/orders': {
@@ -40,12 +111,32 @@ const sharedProxy = {
 };
 
 export default defineConfig(({ mode }) => {
-  const isCocina = mode === 'cocina' || process.env.VITE_FEDERATION_NAME === 'cocinaApp';
+  const env = loadEnv(mode, process.cwd(), '');
+  const allowedOrigins = parseList(env.VITE_CORS_ALLOWED_ORIGINS, DEFAULT_ALLOWED_ORIGINS);
+  if (allowedOrigins.includes('*')) {
+    throw new Error('VITE_CORS_ALLOWED_ORIGINS must not contain a wildcard origin.');
+  }
+
+  const isCocina = mode === 'cocina' || env.VITE_FEDERATION_NAME === 'cocinaApp';
   const federationName = isCocina
     ? 'cocinaApp'
-    : (process.env.VITE_FEDERATION_NAME || 'ordenesApp');
+    : (env.VITE_FEDERATION_NAME || 'ordenesApp');
   const defaultPort = isCocina ? 5179 : 5177;
   const outDir = isCocina ? 'dist-cocina' : 'dist';
+  const sharedHeaders = {
+    'Content-Security-Policy': buildContentSecurityPolicy(
+      env,
+      defaultPort,
+      mode === 'development',
+    ),
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Resource-Policy': 'cross-origin',
+    'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+  };
 
   return {
     plugins: [
@@ -91,13 +182,13 @@ export default defineConfig(({ mode }) => {
     server: {
       port: defaultPort,
       strictPort: true,
-      cors: true,
+      cors: { origin: allowedOrigins },
       host: '0.0.0.0',
       headers: sharedHeaders,
       proxy: sharedProxy,
     },
     preview: {
-      cors: true,
+      cors: { origin: allowedOrigins },
       port: defaultPort,
       strictPort: true,
       host: '0.0.0.0',

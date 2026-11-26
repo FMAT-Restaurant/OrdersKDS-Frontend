@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
-import { z } from 'zod';
+import { z } from './shared/api/zodCsp.ts';
 import { createApiClient, getStoredSessionToken } from './shared/api/client.ts';
 import { OrderSchema, type Order, type OrderItem } from './shared/api/schemas.ts';
 import { queryClient } from './shared/api/queryClient.ts';

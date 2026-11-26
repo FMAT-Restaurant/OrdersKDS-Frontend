@@ -148,7 +148,6 @@ function OrderDetailsItemRow({
                   onItemReady?.(order, item);
                 }
               }}
-              style={{ minHeight: 48 }}
               className={`min-h-[48px] px-3.5 py-2 rounded-control text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-fmat-primary ${
                 isFinished
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 cursor-default opacity-85'
@@ -195,7 +194,6 @@ function OrderDetailsItemRow({
                   onRejectSupplies?.(order, item);
                 }
               }}
-              style={{ minHeight: 48 }}
               className="min-h-[48px] px-3.5 py-2 rounded-control text-xs sm:text-sm font-bold bg-red-700 hover:bg-red-800 active:bg-red-900 text-white border border-red-800 hover:border-red-900 cursor-pointer shadow-sm transition-all flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               Sin insumos
@@ -229,7 +227,6 @@ function OrderDetailsItemRow({
                 onUndoItemReady?.(order, item);
               }
             }}
-            style={{ minWidth: 64, minHeight: 48 }}
             className="min-w-[64px] min-h-[48px] px-4 py-2 rounded-control text-xs sm:text-sm font-extrabold bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto"
           >
             Deshacer
@@ -347,7 +344,6 @@ function OrderDetailsReservedActions({
             onClose();
           })
         }
-        style={{ minHeight: 48 }}
         className="min-h-[48px] px-4 py-2 rounded-control font-bold text-sm bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
       >
         Iniciar preparación
@@ -367,7 +363,6 @@ function OrderDetailsReservedActions({
             onClose();
           })
         }
-        style={{ minHeight: 48 }}
         className="min-h-[48px] px-4 py-2 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
       >
         Rechazar insumo
@@ -420,7 +415,6 @@ function OrderDetailsVoidActions({
               onClose();
             })
           }
-          style={{ minHeight: 48 }}
           className="min-h-[48px] px-3.5 py-2 rounded-control font-bold text-sm bg-amber-700 hover:bg-amber-800 text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors flex items-center justify-center cursor-pointer select-none border-0"
         >
           Anular (Admin)
@@ -442,7 +436,6 @@ function OrderDetailsVoidActions({
               onClose();
             })
           }
-          style={{ minHeight: 48 }}
           className="min-h-[48px] px-3.5 py-2 rounded-control font-bold text-sm bg-red-600 hover:bg-red-700 text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none border-0"
         >
           Anular (Cocina)
@@ -490,7 +483,6 @@ function OrderDetailsReadyAction({
           aria-label={`Deshacer comanda lista para #${orderNumberDisplay}`}
           {...pointerAction(() => onUndoOrderReady?.(order))}
           onKeyDown={(event) => handleButtonKey(event, () => onUndoOrderReady?.(order))}
-          style={{ minHeight: 48 }}
           className="min-h-[48px] px-4 py-1.5 rounded-control font-extrabold text-xs sm:text-sm bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors border-0 shrink-0"
         >
           Deshacer
@@ -509,7 +501,6 @@ function OrderDetailsReadyAction({
       disabled={pendingAction === 'order-ready'}
       {...pointerAction(() => onMarkOrderReady?.(order))}
       onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
-      style={{ minHeight: 48 }}
       className="min-h-[48px] px-5 py-2.5 rounded-control font-bold text-sm sm:text-base bg-fmat-primary text-white hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
     >
       Comanda lista
@@ -553,7 +544,6 @@ function OrderDetailsRedoActions({
           onClose();
         })
       }
-      style={{ minHeight: 48 }}
       className="min-h-[48px] px-4 py-2 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
     >
       Rechazar rehechura (Sin insumos)
@@ -592,7 +582,6 @@ function OrderDetailsExpiredActions({
           onClose();
         })
       }
-      style={{ minHeight: 48 }}
       className="min-h-[48px] px-4 py-2 rounded-control font-bold text-sm bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors flex items-center justify-center cursor-pointer select-none active:scale-[.98] disabled:opacity-50 shadow-sm border-0"
     >
       Rechazar insumo
@@ -657,13 +646,11 @@ export function OrderDetailsDialog({
   useEffect(() => {
     if (!isScrollLocked) return;
     const { body, documentElement } = document;
-    const previousBodyOverflow = body.style.overflow;
-    const previousRootOverflow = documentElement.style.overflow;
-    body.style.overflow = 'hidden';
-    documentElement.style.overflow = 'hidden';
+    body.classList.add('orders-kds-scroll-locked');
+    documentElement.classList.add('orders-kds-scroll-locked');
     return () => {
-      body.style.overflow = previousBodyOverflow;
-      documentElement.style.overflow = previousRootOverflow;
+      body.classList.remove('orders-kds-scroll-locked');
+      documentElement.classList.remove('orders-kds-scroll-locked');
     };
   }, [isScrollLocked]);
 
@@ -680,12 +667,11 @@ export function OrderDetailsDialog({
     isFinished && order?.updatedAt ? { endTime: order.updatedAt } : undefined,
   );
 
-  const { formattedTime, delayStatus, delayLabel, delayColorToken } = isFinished
+  const { formattedTime, delayStatus, delayLabel } = isFinished
     ? {
         ...rawElapsedTime,
         delayStatus: 'on_time' as const,
         delayLabel: 'Entregada' as const,
-        delayColorToken: 'var(--color-success)' as const,
       }
     : rawElapsedTime;
 
@@ -759,7 +745,6 @@ export function OrderDetailsDialog({
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-xs sm:text-sm font-bold shadow-sm whitespace-nowrap shrink-0 ${
                 delayStatus === 'warning' ? 'text-gray-950 font-black' : 'text-white'
               }`}
-              style={{ backgroundColor: delayColorToken }}
             >
               <svg
                 className="w-4 h-4 shrink-0"
@@ -859,7 +844,6 @@ export function OrderDetailsDialog({
             type="button"
             data-testid="order-details-bottom-close-btn"
             onClick={onClose}
-            style={{ minHeight: 48 }}
             className="min-h-[48px] px-6 py-2.5 rounded-control font-bold text-sm bg-surface text-ink hover:bg-canvas active:bg-border border border-border shadow-xs transition-colors flex items-center justify-center cursor-pointer select-none shrink-0"
           >
             Cerrar

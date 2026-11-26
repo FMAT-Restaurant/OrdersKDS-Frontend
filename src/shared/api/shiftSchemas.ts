@@ -3,7 +3,7 @@
  * @satisfies RF-12, RF-15, RNF-03
  */
 
-import { z } from 'zod';
+import { z } from './zodCsp.ts';
 
 export const ShiftStatus = {
   OPEN: 'OPEN',

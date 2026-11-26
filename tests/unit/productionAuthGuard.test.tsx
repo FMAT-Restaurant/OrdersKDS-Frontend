@@ -25,6 +25,29 @@ describe('Production Auth Guard & Bundle Hardening (DEF-E5-018)', () => {
     expect(screen.getByRole('heading', { name: 'Sesión requerida' })).toBeInTheDocument();
   });
 
+  it('does not read the Shell session from localStorage in production', async () => {
+    vi.stubEnv('DEV', false);
+    localStorage.setItem(
+      'fmat_restaurant_auth_session',
+      JSON.stringify({
+        accessToken: 'stored-jwt',
+        user: { id: 'stored-user', roles: ['chef'], permissions: ['kitchen:queues:view'] },
+      }),
+    );
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
+
+    const { getStoredSessionToken } = await import('../../src/shared/api/client.ts');
+    const { getStoredSessionUser } = await import('../../src/shared/types/auth.ts');
+    const { default: ProdApp } = await import('../../src/App.tsx');
+
+    expect(getStoredSessionToken()).toBeNull();
+    expect(getStoredSessionUser()).toBeNull();
+    render(<ProdApp />);
+
+    expect(screen.getByTestId('auth-required-screen')).toBeInTheDocument();
+    expect(getItemSpy).not.toHaveBeenCalledWith('fmat_restaurant_auth_session');
+  });
+
   it('renders UnauthenticatedSessionView standalone', () => {
     render(<UnauthenticatedSessionView />);
     expect(screen.getByTestId('auth-required-screen')).toBeInTheDocument();

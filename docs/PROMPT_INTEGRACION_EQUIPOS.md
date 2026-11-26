@@ -91,7 +91,7 @@ npm install -D @types/react@^18.3.18 @types/react-dom@^18.3.5
      "preview": "vite preview --port <PUERTO_SEGUN_MATRIZ> --host 0.0.0.0"
    }
    ```
-   > **Si usas Docker con Nginx:** Reconstruye sin caché ante cambios (`docker compose build --no-cache && docker compose up -d`), incluye `add_header Access-Control-Allow-Origin *;` en `nginx.conf` y verifica con `curl -I http://localhost:<PUERTO>/assets/remoteEntry.js` que devuelva `Content-Type: application/javascript` (si devuelve `text/html`, el build no se generó).
+   > **Si usas Docker con Nginx:** Reconstruye sin caché ante cambios (`docker compose build --no-cache && docker compose up -d`), configura un allowlist CORS explícito por origen mediante `map $http_origin $cors_origin` (evita `*`) junto con la CSP estricta en `nginx.conf`, y verifica con `curl -I -H "Origin: http://localhost:3000" http://localhost:<PUERTO>/assets/remoteEntry.js` que devuelva `Content-Type: application/javascript` (si devuelve `text/html`, el build no se generó).
 
 ---
 
