@@ -146,7 +146,7 @@ Every team member needs the tools below **before** running the setup steps.
 | **Git** | 2.40+ | Clone, branches, commits | https://git-scm.com/downloads |
 | **Docker Desktop** (includes Compose v2) | Docker 24+ | Backend services (`orders-backend`) and optional Nginx container build | https://www.docker.com/products/docker-desktop |
 | **Node.js** | 24 LTS | JavaScript runtime for pnpm, Vite, Vitest, Playwright | https://nodejs.org |
-| **pnpm** | 9+ (pinned `12.18.0` via Corepack/CI) | Package manager | `corepack enable` or `npm install -g pnpm` |
+| **pnpm** | 9+ (pinned `9.15.9` via Corepack/`packageManager`) | Package manager | `corepack enable` or `npm install -g pnpm@9.15.9` |
 | **VS Code** (recommended) | — | Editor with TypeScript and ESLint integration | https://code.visualstudio.com |
 
 > You do **not** need Python or PostgreSQL to run unit/E2E tests against MSW/Playwright mocks. To test real end-to-end flows, run `orders-backend` locally or in Docker (see §7).
@@ -177,7 +177,7 @@ Every team member needs the tools below **before** running the setup steps.
 ```powershell
 git --version           # 2.40 or newer
 node --version          # v24.x
-pnpm --version          # 9.x or 12.x
+pnpm --version          # 9.x (pinned 9.15.9)
 docker --version        # Docker version 24 or newer (needed for backend/container testing)
 ```
 
@@ -185,10 +185,11 @@ docker --version        # Docker version 24 or newer (needed for backend/contain
 
 | Port | Service |
 |---|---|
-| `5177` | `ordenesApp` Vite dev / preview server (`http://localhost:5177`) |
-| `5179` | `cocinaApp` Vite dev / preview server (`http://localhost:5179`) |
+| `3000` | `Auth-Frontend` Shell host (or optional `-p 3000:8080` standalone Docker port mapping) |
+| `5177` | `ordenesApp` Vite dev / preview / default Docker container port (`http://localhost:5177`) |
+| `5179` | `cocinaApp` Vite dev / preview / Docker container port (`http://localhost:5179`) |
 | `8000` | `orders-backend` / Kong API Gateway (`REST` + `WebSocket`) |
-| `4173` | Optional CI `zap-baseline` preview port |
+| `4173` | Optional CI `zap-baseline` and Playwright production bundle preview port |
 
 ---
 
@@ -254,7 +255,7 @@ If `pnpm-lock.yaml` changed after a `git pull`, run `pnpm install` (without `--f
 #### 6.4 Working without the backend (Dev Sandbox & MSW)
 
 - **Automated tests (Vitest / Playwright):** MSW handlers and fixtures live in `tests/mocks/` and `e2e/fixtures/`.
-- **Interactive local sandbox:** When running standalone without a Shell session, `DevSandboxApp` (`src/DevSandboxApp.tsx` + `src/features/dev-sandbox/mockSandboxFetch.ts`) provides role/view switching (`Admin`, `Chef`, `Cocinero`, `Mesero`) and simulated flows.
+- **Interactive local sandbox:** When running `pnpm dev` (`import.meta.env.DEV === true`) without a session in `localStorage`, `DevSandboxApp` (`src/DevSandboxApp.tsx` + `src/features/dev-sandbox/mockSandboxFetch.ts`) provides role/view switching (`Admin`, `Chef`, `Cocinero`, `Mesero`) and in-memory simulated flows (`Simulación UI` / `KDS: Memoria Compartida`). Its built-in `generateLocalDevToken()` uses `.devsignature`, so calls to real `orders-backend` return `401` unless you authenticate with a signed JWT from `scripts/dev_token.py`.
 
 #### 6.5 Testing Module Federation remotes (`ordenesApp` & `cocinaApp`)
 
@@ -288,20 +289,26 @@ To test real end-to-end flows (real PostgreSQL persistence, Redis catalog, Rabbi
 
 #### Step 0 — Optional: Build and Run the Frontend Docker Container
 
-In normal local or standalone Docker usage, you only need **1 single Docker image** (`orders-frontend:latest`). The [`Dockerfile`](Dockerfile) uses `node:20-alpine` (with Corepack + `pnpm@12.18.0`) and `nginxinc/nginx-unprivileged:alpine` listening on unprivileged port `8080`, and that single image already bundles all **5 modules** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) so both Waiter and Kitchen views work from one container.
+In normal local or standalone Docker usage, you only need **1 single Docker image** (`orders-frontend:latest`). The [`Dockerfile`](Dockerfile) builds with `node:24-alpine` (Corepack + `pnpm@9.15.9`) and serves via `nginxinc/nginx-unprivileged:alpine` on unprivileged port `8080` using [`nginx.conf`](nginx.conf) (strict production CSP without `'unsafe-inline'`/`'unsafe-eval'` and an explicit CORS origin allowlist covering `localhost`/`127.0.0.1` ports `3000`, `4173`, `5173`–`5179`, and `8000` — no wildcard `*`). That single image already bundles all **5 modules** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) so both Waiter and Kitchen views work from one container without conflicting with `orders-backend` containers (`postgres:16-alpine`, `redis:7-alpine`, `rabbitmq:3-management-alpine`).
 
 ```powershell
 cd C:\path\to\orders-frontend
 
-# 1. Build and run the single frontend image on http://localhost:5177
-docker build -t orders-frontend:latest .
+# 1. Build and run the single frontend image on http://localhost:5177 (or use -p 3000:8080 if mapping to 3000)
+docker build --no-cache -t orders-frontend:latest .
 docker rm -f orders-frontend 2>$null
 docker run -d --name orders-frontend -p 5177:8080 orders-frontend:latest
 
-# 2. Verify app and Module Federation manifest respond 200 OK
-curl -I http://localhost:5177/
-curl -I http://localhost:5177/assets/remoteEntry.js
+# 2. Verify app, strict CSP, explicit CORS, and Module Federation manifest respond 200 OK
+curl.exe -I http://localhost:5177/
+curl.exe -I -H "Origin: http://localhost:3000" http://localhost:5177/assets/remoteEntry.js
 ```
+
+> **Production Security Behavior in Docker (`Sesión requerida`):**
+> `getStoredSessionUser()` and `getStoredSessionToken()` intentionally return `null` when `!import.meta.env.DEV`. Production Docker builds never read JWTs from `localStorage`, so opening the standalone container directly without **Auth-Frontend Shell** is expected to display **`Sesión requerida`**. To test authenticated flows on the final Docker image, load it inside **Auth-Frontend Shell** (which injects `token`, `tokenProvider`, and `currentUser` in memory via props).
+
+> [!IMPORTANT]
+> **Mandatory Pre-Sprint-Close Verification in Docker:** Use `pnpm dev` (`:5177`) alongside `orders-backend` in Docker for fast daily development and RabbitMQ integration testing. **Before closing any sprint or handing off to Auth/Staging, you must rebuild and verify the final Docker container** (`docker build --no-cache`, `200 OK` on `/` and `/assets/remoteEntry.js`, CSP/CORS headers, `Sesión requerida` gate, and Auth Shell integration) so you do not become biased toward `pnpm dev`-only behavior.
 
 > **Optional / Advanced — Separate `cocinaApp` image (`:5179`, only for 6-module Auth Shell + Kong dual-remote integration `INT-06`/`INT-07`):**
 > `vite.config.ts` sets the Module Federation remote name (`ordenesApp` vs `cocinaApp`) and default Kong API prefix (`/api/v1/orders` vs `/api/v1/kitchen`) at build time. Only when integrating with the **Auth Shell + Kong** team setup that explicitly loads two separate remotes (`ordenesApp` on `:5177` and `cocinaApp` on `:5179`), also build the kitchen remote image:
@@ -309,30 +316,36 @@ curl -I http://localhost:5177/assets/remoteEntry.js
 > docker build --build-arg BUILD_MODE=cocina -t cocina-frontend:latest .
 > docker rm -f cocina-frontend 2>$null
 > docker run -d --name cocina-frontend -p 5179:8080 cocina-frontend:latest
-> curl -I http://localhost:5179/assets/remoteEntry.js
+> curl.exe -I http://localhost:5179/assets/remoteEntry.js
 > ```
 
-#### Step 1 — Start `orders-backend` First (Terminals 1 & 2 + Docker Desktop)
+#### Step 1 — Start `orders-backend` First (Docker or Terminals + Seed Data)
 
-1. Open **Docker Desktop** and wait for **Engine running**.
-2. In **Terminal 1** (`orders-backend`):
-   ```powershell
-   cd C:\path\to\orders-backend
-   .\.venv\Scripts\Activate.ps1
-   python scripts/setup_env.py
-   docker compose up -d postgres redis rabbitmq
-   docker compose ps
-   alembic upgrade head
-   python scripts/seed_demo.py --reset
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-   *(You can also start all 6 backend containers with `docker-compose.ci.yml` — see `orders-backend/QUICKSTART.md §8 Mode B`. Remember `seed_demo.py --reset` generates **fresh random UUIDv4s** and prints the 8 seeded `OrderId`s in stdout.)*
-3. In **Terminal 2** (`orders-backend`), start the background workers so outbox events, Saga timeout (60 s), RabbitMQ consumers, and live WebSocket updates work:
-   ```powershell
-   cd C:\path\to\orders-backend
-   .\.venv\Scripts\Activate.ps1
-   python -m app.workers.run_all
-   ```
+Choose the backend mode matching your test:
+
+- **Option 1A — Local Terminal / Simulated RabbitMQ & Stubs:**
+  ```powershell
+  cd C:\path\to\orders-backend
+  .\.venv\Scripts\Activate.ps1
+  python scripts/setup_env.py
+  docker compose up -d postgres redis rabbitmq
+  alembic upgrade head
+  python scripts/seed_demo.py --reset
+  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+  ```
+  In **Terminal 2** (`orders-backend`), run `python -m app.workers.run_all` (and optionally `python -m app.stubs.runner` in a 3rd terminal, or start the full 6-container stack via `orders-backend/QUICKSTART.md §8 Mode B`).
+- **Option 1B — Backend in Docker Against Real RabbitMQ (CloudAMQP, no local `rabbitmq` or `stubs`):**
+  Ensure `orders-backend/.env` contains your real `RABBITMQ_URL`, `RABBITMQ_VHOST`, `RABBITMQ_EXCHANGE`, `SAGA_TIMEOUT_SECONDS=60`, and `JWT_SECRET` (32+ bytes), then run:
+  ```powershell
+  cd C:\path\to\orders-backend
+  docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d postgres redis
+  $env:DATABASE_URL="postgresql+asyncpg://ordenes:ordenes@postgres:5432/ordenes"
+  $env:REDIS_URL="redis://redis:6379/0"
+  docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --no-deps api workers
+  docker exec ordenes-api-ci alembic upgrade head
+  ```
+  From a separate host terminal (without those `$env:` overrides), seed demo data: `python scripts/seed_demo.py --reset`.
+  *(Running `pnpm dev` in `:5177` still sends all REST and WebSocket traffic to `orders-backend` on `:8000` in Docker, so `ordenes-workers-ci` publishes and consumes directly on the **real RabbitMQ broker (CloudAMQP)**).*
 
 #### Step 2 — Configure `.env.local` in `orders-frontend` (Terminal 3)
 
@@ -342,13 +355,13 @@ cd C:\path\to\orders-frontend
 # First time only (if node_modules is not installed yet):
 # .\scripts\bootstrap.ps1
 
-# Copy .env.example (already sets VITE_API_BASE_URL=auto and VITE_WS_URL=auto for :8000)
+# Copy .env.example (must keep VITE_API_BASE_URL=auto and VITE_WS_URL=auto toward :8000)
 Copy-Item .env.example .env.local -Force
 ```
 
-> **How `auto` works:** `resolveDefaultApiBaseUrl()` and `resolveDefaultWsBaseUrl()` automatically target `http://<host>:8000/api/v1/orders` (`ws://.../api/v1/orders`) in standard mode and `http://<host>:8000/api/v1/kitchen` in `cocina` mode. You can override them explicitly in `.env.local` if connecting to a remote host or Kong Gateway on another port.
+> **How `auto` works (and what to avoid):** `resolveDefaultApiBaseUrl()` and `resolveDefaultWsBaseUrl()` automatically target `http://<host>:8000/api/v1/orders` (`ws://.../api/v1/orders`) in standard mode and `http://<host>:8000/api/v1/kitchen` in `cocina` mode. Always keep `VITE_API_BASE_URL=auto` and `VITE_WS_URL=auto` for local Docker/host runs (do **not** set `VITE_WS_URL=ws://localhost:8000/ws`, which duplicates the path to `/ws/ws/waiter` and causes `403 Forbidden`).
 
-#### Step 3 — Start the Frontend (Terminal 3)
+#### Step 3 — Start the Frontend (`pnpm dev`) and Load a Signed Dev JWT
 
 ```powershell
 # Development server (HMR) on http://localhost:5177
@@ -357,6 +370,28 @@ pnpm dev
 # Or serve built Module Federation remote locally:
 # pnpm run dev:federation         -> http://localhost:5177
 ```
+
+To authenticate `http://localhost:5177` (`pnpm dev`, where `import.meta.env.DEV === true`) against real `orders-backend` (`:8000`):
+
+1. In `orders-backend`, generate a signed JWT matching `DEFAULT_WAITER_ID` (reads `JWT_SECRET` from `orders-backend/.env`):
+   ```powershell
+   python scripts/dev_token.py --role admin --user-id 00000000-0000-0000-0000-000000000001
+   ```
+2. Open `http://localhost:5177`, open **DevTools (`F12`) → Console**, paste the token **without `Bearer `**, and reload:
+   ```javascript
+   localStorage.setItem('fmat_restaurant_auth_session', JSON.stringify({
+     accessToken: '<SIGNED_JWT_WITHOUT_BEARER>',
+     user: {
+       id: '00000000-0000-0000-0000-000000000001',
+       email: 'admin@fmat.local',
+       displayName: 'Admin Local',
+       roles: ['admin'],
+       permissions: ['*']
+     }
+   }));
+   location.reload();
+   ```
+   *(See [docs/guia_pruebas_token_desarrollo.md](docs/guia_pruebas_token_desarrollo.md) for `chef`, `kitchen`, and `waiter` presets. Removing `fmat_restaurant_auth_session` in `pnpm dev` opens `DevSandboxApp` for in-memory UI mocks via `Simulación UI` / `KDS: Memoria Compartida`.)*
 
 #### Step 4 — Manual Verification with Seeded Data (`seed_demo.py --reset`)
 
@@ -516,7 +551,7 @@ Fallos comunes y soluciones:
 | **Git** | 2.40+ | Clonar, ramas, commits | https://git-scm.com/downloads |
 | **Docker Desktop** (incluye Compose v2) | Docker 24+ | Servicios de `orders-backend` y empaquetamiento Docker opcional | https://www.docker.com/products/docker-desktop |
 | **Node.js** | 24 LTS | Runtime de JavaScript para pnpm, Vite, Vitest, Playwright | https://nodejs.org |
-| **pnpm** | 9+ (fijado `12.18.0` vía Corepack/CI) | Manejador de paquetes | `corepack enable` o `npm install -g pnpm` |
+| **pnpm** | 9+ (fijado `9.15.9` vía Corepack/`packageManager`) | Manejador de paquetes | `corepack enable` o `npm install -g pnpm@9.15.9` |
 | **VS Code** (recomendado) | — | Editor con integración de TypeScript y ESLint | https://code.visualstudio.com |
 
 > **No necesitas** instalar Python ni PostgreSQL para correr pruebas unitarias o E2E con mocks MSW/Playwright. Para probar flujos reales de punta a punta, levanta `orders-backend` (ver §7).
@@ -537,7 +572,7 @@ Fallos comunes y soluciones:
 ```powershell
 git --version           # 2.40 o superior
 node --version          # v24.x
-pnpm --version          # 9.x o 12.x
+pnpm --version          # 9.x (fijado 9.15.9)
 docker --version        # Docker version 24 o superior (para backend / contenedores)
 ```
 
@@ -545,10 +580,11 @@ docker --version        # Docker version 24 o superior (para backend / contenedo
 
 | Puerto | Servicio |
 |---|---|
-| `5177` | Servidor Vite dev / preview de `ordenesApp` (`http://localhost:5177`) |
-| `5179` | Servidor Vite dev / preview de `cocinaApp` (`http://localhost:5179`) |
+| `3000` | Shell `Auth-Frontend` (o mapeo opcional `-p 3000:8080` del contenedor frontend) |
+| `5177` | Servidor Vite dev / preview / contenedor Docker estándar de `ordenesApp` (`http://localhost:5177`) |
+| `5179` | Servidor Vite dev / preview / contenedor Docker de `cocinaApp` (`http://localhost:5179`) |
 | `8000` | `orders-backend` / API Gateway Kong (`REST` + `WebSocket`) |
-| `4173` | Puerto temporal usado por `zap-baseline` en CI |
+| `4173` | Puerto temporal usado por `zap-baseline` y pruebas de producción en CI |
 
 ---
 
@@ -614,7 +650,7 @@ Si `pnpm-lock.yaml` cambió tras un `git pull`, ejecuta `pnpm install` (sin `--f
 #### 6.4 Trabajar sin el backend (Sandbox de desarrollo y MSW)
 
 - **Pruebas automatizadas (Vitest / Playwright):** Los handlers y fixtures MSW viven en `tests/mocks/` y `e2e/fixtures/`.
-- **Sandbox interactivo local:** Al abrir la app sin sesión del Shell, `DevSandboxApp` (`src/DevSandboxApp.tsx` + `src/features/dev-sandbox/mockSandboxFetch.ts`) ofrece selector de rol/vista y datos simulados en memoria.
+- **Sandbox interactivo local:** Al correr `pnpm dev` (`import.meta.env.DEV === true`) sin sesión en `localStorage`, `DevSandboxApp` (`src/DevSandboxApp.tsx` + `src/features/dev-sandbox/mockSandboxFetch.ts`) ofrece selector de rol/vista y datos simulados en memoria (`Simulación UI` / `KDS: Memoria Compartida`). Su `generateLocalDevToken()` usa `.devsignature`, por lo que `orders-backend` real lo rechaza con `401` salvo que cargues un JWT firmado con `scripts/dev_token.py`.
 
 #### 6.5 Probar los remotos de Module Federation (`ordenesApp` y `cocinaApp`)
 
@@ -648,20 +684,26 @@ Para probar flujos reales de punta a punta (PostgreSQL real, catálogo en Redis,
 
 #### Paso 0 — Opcional: Empaquetar y Levantar el Contenedor Docker del Frontend (1 sola imagen)
 
-Para uso local o en contenedor independiente solo necesitas **1 única imagen Docker** (`orders-frontend:latest`). El [`Dockerfile`](Dockerfile) multi-etapa compila con `node:20-alpine` (Corepack + `pnpm@12.18.0`) y sirve con `nginxinc/nginx-unprivileged:alpine` en el puerto `8080`, incluyendo en el mismo contenedor los **5 módulos federados** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) para operar tanto vista de Mesero como KDS de Cocina.
+Para uso local o en contenedor independiente solo necesitas **1 única imagen Docker** (`orders-frontend:latest`). El [`Dockerfile`](Dockerfile) multi-etapa compila con `node:24-alpine` (Corepack + `pnpm@9.15.9`) y sirve con `nginxinc/nginx-unprivileged:alpine` en el puerto `8080` usando [`nginx.conf`](nginx.conf) (CSP estricto sin `'unsafe-inline'`/`'unsafe-eval'` y lista explícita CORS para `localhost`/`127.0.0.1` en los puertos `3000`, `4173`, `5173`–`5179` y `8000`, sin comodín `*`). El mismo contenedor incluye los **5 módulos federados** (`./App`, `./KdsApp`, `./OrderTicketWidget`, `./ReadyOrdersAlert`, `./IntermediateDishesApp`) y no entra en conflicto con los contenedores de `orders-backend` (`postgres:16-alpine`, `redis:7-alpine`, `rabbitmq:3-management-alpine`).
 
 ```powershell
 cd C:\ruta\a\orders-frontend
 
-# 1. Construir y levantar la imagen única en http://localhost:5177
-docker build -t orders-frontend:latest .
+# 1. Construir y levantar la imagen única en http://localhost:5177 (o -p 3000:8080 si usas puerto 3000)
+docker build --no-cache -t orders-frontend:latest .
 docker rm -f orders-frontend 2>$null
 docker run -d --name orders-frontend -p 5177:8080 orders-frontend:latest
 
-# 2. Verificar que la app y el manifiesto de Module Federation respondan 200 OK
-curl -I http://localhost:5177/
-curl -I http://localhost:5177/assets/remoteEntry.js
+# 2. Verificar app, CSP estricto, CORS explícito y manifiesto de Module Federation (200 OK)
+curl.exe -I http://localhost:5177/
+curl.exe -I -H "Origin: http://localhost:3000" http://localhost:5177/assets/remoteEntry.js
 ```
+
+> **Comportamiento de Seguridad en Docker (`Sesión requerida`):**
+> `getStoredSessionUser()` y `getStoredSessionToken()` devuelven `null` intencionalmente cuando `!import.meta.env.DEV`. Las compilaciones de producción en Docker nunca leen JWT desde `localStorage`, por lo que abrir el contenedor de forma aislada sin **Auth-Frontend Shell** mostrará correctamente **`Sesión requerida`**. Para probar flujos autenticados sobre la imagen final de Docker, cárgala dentro de **Auth-Frontend Shell** (que inyecta `token`, `tokenProvider` y `currentUser` en memoria por props).
+
+> [!IMPORTANT]
+> **Verificación Obligatoria en Docker Antes de Cerrar Sprint:** Usa `pnpm dev` (`:5177`) junto con `orders-backend` en Docker para agilizar el desarrollo diario y las pruebas de integración con RabbitMQ. **Antes de cerrar cualquier sprint o entregar cambios para integración con Auth/Staging, debes reconstruir y verificar el contenedor final de Docker** (`docker build --no-cache`, `200 OK` en `/` y `/assets/remoteEntry.js`, cabeceras CSP/CORS, bloqueo `Sesión requerida` e integración con Auth Shell) para evitar sesgos por probar únicamente en `pnpm dev`.
 
 > **Opcional / Avanzado — Segunda imagen separada `cocinaApp` (`:5179`, solo para integración dual con Shell de Auth + Kong `INT-06`/`INT-07`):**
 > `vite.config.ts` define en tiempo de compilación el nombre del remoto (`ordenesApp` vs `cocinaApp`) y el prefijo de API detrás de Kong (`/api/v1/orders` vs `/api/v1/kitchen`). Solo cuando integres con el **Auth Shell + Kong** que consume dos remotos por separado (`ordenesApp` en `:5177` y `cocinaApp` en `:5179`), compila también la imagen de cocina:
@@ -669,30 +711,36 @@ curl -I http://localhost:5177/assets/remoteEntry.js
 > docker build --build-arg BUILD_MODE=cocina -t cocina-frontend:latest .
 > docker rm -f cocina-frontend 2>$null
 > docker run -d --name cocina-frontend -p 5179:8080 cocina-frontend:latest
-> curl -I http://localhost:5179/assets/remoteEntry.js
+> curl.exe -I http://localhost:5179/assets/remoteEntry.js
 > ```
 
-#### Paso 1 — Levantar Primero `orders-backend` y sus Datos Demo (Terminales 1 y 2 + Docker Desktop)
+#### Paso 1 — Levantar Primero `orders-backend` (Docker o Terminales + Datos Demo)
 
-1. Abre **Docker Desktop** y espera el indicador verde **Engine running**.
-2. En **Terminal 1** (`orders-backend`):
-   ```powershell
-   cd C:\ruta\a\orders-backend
-   .\.venv\Scripts\Activate.ps1
-   python scripts/setup_env.py
-   docker compose up -d postgres redis rabbitmq
-   docker compose ps
-   alembic upgrade head
-   python scripts/seed_demo.py --reset
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-   *(También puedes levantar los 6 contenedores del backend con `docker-compose.ci.yml`; ver `orders-backend/QUICKSTART.md §8 Modo B`. Recuerda que `seed_demo.py --reset` genera **UUIDv4 aleatorios nuevos** e imprime los 8 `OrderId` en consola.)*
-3. En **Terminal 2** (`orders-backend`), inicia los workers en segundo plano para que el outbox, el watcher de 60 s, RabbitMQ y el puente WebSocket funcionen en vivo:
-   ```powershell
-   cd C:\ruta\a\orders-backend
-   .\.venv\Scripts\Activate.ps1
-   python -m app.workers.run_all
-   ```
+Elige la variante de backend según lo que vayas a probar:
+
+- **Opción 1A — Terminal local / RabbitMQ simulado y stubs:**
+  ```powershell
+  cd C:\ruta\a\orders-backend
+  .\.venv\Scripts\Activate.ps1
+  python scripts/setup_env.py
+  docker compose up -d postgres redis rabbitmq
+  alembic upgrade head
+  python scripts/seed_demo.py --reset
+  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+  ```
+  En **Terminal 2** (`orders-backend`), ejecuta `python -m app.workers.run_all` (y opcionalmente `python -m app.stubs.runner` en una 3ra terminal, o levanta el stack de 6 contenedores siguiendo `orders-backend/QUICKSTART.md §8 Modo B`).
+- **Opción 1B — Backend en Docker contra RabbitMQ Real (CloudAMQP, sin `rabbitmq` ni `stubs` locales):**
+  Verifica que `orders-backend/.env` tenga configurados `RABBITMQ_URL`, `RABBITMQ_VHOST`, `RABBITMQ_EXCHANGE`, `SAGA_TIMEOUT_SECONDS=60` y `JWT_SECRET` (32+ bytes), y ejecuta:
+  ```powershell
+  cd C:\ruta\a\orders-backend
+  docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d postgres redis
+  $env:DATABASE_URL="postgresql+asyncpg://ordenes:ordenes@postgres:5432/ordenes"
+  $env:REDIS_URL="redis://redis:6379/0"
+  docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --no-deps api workers
+  docker exec ordenes-api-ci alembic upgrade head
+  ```
+  Desde otra terminal del host (sin esos `$env:` activos), siembra los datos demo: `python scripts/seed_demo.py --reset`.
+  *(Al levantar `pnpm dev` en `:5177`, todas las peticiones REST y WebSocket siguen yendo a `orders-backend` en `:8000` dentro de Docker, y `ordenes-workers-ci` publica/consume directo en el **RabbitMQ real (CloudAMQP)**).*
 
 #### Paso 2 — Configurar `.env.local` en `orders-frontend` (Terminal 3)
 
@@ -702,13 +750,13 @@ cd C:\ruta\a\orders-frontend
 # Solo la primera vez (si aún no instalaste dependencias):
 # .\scripts\bootstrap.ps1
 
-# Copiar .env.example (ya usa VITE_API_BASE_URL=auto y VITE_WS_URL=auto hacia :8000)
+# Copiar .env.example (debe mantener VITE_API_BASE_URL=auto y VITE_WS_URL=auto hacia :8000)
 Copy-Item .env.example .env.local -Force
 ```
 
-> **Cómo funciona `auto`:** `resolveDefaultApiBaseUrl()` y `resolveDefaultWsBaseUrl()` apuntan automáticamente a `http://<host-actual>:8000/api/v1/orders` en modo normal y a `http://<host-actual>:8000/api/v1/kitchen` en modo `cocina`. Si necesitas apuntar a otro host o puerto, define las URLs explícitamente en `.env.local`.
+> **Cómo funciona `auto` (y qué evitar):** `resolveDefaultApiBaseUrl()` y `resolveDefaultWsBaseUrl()` apuntan automáticamente a `http://<host-actual>:8000/api/v1/orders` en modo normal y a `http://<host-actual>:8000/api/v1/kitchen` en modo `cocina`. Mantén siempre `VITE_API_BASE_URL=auto` y `VITE_WS_URL=auto` en local (**no** pongas `VITE_WS_URL=ws://localhost:8000/ws`, porque duplica la ruta a `/ws/ws/waiter` y genera `403 Forbidden`).
 
-#### Paso 3 — Levantar el Frontend (Terminal 3)
+#### Paso 3 — Levantar el Frontend (`pnpm dev`) y Cargar un JWT Firmado de Desarrollo
 
 ```powershell
 # Servidor de desarrollo (HMR) en http://localhost:5177
@@ -717,6 +765,28 @@ pnpm dev
 # O servir el remoto compilado de Module Federation:
 # pnpm run dev:federation         -> http://localhost:5177
 ```
+
+Para autenticar `http://localhost:5177` (`pnpm dev`, donde `import.meta.env.DEV === true`) contra el backend real (`:8000`):
+
+1. En `orders-backend`, genera un JWT firmado alineado a `DEFAULT_WAITER_ID` (lee `JWT_SECRET` de `orders-backend/.env`):
+   ```powershell
+   python scripts/dev_token.py --role admin --user-id 00000000-0000-0000-0000-000000000001
+   ```
+2. Abre `http://localhost:5177`, abre **DevTools (`F12`) → Console**, pega el token **sin `Bearer `** y recarga:
+   ```javascript
+   localStorage.setItem('fmat_restaurant_auth_session', JSON.stringify({
+     accessToken: '<JWT_FIRMADO_SIN_BEARER>',
+     user: {
+       id: '00000000-0000-0000-0000-000000000001',
+       email: 'admin@fmat.local',
+       displayName: 'Admin Local',
+       roles: ['admin'],
+       permissions: ['*']
+     }
+   }));
+   location.reload();
+   ```
+   *(Consulta [docs/guia_pruebas_token_desarrollo.md](docs/guia_pruebas_token_desarrollo.md) para ver los valores de `chef`, `kitchen` y `waiter`. Si eliminas `fmat_restaurant_auth_session` en `pnpm dev`, entrarás a `DevSandboxApp` para simulaciones UI en memoria con `Simulación UI` / `KDS: Memoria Compartida`.)*
 
 #### Paso 4 — Pruebas Manuales con los Datos Sembrados (`seed_demo.py --reset`)
 

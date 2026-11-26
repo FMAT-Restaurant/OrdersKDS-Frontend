@@ -76,8 +76,9 @@ function OrderItemUndoBanner({
             onUndo?.();
           }
         }}
-        style={{ minWidth: 64, minHeight: isManyItems ? 40 : 44 }}
-        className="min-w-[64px] min-h-[40px] px-3.5 py-1.5 rounded-control text-xs sm:text-sm font-extrabold bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto"
+        className={`min-w-[64px] ${
+          isManyItems ? 'min-h-[40px]' : 'min-h-[44px]'
+        } px-3.5 py-1.5 rounded-control text-xs sm:text-sm font-extrabold bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto`}
       >
         Deshacer
       </button>
@@ -239,7 +240,6 @@ function OrderCardItem({
   return (
     <li
       data-testid={`order-item-${itemId}`}
-      style={{ minHeight: isCompactDensity ? 40 : 64 }}
       data-redo-pending={isRedoPending ? 'true' : undefined}
       data-undo-pending={isPendingUndo ? 'true' : undefined}
       className={`border-b border-border last:border-b-0 flex flex-col justify-center py-2 gap-1 ${
@@ -316,8 +316,9 @@ function OrderCardItem({
                   onRejectSupplies?.();
                 }
               }}
-              style={{ minHeight: isCompactDensity ? 36 : 40 }}
-              className="min-h-[36px] px-2.5 py-1 rounded-control text-xs font-bold bg-red-700 hover:bg-red-800 active:bg-red-900 text-white border border-red-800 hover:border-red-900 cursor-pointer shadow-sm transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-red-500"
+              className={`${
+                isCompactDensity ? 'min-h-[36px]' : 'min-h-[40px]'
+              } px-2.5 py-1 rounded-control text-xs font-bold bg-red-700 hover:bg-red-800 active:bg-red-900 text-white border border-red-800 hover:border-red-900 cursor-pointer shadow-sm transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-red-500`}
             >
               Sin insumos
             </button>
@@ -396,7 +397,6 @@ function OrderReadyUndoBanner({
         aria-label={`Deshacer comanda lista para #${displayId}`}
         {...pointerAction(() => onUndo?.())}
         onKeyDown={(event) => handleButtonKey(event, onUndo)}
-        style={{ minWidth: 64, minHeight: isCompact ? 40 : 44 }}
         className={`min-w-[64px] ${
           isCompact ? 'min-h-[40px] px-3 py-1' : 'min-h-[44px] px-4 py-2'
         } rounded-control font-extrabold text-xs sm:text-sm bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 select-none border-0 shrink-0 ml-auto`}
@@ -513,7 +513,6 @@ function OrderCardExpiredTabActions({
         disabled={pendingAction === 'reject'}
         {...pointerAction(() => onRejectSupplies?.(order))}
         onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
-        style={{ minHeight: isCompact ? 48 : 64 }}
         className={`${
           isCompact
             ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
@@ -580,7 +579,6 @@ function OrderCardReservedActions(props: Readonly<OrderCardReservedActionsProps>
               if (!isTtlExpired) onStartPreparation?.(order);
             })
           }
-          style={{ minHeight: isCompact ? 48 : 64 }}
           className={`${
             isCompact
               ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
@@ -600,7 +598,6 @@ function OrderCardReservedActions(props: Readonly<OrderCardReservedActionsProps>
           disabled={pendingAction === 'reject'}
           {...pointerAction(() => onRejectSupplies?.(order))}
           onKeyDown={(e) => handleButtonKey(e, () => onRejectSupplies?.(order))}
-          style={{ minHeight: isCompact ? 48 : 64 }}
           className={`${
             isCompact
               ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
@@ -656,7 +653,6 @@ function OrderCardVoidActions({
           disabled={pendingAction === 'void-admin'}
           {...pointerAction(() => onAdminVoid?.(order))}
           onKeyDown={(e) => handleButtonKey(e, () => onAdminVoid?.(order))}
-          style={{ minHeight: isCompact ? 48 : 64 }}
           className={`${
             isCompact
               ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
@@ -674,7 +670,6 @@ function OrderCardVoidActions({
           disabled={pendingAction === 'void-kitchen'}
           {...pointerAction(() => onChefVoid?.(order))}
           onKeyDown={(e) => handleButtonKey(e, () => onChefVoid?.(order))}
-          style={{ minHeight: isCompact ? 48 : 64 }}
           className={`${
             isCompact
               ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
@@ -728,7 +723,6 @@ function OrderCardReadyAction({
       disabled={pendingAction === 'order-ready'}
       {...pointerAction(() => onMarkOrderReady?.(order))}
       onKeyDown={(e) => handleButtonKey(e, () => onMarkOrderReady?.(order))}
-      style={{ minHeight: isCompact ? 48 : 64 }}
       className={`shrink-0 ${
         isCompact
           ? 'mx-2 sm:mx-2.5 mb-1.5 sm:mb-2 min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
@@ -783,7 +777,6 @@ function OrderCardRedoActions({
             onRejectSupplies?.(order, pendingItem);
           })
         }
-        style={{ minHeight: isCompact ? 48 : 64 }}
         className={`${
           isCompact
             ? 'min-h-[48px] px-3 py-1.5 text-xs sm:text-sm'
@@ -866,12 +859,11 @@ export function OrderCard({
     isFinished && order.updatedAt ? { endTime: order.updatedAt } : undefined,
   );
 
-  const { formattedTime, delayStatus, delayLabel, delayColorToken } = isFinished
+  const { formattedTime, delayStatus, delayLabel } = isFinished
     ? {
         ...rawElapsedTime,
         delayStatus: 'on_time' as const,
         delayLabel: 'Entregada' as const,
-        delayColorToken: 'var(--color-success)' as const,
       }
     : rawElapsedTime;
 
@@ -951,7 +943,6 @@ export function OrderCard({
             } rounded-md font-mono font-bold shadow-sm whitespace-nowrap shrink-0 flex-nowrap ${
               delayStatus === 'warning' ? 'text-gray-950 font-black' : 'text-white'
             }`}
-            style={{ backgroundColor: delayColorToken }}
             aria-label={`Tiempo transcurrido: ${formattedTime}, estado: ${delayLabel}`}
           >
             <svg

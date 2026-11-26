@@ -195,6 +195,8 @@ export function canManageShifts(
  * Retrieve user session stored in localStorage by the Auth Shell.
  */
 export function getStoredSessionUser(): ShellUser | null {
+  if (!import.meta.env.DEV) return null;
+
   try {
     const raw = localStorage.getItem('fmat_restaurant_auth_session');
     if (!raw) return null;

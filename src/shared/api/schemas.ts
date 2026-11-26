@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from './zodCsp.ts';
 import { ItemStatus, OrderStatus } from '../types/order.ts';
 
 /**

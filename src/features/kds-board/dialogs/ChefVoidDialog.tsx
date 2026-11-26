@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { z } from 'zod';
+import { z } from '../../../shared/api/zodCsp.ts';
 import { OrderSchema, type Order } from '../../../shared/api/schemas.ts';
 import { UserRole } from '../../../shared/types/auth.ts';
 import { OrderStatus } from '../../../shared/types/order.ts';
@@ -83,19 +83,16 @@ function ChefQuickReasonsGrid({
               aria-label={item.label}
               data-testid={`chef-reason-${idx}`}
               {...pointerAction(() => onToggleReason(item.label))}
-              style={{ minHeight: 64, minWidth: 64 }}
-              className={`min-h-[64px] min-w-[64px] px-4 py-2.5 rounded-control font-bold text-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed text-left ${
-                isSelected
-                  ? 'bg-fmat-primary text-white border-fmat-primary shadow-sm'
-                  : 'bg-surface text-ink border border-border hover:bg-fmat-soft hover:border-fmat-primary'
-              }`}
+              className={`min-h-[64px] min-w-[64px] px-4 py-2.5 rounded-control font-bold text-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed text-left ${isSelected
+                ? 'bg-fmat-primary text-white border-fmat-primary shadow-sm'
+                : 'bg-surface text-ink border border-border hover:bg-fmat-soft hover:border-fmat-primary'
+                }`}
             >
               <div className="flex flex-col items-start">
                 <span className="font-bold text-base sm:text-lg leading-tight">{item.label}</span>
                 <span
-                  className={`text-xs font-normal mt-0.5 leading-snug ${
-                    isSelected ? 'text-white/90' : 'text-muted'
-                  }`}
+                  className={`text-xs font-normal mt-0.5 leading-snug ${isSelected ? 'text-white/90' : 'text-muted'
+                    }`}
                 >
                   {item.description}
                 </span>
@@ -165,96 +162,93 @@ export function ChefVoidDialog({
       className="orders-kds-root fixed inset-0 z-[60] m-0 p-0 w-full h-full max-w-none max-h-none flex flex-col bg-black/60 backdrop-blur-sm border-none select-none overflow-hidden"
     >
       <div
-        className={`flex-1 min-h-0 w-full flex justify-center overflow-y-auto p-3 sm:p-4 ${
-          showKeyboard ? 'items-start' : 'items-center'
-        }`}
+        className={`flex-1 min-h-0 w-full flex justify-center overflow-y-auto p-3 sm:p-4 ${showKeyboard ? 'items-start' : 'items-center'
+          }`}
       >
         <div className="w-full max-w-4xl max-h-full overflow-y-auto rounded-card bg-surface border border-border p-6 text-ink shadow-2xl flex flex-col gap-4">
-        <header className="flex items-center justify-between border-b border-border pb-3">
-          <h2 id="chef-void-dialog-title" className="text-2xl font-black text-ink">
-            Anulación por Error de Cocina {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
-            <span className="sr-only">#{displayId}</span>
-          </h2>
-        </header>
+          <header className="flex items-center justify-between border-b border-border pb-3">
+            <h2 id="chef-void-dialog-title" className="text-2xl font-black text-ink">
+              Anulación por Error de Cocina {tableDisplay ? `· ${tableDisplay}` : ''} · #{orderNumberDisplay}
+              <span className="sr-only">#{displayId}</span>
+            </h2>
+          </header>
 
-        <div
-          role="alert"
-          data-testid="chef-void-warning"
-          className="rounded-control bg-blue-50 border border-blue-200 px-4 py-3 text-blue-900 font-bold text-center text-base"
-        >
-          No se cobrará al cliente por la anulación realizada por un error en cocina{' '}
-          <span className="sr-only">No se cobrará por error de cocina</span>
-        </div>
-
-        {!isOperable && (
           <div
             role="alert"
-            data-testid="chef-void-invalid-status"
-            className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-red-700 font-semibold text-base"
+            data-testid="chef-void-warning"
+            className="rounded-control bg-blue-50 border border-blue-200 px-4 py-3 text-blue-900 font-bold text-center text-base"
           >
-            Operación bloqueada: la comanda debe estar en estado EN PREPARACIÓN ({OrderStatus.IN_PREPARATION}).
+            No se cobrará al cliente por la anulación realizada por un error en cocina{' '}
+            <span className="sr-only">No se cobrará por error de cocina</span>
           </div>
-        )}
 
-        <ChefQuickReasonsGrid
-          selectedReasons={selectedReasons}
-          isDisabled={isDisabled}
-          onToggleReason={toggleReason}
-        />
-
-        <section aria-label="Detalle adicional del motivo" className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <label
-              htmlFor="chef-void-note-input"
-              className="text-sm font-semibold uppercase tracking-wider text-body"
+          {!isOperable && (
+            <div
+              role="alert"
+              data-testid="chef-void-invalid-status"
+              className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-red-700 font-semibold text-base"
             >
-              Nota adicional (opcional si eligió motivo rápido):
-            </label>
+              Operación bloqueada: la comanda debe estar en estado EN PREPARACIÓN ({OrderStatus.IN_PREPARATION}).
+            </div>
+          )}
+
+          <ChefQuickReasonsGrid
+            selectedReasons={selectedReasons}
+            isDisabled={isDisabled}
+            onToggleReason={toggleReason}
+          />
+
+          <section aria-label="Detalle adicional del motivo" className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor="chef-void-note-input"
+                className="text-sm font-semibold uppercase tracking-wider text-body"
+              >
+                Nota adicional (opcional si eligió motivo rápido):
+              </label>
+              <button
+                type="button"
+                data-testid="chef-void-toggle-keyboard"
+                disabled={isDisabled}
+                {...pointerAction(() => setShowKeyboard((prev) => !prev))}
+                className="text-xs font-bold text-fmat-primary hover:underline px-2 py-1 cursor-pointer disabled:opacity-40 shrink-0"
+              >
+                {showKeyboard ? 'Ocultar teclado' : 'Teclado en pantalla'}
+              </button>
+            </div>
+            <input
+              id="chef-void-note-input"
+              type="text"
+              value={customNote}
+              maxLength={500}
+              disabled={isDisabled}
+              onChange={(event) => setCustomNote(event.target.value)}
+              placeholder="Escriba con el teclado o en pantalla..."
+              data-testid="chef-void-note-input"
+              className="w-full min-h-[48px] px-4 py-2 rounded-md bg-surface border border-border text-ink placeholder:text-muted text-lg font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
+            />
+          </section>
+
+          <footer className="sticky -bottom-6 bg-surface flex items-center justify-end gap-4 pt-3 pb-1 border-t border-border shrink-0 -mx-6 px-6">
             <button
               type="button"
-              data-testid="chef-void-toggle-keyboard"
-              disabled={isDisabled}
-              {...pointerAction(() => setShowKeyboard((prev) => !prev))}
-              className="text-xs font-bold text-fmat-primary hover:underline px-2 py-1 cursor-pointer disabled:opacity-40 shrink-0"
+              data-testid="chef-void-cancel"
+              disabled={isSubmitting}
+              {...pointerAction(onCancel)}
+              className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-canvas text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
             >
-              {showKeyboard ? 'Ocultar teclado' : 'Teclado en pantalla'}
+              Cancelar
             </button>
-          </div>
-          <input
-            id="chef-void-note-input"
-            type="text"
-            value={customNote}
-            maxLength={500}
-            disabled={isDisabled}
-            onChange={(event) => setCustomNote(event.target.value)}
-            placeholder="Escriba con el teclado o en pantalla..."
-            data-testid="chef-void-note-input"
-            className="w-full min-h-[48px] px-4 py-2 rounded-md bg-surface border border-border text-ink placeholder:text-muted text-lg font-medium focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40"
-          />
-        </section>
-
-        <footer className="sticky -bottom-6 bg-surface flex items-center justify-end gap-4 pt-3 pb-1 border-t border-border shrink-0 -mx-6 px-6">
-          <button
-            type="button"
-            data-testid="chef-void-cancel"
-            disabled={isSubmitting}
-            {...pointerAction(onCancel)}
-            style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-canvas text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            data-testid="chef-void-confirm"
-            disabled={!isConfirmEnabled}
-            {...pointerAction(handleConfirm)}
-            style={{ minHeight: 64, minWidth: 64 }}
-            className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-red-600 hover:bg-red-700 text-white font-bold text-lg border-0 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
-          >
-            Confirmar
-          </button>
-        </footer>
+            <button
+              type="button"
+              data-testid="chef-void-confirm"
+              disabled={!isConfirmEnabled}
+              {...pointerAction(handleConfirm)}
+              className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-red-600 hover:bg-red-700 text-white font-bold text-lg border-0 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+            >
+              Confirmar
+            </button>
+          </footer>
         </div>
       </div>
 

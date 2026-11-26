@@ -63,7 +63,7 @@ const CATEGORY_TEMPLATES: Readonly<Record<DevErrorCategory, CategoryTemplate>> =
   AUTH_TOKEN: {
     label: 'Error de autenticación JWT (401)',
     summary: 'Token faltante, expirado o firmado con secreto distinto.',
-    hint: 'Verifique tokenProvider, localStorage (fmat_restaurant_auth_session) o JWT_SECRET.',
+    hint: 'Verifique el tokenProvider provisto por el Shell, la vigencia/firma del JWT o JWT_SECRET.',
   },
   FORBIDDEN_ACCESS: {
     label: 'Acceso denegado por permisos/rol (403)',

@@ -71,7 +71,6 @@ export function VirtualKeyboard({
               data-testid="virtual-keyboard-close"
               disabled={disabled}
               {...pointerAction(onClose)}
-              style={{ minHeight: 64, minWidth: 64 }}
               className="min-h-[64px] min-w-[64px] px-4 py-2 rounded-control text-xs sm:text-sm font-bold text-fmat-primary hover:bg-canvas border border-border bg-surface cursor-pointer disabled:opacity-40"
             >
               Ocultar teclado
@@ -93,7 +92,6 @@ export function VirtualKeyboard({
                 data-testid={`virtual-key-${letter}`}
                 aria-label={`Tecla ${letter}`}
                 {...pointerAction(() => handleKeyPress(letter))}
-                style={{ minHeight: 64, minWidth: 64 }}
                 className="min-h-[64px] min-w-[64px] px-3 py-2 rounded-control bg-surface hover:bg-canvas active:bg-border text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center select-none"
               >
                 {letter}
@@ -109,7 +107,6 @@ export function VirtualKeyboard({
             data-testid="virtual-key-space"
             aria-label="Espacio"
             {...pointerAction(handleSpace)}
-            style={{ minHeight: 64, minWidth: 64 }}
             className="min-h-[64px] min-w-[64px] flex-1 max-w-sm px-6 py-2 rounded-control bg-surface hover:bg-canvas active:bg-border text-ink font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Espacio
@@ -120,7 +117,6 @@ export function VirtualKeyboard({
             data-testid="virtual-key-backspace"
             aria-label="Borrar"
             {...pointerAction(handleBackspace)}
-            style={{ minHeight: 64, minWidth: 64 }}
             className="min-h-[64px] min-w-[64px] px-6 py-2 rounded-control bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 font-bold text-lg border border-red-300 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Borrar

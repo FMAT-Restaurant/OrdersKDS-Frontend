@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../api/zodCsp.ts';
 import { ItemStatusSchema, OrderStatusSchema } from '../api/schemas.ts';
 
 /**
