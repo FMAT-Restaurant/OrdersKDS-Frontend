@@ -54,4 +54,14 @@ describe('Docker, Nginx, and Vite security configuration', () => {
     }
     expect(viteConfig).toContain('VITE_CORS_ALLOWED_ORIGINS must not contain a wildcard origin.');
   });
+
+  it('self-hosts Inter font locally without external Google Fonts links in index.html', () => {
+    const indexHtml = readRepoFile('index.html');
+    const mainTsx = readRepoFile('src/main.tsx');
+
+    expect(indexHtml).not.toContain('fonts.googleapis.com');
+    expect(indexHtml).not.toContain('fonts.gstatic.com');
+    expect(mainTsx).toContain("@fontsource/inter/400.css");
+    expect(mainTsx).toContain("@fontsource/inter/900.css");
+  });
 });

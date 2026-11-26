@@ -61,22 +61,14 @@ async function installCspViolationCollector(page: Page): Promise<void> {
   });
 }
 
-async function getRelevantCspViolations(page: Page): Promise<CapturedCspViolation[]> {
-  const all = await page.evaluate(
+async function getAllCspViolations(page: Page): Promise<CapturedCspViolation[]> {
+  return page.evaluate(
     () => (window as Window & { __cspViolations?: CapturedCspViolation[] }).__cspViolations ?? [],
-  );
-  return all.filter(
-    (violation) =>
-      violation.blockedURI === 'inline' ||
-      violation.blockedURI === 'eval' ||
-      violation.blockedURI === '' ||
-      violation.blockedURI.startsWith('http://127.0.0.1:4173') ||
-      violation.blockedURI.startsWith('http://localhost:4173'),
   );
 }
 
 async function assertZeroRelevantCspViolations(page: Page, context: string): Promise<void> {
-  const violations = await getRelevantCspViolations(page);
+  const violations = await getAllCspViolations(page);
   expect(
     violations,
     `Unexpected CSP violations during "${context}": ${JSON.stringify(violations)}`,
