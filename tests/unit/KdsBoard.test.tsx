@@ -87,7 +87,6 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
 
       // Prohibits scroll: overflow must be hidden on container and style
       expect(container).toHaveClass('overflow-hidden');
-      expect(container).toHaveStyle({ overflow: 'hidden' });
 
       // Landscape dimensions (1920x1080 bounding constraints)
       expect(container).toHaveClass('max-w-[1920px]');
@@ -614,7 +613,6 @@ describe('KdsBoard Component Suite (TASK-15 Phase 1)', () => {
       });
 
       const container = screen.getByTestId('kds-board-container');
-      expect(container.style.overflow).toBe('hidden');
       expect(container).toHaveClass('overflow-hidden');
       expect(container).toHaveClass('max-w-[1920px]');
       expect(container).toHaveClass('max-h-[1080px]');

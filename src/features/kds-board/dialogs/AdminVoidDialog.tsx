@@ -159,7 +159,6 @@ function AdminQuickReasonsList({
               disabled={!isOperable || isSubmitting || isContradictory}
               title={isContradictory ? 'Incompatible con la selección actual' : undefined}
               {...pointerAction(() => onToggleReason(item))}
-              style={{ minHeight: 48 }}
               className={`min-h-[48px] px-3 py-2 rounded-control text-left border transition-all text-sm font-semibold flex flex-col justify-center cursor-pointer ${getReasonButtonClass(
                 isSelected,
                 isContradictory,
@@ -384,7 +383,7 @@ export function AdminVoidDialog({
               {getChargeSwitchDescription(hasQuickReasons, customReasonActive, chargeCustomer)}
             </span>
           </div>
-          <div className="shrink-0 flex items-center justify-center" style={{ minHeight: 48, minWidth: 48 }}>
+          <div className="shrink-0 flex items-center justify-center min-h-[48px] min-w-[48px]">
             <button
               type="button"
               role="switch"
@@ -457,7 +456,6 @@ export function AdminVoidDialog({
             data-testid="admin-void-cancel"
             disabled={isSubmitting}
             {...pointerAction(onCancel)}
-            style={{ minHeight: 64, minWidth: 64 }}
             className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-surface hover:bg-canvas text-body font-bold text-lg border border-border focus:outline-none focus:ring-2 focus:ring-fmat-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             Cancelar
@@ -467,7 +465,6 @@ export function AdminVoidDialog({
             data-testid="admin-void-confirm"
             disabled={!isOperable || isSubmitting}
             {...pointerAction(handleConfirm)}
-            style={{ minHeight: 64, minWidth: 64 }}
             className="min-h-[64px] min-w-[64px] px-6 py-3 rounded-control bg-red-600 hover:bg-red-700 text-white font-bold text-lg border-0 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
           >
             Confirmar

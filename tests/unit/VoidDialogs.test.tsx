@@ -369,9 +369,7 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       const cancelBtn = screen.getByTestId('admin-void-cancel');
 
       expect(confirmBtn).toHaveClass('min-h-[64px]', 'min-w-[64px]');
-      expect(confirmBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
       expect(cancelBtn).toHaveClass('min-h-[64px]', 'min-w-[64px]');
-      expect(cancelBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
 
       fireEvent.click(confirmBtn);
       expect(onConfirm).toHaveBeenCalledWith(
@@ -399,7 +397,6 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       expect(reasonButtons).toHaveLength(4);
       for (const btn of reasonButtons) {
         expect(btn).toHaveClass('min-h-[64px]', 'min-w-[64px]');
-        expect(btn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
       }
 
       // Verify all virtual keyboard keys (letters + space + backspace)
@@ -408,16 +405,13 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       expect(keyButtons.length).toBeGreaterThanOrEqual(29);
       for (const keyBtn of keyButtons) {
         expect(keyBtn).toHaveClass('min-h-[64px]', 'min-w-[64px]');
-        expect(keyBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
       }
 
       // Verify Confirm and Cancel buttons
       const confirmBtn = screen.getByTestId('chef-void-confirm');
       const cancelBtn = screen.getByTestId('chef-void-cancel');
       expect(confirmBtn).toHaveClass('min-h-[64px]', 'min-w-[64px]');
-      expect(confirmBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
       expect(cancelBtn).toHaveClass('min-h-[64px]', 'min-w-[64px]');
-      expect(cancelBtn).toHaveStyle({ minHeight: '64px', minWidth: '64px' });
     });
 
     it('executes ST-11 in green with admin and chef roles verifying warnings and confirmation', () => {
@@ -481,9 +475,7 @@ describe('VoidDialogs & VirtualKeyboard Suite (TASK-36, ADR-0012)', () => {
       const chefBtn = screen.getByTestId('order-action-chef-void-ord-void-101');
 
       expect(adminBtn).toHaveClass('min-h-[64px]');
-      expect(adminBtn).toHaveStyle({ minHeight: '64px' });
       expect(chefBtn).toHaveClass('min-h-[64px]');
-      expect(chefBtn).toHaveStyle({ minHeight: '64px' });
 
       fireEvent.click(adminBtn);
       expect(onAdminVoid).toHaveBeenCalledWith(inPreparationOrder);

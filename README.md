@@ -203,7 +203,9 @@ For the Vite dev/preview servers, configure federated host origins with
 `VITE_CORS_ALLOWED_ORIGINS` (comma-separated; defaults to `http://localhost:5173`
 and `http://127.0.0.1:5173`). Add deployment-specific API/WebSocket origins to
 `VITE_CSP_CONNECT_SRC` and additional remote script/style origins to
-`VITE_CSP_FEDERATION_SRC` when needed.
+`VITE_CSP_FEDERATION_SRC` when needed. Production responses do not allow inline
+styles; KDS components use the bundled stylesheet. Development retains Vite's
+inline CSS injection allowance for HMR only.
 
 To build and preview both Module Federation remotes locally:
 
@@ -485,7 +487,9 @@ Para los servidores Vite de desarrollo/preview, configura los orígenes del Shel
 con `VITE_CORS_ALLOWED_ORIGINS` (separados por comas; por defecto
 `http://localhost:5173` y `http://127.0.0.1:5173`). Agrega los orígenes API/WebSocket
 de despliegue en `VITE_CSP_CONNECT_SRC` y los orígenes adicionales de scripts/estilos
-remotos en `VITE_CSP_FEDERATION_SRC` cuando sea necesario.
+remotos en `VITE_CSP_FEDERATION_SRC` cuando sea necesario. Las respuestas de producción
+no permiten estilos inline; los componentes KDS usan la hoja de estilos del bundle.
+Solo desarrollo conserva la excepción de inyección CSS que Vite requiere para HMR.
 
 Para compilar y previsualizar ambos remotos de Module Federation localmente:
 

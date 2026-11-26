@@ -36,11 +36,29 @@ test('Vite preview returns restrictive CSP and non-wildcard CORS headers', async
   expect(csp).toContain('connect-src');
   expect(csp).toContain('ws://127.0.0.1:8000');
   expect(csp).not.toContain('unsafe-eval');
+  expect(csp).not.toContain('unsafe-inline');
   expect(csp.split(';').find((directive) => directive.trim().startsWith('script-src'))).not.toContain(
+    "'unsafe-inline'",
+  );
+  expect(csp.split(';').find((directive) => directive.trim().startsWith('style-src'))).not.toContain(
     "'unsafe-inline'",
   );
   expect(headers['access-control-allow-origin']).toBe('http://127.0.0.1:5173');
   expect(headers['access-control-allow-origin']).not.toBe('*');
+
+  for (const path of ['/robots.txt', '/sitemap.xml']) {
+    const staticResponse = await request.get(`http://127.0.0.1:4173${path}`);
+    const staticCsp = staticResponse.headers()['content-security-policy'];
+    expect(staticCsp, `${path} CSP`).toBeDefined();
+    const staticStyleSrc = staticCsp
+      ?.split(';')
+      .find((directive) => directive.trim().startsWith('style-src'));
+    expect(
+      staticStyleSrc,
+      `${path} style-src`,
+    ).toBeDefined();
+    expect(staticStyleSrc, `${path} style-src`).not.toContain("'unsafe-inline'");
+  }
 
   const blockedOriginResponse = await request.get('http://127.0.0.1:4173/', {
     headers: { Origin: 'https://unauthorized.example' },

@@ -263,16 +263,16 @@ describe('OrderDetailsDialog Component Suite', () => {
     );
 
     const markReadyBtn = screen.getByTestId('order-details-action-ready');
-    expect(markReadyBtn).toHaveStyle({ minHeight: '48px' });
+    expect(markReadyBtn).toHaveClass('min-h-[48px]');
 
     const closeBtn = screen.getByTestId('order-details-bottom-close-btn');
-    expect(closeBtn).toHaveStyle({ minHeight: '48px' });
+    expect(closeBtn).toHaveClass('min-h-[48px]');
 
     const itemActionBtn = screen.getByTestId('order-details-item-action-item-1');
-    expect(itemActionBtn).toHaveStyle({ minHeight: '48px' });
+    expect(itemActionBtn).toHaveClass('min-h-[48px]');
   });
 
-  it('locks document background scroll while open and restores previous overflow on close', () => {
+  it('locks document background scroll with scoped classes and preserves host inline styles', () => {
     document.body.style.overflow = 'auto';
     document.documentElement.style.overflow = 'scroll';
 
@@ -280,18 +280,24 @@ describe('OrderDetailsDialog Component Suite', () => {
       <OrderDetailsDialog order={mockOrder} isOpen={true} onClose={vi.fn()} />,
     );
 
-    expect(document.body.style.overflow).toBe('hidden');
-    expect(document.documentElement.style.overflow).toBe('hidden');
+    expect(document.body).toHaveClass('orders-kds-scroll-locked');
+    expect(document.documentElement).toHaveClass('orders-kds-scroll-locked');
+    expect(document.body.style.overflow).toBe('auto');
+    expect(document.documentElement.style.overflow).toBe('scroll');
 
     rerender(<OrderDetailsDialog order={mockOrder} isOpen={false} onClose={vi.fn()} />);
 
+    expect(document.body).not.toHaveClass('orders-kds-scroll-locked');
+    expect(document.documentElement).not.toHaveClass('orders-kds-scroll-locked');
     expect(document.body.style.overflow).toBe('auto');
     expect(document.documentElement.style.overflow).toBe('scroll');
 
     rerender(<OrderDetailsDialog order={mockOrder} isOpen={true} onClose={vi.fn()} />);
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.body).toHaveClass('orders-kds-scroll-locked');
 
     unmount();
+    expect(document.body).not.toHaveClass('orders-kds-scroll-locked');
+    expect(document.documentElement).not.toHaveClass('orders-kds-scroll-locked');
     expect(document.body.style.overflow).toBe('auto');
     expect(document.documentElement.style.overflow).toBe('scroll');
   });

@@ -122,7 +122,7 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       const { rerender } = render(<OrderCard order={onTimeOrder} />);
       const stopwatch1 = screen.getByTestId('order-stopwatch-ord-sem-1');
       expect(stopwatch1).toHaveAttribute('data-delay-status', 'on_time');
-      expect(stopwatch1).toHaveStyle({ backgroundColor: 'var(--color-success)' });
+      expect(stopwatch1).not.toHaveAttribute('style');
       expect(screen.getByTestId('order-delay-label-ord-sem-1')).toHaveTextContent('(En tiempo)');
       expect(screen.getByTestId('order-timer-ord-sem-1')).toHaveTextContent('05:00');
 
@@ -135,7 +135,7 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       rerender(<OrderCard order={warningOrder} />);
       const stopwatch2 = screen.getByTestId('order-stopwatch-ord-sem-2');
       expect(stopwatch2).toHaveAttribute('data-delay-status', 'warning');
-      expect(stopwatch2).toHaveStyle({ backgroundColor: 'var(--color-warning)' });
+      expect(stopwatch2).not.toHaveAttribute('style');
       expect(screen.getByTestId('order-delay-label-ord-sem-2')).toHaveTextContent('(Por atrasarse)');
       expect(screen.getByTestId('order-timer-ord-sem-2')).toHaveTextContent('11:00');
 
@@ -148,7 +148,7 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       rerender(<OrderCard order={lateOrder} />);
       const stopwatch3 = screen.getByTestId('order-stopwatch-ord-sem-3');
       expect(stopwatch3).toHaveAttribute('data-delay-status', 'late');
-      expect(stopwatch3).toHaveStyle({ backgroundColor: 'var(--color-error)' });
+      expect(stopwatch3).not.toHaveAttribute('style');
       expect(screen.getByTestId('order-delay-label-ord-sem-3')).toHaveTextContent('(Atrasada)');
       expect(screen.getByTestId('order-timer-ord-sem-3')).toHaveTextContent('20:00');
     });
@@ -223,14 +223,15 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
     it.each(Object.keys(expectedTokens) as OrderStatus[])(
       'renders status %s with readable text and semantic CSS token',
       (status) => {
-        const { label, token } = expectedTokens[status];
+        const { label } = expectedTokens[status];
         render(<StatusBadge status={status} />);
 
         const badge = screen.getByTestId(`status-badge-${status.toLowerCase()}`);
         expect(badge).toBeInTheDocument();
         expect(badge).toHaveTextContent(label);
         expect(badge).toHaveAttribute('data-status', status);
-        expect(badge).toHaveStyle({ backgroundColor: token });
+        expect(badge.className).toContain(STATUS_CONFIG[status].className);
+        expect(badge).not.toHaveAttribute('style');
       },
     );
 
@@ -256,7 +257,8 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       render(<StatusBadge status={'UNKNOWN_STATUS' as OrderStatus} />);
       const fallbackBadge = screen.getByTestId('status-badge-unknown_status');
       expect(fallbackBadge).toHaveTextContent('UNKNOWN_STATUS');
-      expect(fallbackBadge).toHaveStyle({ backgroundColor: 'var(--color-info)' });
+      expect(fallbackBadge).toHaveClass('bg-info');
+      expect(fallbackBadge).not.toHaveAttribute('style');
     });
   });
 
@@ -1153,13 +1155,13 @@ describe('OrderCard Component & Hook Suite (TASK-15 Phase 2, ADR-0012)', () => {
       expect(footerBtn).toHaveClass('text-[11px]');
 
       const readyBtn = screen.getByTestId('order-action-ready-ord-reserved-1');
-      expect(readyBtn).toHaveStyle({ minHeight: '48px' });
+      expect(readyBtn).toHaveClass('min-h-[48px]');
 
       // Rerender with normal layout
       rerender(<OrderCard order={inPrepOrder} isCompact={false} />);
       expect(headerStub).toHaveClass('p-3');
       expect(footerBtn).toHaveClass('text-xs');
-      expect(readyBtn).toHaveStyle({ minHeight: '64px' });
+      expect(readyBtn).toHaveClass('min-h-[64px]');
     });
 
     it('triggers onClick when the footer is clicked to view order details', () => {

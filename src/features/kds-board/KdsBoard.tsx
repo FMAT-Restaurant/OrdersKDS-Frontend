@@ -632,7 +632,6 @@ function KdsFooter({
           aria-label="Página anterior"
           disabled={currentPage <= 1}
           {...pointerAction(() => onPageChange(currentPage - 1))}
-          style={{ minHeight: 64 }}
           className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-surface text-fmat-primary border-2 border-fmat-primary disabled:opacity-40 disabled:border-border disabled:text-muted disabled:cursor-not-allowed hover:bg-fmat-soft focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm cursor-pointer"
         >
           Anterior
@@ -643,7 +642,6 @@ function KdsFooter({
           aria-label="Página siguiente"
           disabled={currentPage >= totalPages}
           {...pointerAction(() => onPageChange(currentPage + 1))}
-          style={{ minHeight: 64 }}
           className="min-h-[48px] sm:min-h-[56px] md:min-h-[64px] min-w-[90px] sm:min-w-[120px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-control font-bold text-sm sm:text-lg bg-fmat-primary text-white border-0 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-fmat-primary-hover focus:outline-none focus:ring-2 focus:ring-fmat-primary transition-colors duration-150 shadow-sm cursor-pointer"
         >
           Siguiente
@@ -1470,7 +1468,6 @@ function KdsBoardContent({
     <div
       data-testid="kds-board-container"
       className="orders-kds-root w-full h-full max-w-[1920px] max-h-[1080px] min-w-0 min-h-0 flex flex-col bg-canvas text-ink select-none overflow-hidden"
-      style={{ overflow: 'hidden' }}
     >
       <KdsHeader
         tab={tab}

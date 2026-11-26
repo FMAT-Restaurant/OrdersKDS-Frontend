@@ -65,6 +65,11 @@ function buildContentSecurityPolicy(
     ...(isDevelopment ? ["'unsafe-inline'"] : []),
     federationSources,
   ].join(' ');
+  const styleSources = [
+    "'self'",
+    ...(isDevelopment ? ["'unsafe-inline'"] : []),
+    federationSources,
+  ].join(' ');
 
   return [
     "default-src 'self'",
@@ -73,7 +78,7 @@ function buildContentSecurityPolicy(
     "frame-ancestors 'none'",
     "form-action 'self'",
     `script-src ${scriptSources}`,
-    `style-src 'self' 'unsafe-inline' ${federationSources}`,
+    `style-src ${styleSources}`,
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     `connect-src ${[...connectSources].join(' ')}`,

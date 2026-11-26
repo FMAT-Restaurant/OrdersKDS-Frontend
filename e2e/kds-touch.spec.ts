@@ -189,14 +189,23 @@ test.describe('ST-18(a) — KDS Táctil, TTL/Caducados, Debounce 400ms, Undo 15s
     await page.getByTestId('order-id-ord-modal-lock').tap();
     await expect(page.getByTestId('order-details-dialog')).toBeVisible();
 
-    const bodyOverflowOpen = await page.evaluate(() => document.body.style.overflow);
-    expect(bodyOverflowOpen).toBe('hidden');
+    const scrollLockedOpen = await page.evaluate(
+      () =>
+        document.body.classList.contains('orders-kds-scroll-locked') &&
+        document.documentElement.classList.contains('orders-kds-scroll-locked') &&
+        getComputedStyle(document.body).overflow === 'hidden',
+    );
+    expect(scrollLockedOpen).toBe(true);
 
     await page.getByTestId('order-details-close-btn').tap();
     await expect(page.getByTestId('order-details-dialog')).toBeHidden();
 
-    const bodyOverflowClosed = await page.evaluate(() => document.body.style.overflow);
-    expect(bodyOverflowClosed).not.toBe('hidden');
+    const scrollLockedClosed = await page.evaluate(
+      () =>
+        document.body.classList.contains('orders-kds-scroll-locked') ||
+        document.documentElement.classList.contains('orders-kds-scroll-locked'),
+    );
+    expect(scrollLockedClosed).toBe(false);
   });
 
   test('soporta tema oscuro dinámico [data-theme="dark"] y toggle chargeCustomer en AdminVoidDialog @touch', async ({
